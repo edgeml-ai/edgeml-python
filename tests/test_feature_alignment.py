@@ -152,25 +152,28 @@ class FeatureAlignmentTests(unittest.TestCase):
     def test_auto_align_function(self):
         from edgeml.feature_alignment import auto_align
 
-        datasets = {
-            "device1": pd.DataFrame({
-                "f1": [1, 2],
-                "f2": [3, 4],
-                "target": [0, 1],
-            }),
-            "device2": pd.DataFrame({
-                "f1": [5, 6],
-                "f3": [7, 8],
-                "target": [1, 0],
-            }),
-        }
+        # auto_align takes a single DataFrame, not a dict
+        df = pd.DataFrame({
+            "f1": [1, 2, 3],
+            "f2": [3, 4, 5],
+            "target": [0, 1, 0],
+        })
 
-        aligned = auto_align(datasets, target_col="target", input_dim=4)
-        self.assertIsInstance(aligned, dict)
-        self.assertIn("device1", aligned)
-        self.assertIn("device2", aligned)
+        # Returns (np.ndarray, List[str], Dict[str, Any])
+        X, detected_features, coverage_info = auto_align(df, target_col="target", input_dim=4)
 
-    def test_feature_aligner_get_coverage_info(self):
+        # Check return types
+        import numpy as np
+        self.assertIsInstance(X, np.ndarray)
+        self.assertIsInstance(detected_features, list)
+        self.assertIsInstance(coverage_info, dict)
+
+        # Check shapes and content
+        self.assertEqual(X.shape[0], len(df))
+        self.assertEqual(X.shape[1], 4)  # input_dim
+        self.assertEqual(len(detected_features), 2)  # f1 and f2
+
+    def test_feature_aligner_get_coverage(self):
         from edgeml.feature_alignment import FeatureAligner
 
         datasets = {
@@ -188,9 +191,14 @@ class FeatureAlignmentTests(unittest.TestCase):
         aligner = FeatureAligner(strategy="intersection")
         aligner.fit(datasets, target_col="target")
 
-        coverage = aligner.get_coverage_info()
+        # Test get_coverage (not get_coverage_info)
+        test_df = pd.DataFrame({
+            "f1": [9, 10],
+            "target": [0, 1],
+        })
+        coverage = aligner.get_coverage(test_df, target_col="target")
         self.assertIsInstance(coverage, dict)
-        self.assertIn("strategy", coverage)
+        self.assertIn("coverage", coverage)
 
     def test_feature_aligner_imputation_methods(self):
         from edgeml.feature_alignment import FeatureAligner

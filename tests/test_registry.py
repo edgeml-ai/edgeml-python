@@ -11,6 +11,7 @@ class _StubApi:
         self.calls = []
         self._responses = {}
         self.timeout = 60.0  # Add timeout attribute
+        self.api_base = "https://api.edgeml.io/api/v1"
 
     def set_response(self, key, response):
         self._responses[key] = response
