@@ -31,15 +31,13 @@ jobs:
           pip install -e edgeml/python[dev]
 
       - name: Run tests with coverage
-        run: |
-          cd edgeml/python
-          pytest --cov=edgeml --cov-report=xml --cov-report=term-missing
+        run: pytest --cov=edgeml/python/edgeml --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
         uses: codecov/codecov-action@v4
         with:
-          file: ./edgeml/python/coverage.xml
+          file: ./coverage.xml
           flags: python
           name: python-${{ matrix.python-version }}
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -65,9 +63,7 @@ jobs:
           pip install -e edgeml/python[dev]
 
       - name: Run tests with coverage
-        run: |
-          cd edgeml/python
-          pytest --cov=edgeml --cov-report=xml
+        run: pytest --cov=edgeml/python/edgeml --cov-report=xml
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
