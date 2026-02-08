@@ -1,7 +1,7 @@
 import unittest
 
-from edgeml.python.edgeml.control_plane import ExperimentsAPI, RolloutsAPI
-from edgeml.python.edgeml.registry import ModelRegistry
+from edgeml.control_plane import ExperimentsAPI, RolloutsAPI
+from edgeml.registry import ModelRegistry
 
 
 class _StubApi:

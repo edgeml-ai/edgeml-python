@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from edgeml.python.edgeml.auth import DeviceAuthClient, DeviceTokenState
+from edgeml.auth import DeviceAuthClient, DeviceTokenState
 
 
 class _FakeKeyring:
