@@ -1,7 +1,7 @@
 import unittest
 
-from octomil.python.octomil.control_plane import ExperimentsAPI, RolloutsAPI
-from octomil.python.octomil.registry import ModelRegistry
+from octomil.control_plane import ExperimentsAPI, RolloutsAPI
+from octomil.registry import ModelRegistry
 
 
 class _StubApi:
