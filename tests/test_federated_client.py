@@ -684,7 +684,7 @@ class PrepareTrainingDataTests(unittest.TestCase):
             "edgeml.federated_client.validate_target",
             return_value=df,
         ) as mock_validate:
-            result_df, features, target_col, count = client._prepare_training_data(
+            client._prepare_training_data(
                 model="test_model",
                 data=df,
                 target_col="target",

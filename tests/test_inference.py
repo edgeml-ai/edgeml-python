@@ -292,20 +292,23 @@ class GenerateAsyncTextTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_generate_reports_events(self):
         api = _StubApi()
         client = _make_client(api)
-        async for _ in client.generate_async(
+        chunks = []
+        async for ch in client.generate_async(
             "model-1", prompt="Hello", modality=Modality.TEXT
         ):
-            pass
+            chunks.append(ch)
+        self.assertGreater(len(chunks), 0)
         event_types = [call[1]["event_type"] for call in api.calls]
         self.assertIn("generation_started", event_types)
         self.assertIn("generation_completed", event_types)
 
     async def test_async_generate_populates_last_result(self):
         client = _make_client()
-        async for _ in client.generate_async(
+        chunks = []
+        async for ch in client.generate_async(
             "model-1", prompt="Hello", modality=Modality.TEXT
         ):
-            pass
+            chunks.append(ch)
         self.assertIsNotNone(client.last_result)
         self.assertEqual(client.last_result.modality, Modality.TEXT)
         self.assertGreater(client.last_result.total_chunks, 0)
@@ -320,10 +323,11 @@ class GenerateAsyncTextTests(unittest.IsolatedAsyncioTestCase):
         client._backend_generate = _exploding_backend
 
         with self.assertRaises(ValueError):
-            async for _ in client.generate_async(
+            chunks = []
+            async for ch in client.generate_async(
                 "model-1", prompt="Hello", modality=Modality.TEXT
             ):
-                pass
+                chunks.append(ch)
 
         event_types = [call[1]["event_type"] for call in api.calls]
         self.assertIn("generation_started", event_types)
@@ -443,9 +447,11 @@ class GenerateFailureTests(unittest.TestCase):
 
     def test_backend_exception_does_not_populate_last_result(self):
         client = _make_client()
-        client._backend_generate = lambda *a, **kw: (_ for _ in ()).throw(
-            RuntimeError("fail")
-        )
+        def _failing_backend(*a, **kw):
+            raise RuntimeError("fail")
+            yield  # noqa: unreachable — makes this a generator
+
+        client._backend_generate = _failing_backend
         with self.assertRaises(RuntimeError):
             list(client.generate("model-1", prompt="Hello", modality=Modality.TEXT))
         self.assertIsNone(client.last_result)

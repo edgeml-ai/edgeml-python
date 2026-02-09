@@ -189,8 +189,9 @@ class TestGetTimezone(unittest.TestCase):
 
     @patch("edgeml.device_info.platform.system", return_value="Windows")
     def test_unsupported_platform_returns_utc(self, mock_system):
-        result = get_timezone()
-        self.assertEqual(result, "UTC")
+        """Neither Darwin nor Linux branch is entered, so the fallback fires."""
+        self.assertEqual(get_timezone(), "UTC")
+        mock_system.assert_called()
 
 
 # ---------------------------------------------------------------------------
