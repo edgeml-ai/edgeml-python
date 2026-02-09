@@ -4,6 +4,8 @@
 [![codecov](https://codecov.io/gh/octomil-ai/octomil-python/branch/main/graph/badge.svg)](https://codecov.io/gh/octomil-ai/octomil-python)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=octomil-ai_octomil-python&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=octomil-ai_octomil-python)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=octomil-ai_octomil-python&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=octomil-ai_octomil-python)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/octomil-ai/octomil-python/badge)](https://scorecard.dev/viewer/?uri=github.com/octomil-ai/octomil-python)
+[![CodeQL](https://github.com/octomil-ai/octomil-python/actions/workflows/codeql.yml/badge.svg)](https://github.com/octomil-ai/octomil-python/actions/workflows/codeql.yml)
 [![Python Version](https://img.shields.io/pypi/pyversions/octomil-sdk.svg)](https://pypi.org/project/octomil-sdk/)
 [![PyPI version](https://badge.fury.io/py/octomil-sdk.svg)](https://badge.fury.io/py/octomil-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
