@@ -347,5 +347,5 @@ class StreamingInferenceClient:
             if metrics:
                 payload["metrics"] = metrics
             self.api.post("/inference/events", payload)
-        except (ConnectionError, OSError, ValueError):
+        except (OSError, ValueError):
             pass  # best-effort reporting

@@ -154,7 +154,7 @@ def _get_s3_options() -> Optional[Dict[str, Any]]:
 
     env_map = {
         'AWS_ACCESS_KEY_ID': 'key',
-        'AWS_SECRET_ACCESS_KEY': 'secret',  # noqa: S105 — S3 option key name, not a credential
+        'AWS_SECRET_ACCESS_KEY': 'secret',  # noqa: S105
         'AWS_SESSION_TOKEN': 'token',  # noqa: S105
         'AWS_ENDPOINT_URL': 'endpoint_url',
     }
