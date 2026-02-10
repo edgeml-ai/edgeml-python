@@ -539,10 +539,13 @@ class EndToEndSecAggPlusTests(unittest.TestCase):
         # Compute expected: sum of individually quantized updates.
         # Because of stochastic rounding, we can't predict exact values, but
         # we verify that dequantized aggregate is close to sum of original updates.
+        # Note: dequantize reverses shift for 1 client, but aggregate has shift
+        # from N clients. Subtract (N-1)*clip to correct.
         dequantized = dequantize(agg, clip, target)
+        corrected = [d - (n - 1) * clip for d in dequantized]
         expected_sum = [sum(u[j] for u in updates) for j in range(n_elements)]
 
-        for d, e in zip(dequantized, expected_sum):
+        for d, e in zip(corrected, expected_sum):
             # Allow larger tolerance due to stochastic quantization error across 3 clients.
             self.assertAlmostEqual(d, e, delta=0.5)
 
@@ -624,10 +627,13 @@ class EndToEndSecAggPlusTests(unittest.TestCase):
         # (both uploaded masked vectors). No action needed.
 
         # Verify: dequantize and check approximate sum.
-        dequantized = dequantize(agg, clients[0].config.clipping_range,
-                                  clients[0].config.target_range)
+        # Correct for N-client shift: dequantize reverses 1 client's shift,
+        # but aggregate has shift from N clients.
+        clip = clients[0].config.clipping_range
+        dequantized = dequantize(agg, clip, clients[0].config.target_range)
+        corrected = [d - (n - 1) * clip for d in dequantized]
         expected_sum = [sum(u[j] for u in updates) for j in range(n_elements)]
-        for d, e in zip(dequantized, expected_sum):
+        for d, e in zip(corrected, expected_sum):
             self.assertAlmostEqual(d, e, delta=0.5)
 
     def test_five_clients_two_drop(self):
@@ -675,10 +681,12 @@ class EndToEndSecAggPlusTests(unittest.TestCase):
                 agg[j] = (agg[j] - self_mask[j]) % mod
 
         # Pairwise masks cancel since all clients uploaded.
-        dequantized = dequantize(agg, clients[0].config.clipping_range,
-                                  clients[0].config.target_range)
+        # Correct for N-client shift.
+        clip = clients[0].config.clipping_range
+        dequantized = dequantize(agg, clip, clients[0].config.target_range)
+        corrected = [d - (n - 1) * clip for d in dequantized]
         expected_sum = [sum(u[j] for u in updates) for j in range(n_elements)]
-        for d, e in zip(dequantized, expected_sum):
+        for d, e in zip(corrected, expected_sum):
             self.assertAlmostEqual(d, e, delta=1.0)
 
 

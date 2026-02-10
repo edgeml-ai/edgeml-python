@@ -174,24 +174,15 @@ def reconstruct_secret(shares: List[ShamirShare]) -> int:
 # ---------------------------------------------------------------------------
 
 # Shamir chunk size in bytes (matches Flower's 16-byte AES block approach).
-_SHAMIR_CHUNK_SIZE = 16
+_SHAMIR_CHUNK_SIZE = 15  # Must fit within GF(2^127-1): 15 bytes = 120 bits < 127 bits
 
 
-def _pad_to_chunk_size(data: bytes) -> bytes:
-    """PKCS7-pad *data* to the next multiple of ``_SHAMIR_CHUNK_SIZE``."""
-    pad_len = _SHAMIR_CHUNK_SIZE - (len(data) % _SHAMIR_CHUNK_SIZE)
-    return data + bytes([pad_len] * pad_len)
-
-
-def _unpad(data: bytes) -> bytes:
-    """Remove PKCS7 padding."""
-    pad_len = data[-1]
-    if pad_len == 0 or pad_len > _SHAMIR_CHUNK_SIZE:
-        raise ValueError("Invalid PKCS7 padding")
-    for b in data[-pad_len:]:
-        if b != pad_len:
-            raise ValueError("Invalid PKCS7 padding")
-    return data[:-pad_len]
+def _zero_pad_to_chunk_size(data: bytes) -> bytes:
+    """Zero-pad *data* to the next multiple of ``_SHAMIR_CHUNK_SIZE``."""
+    remainder = len(data) % _SHAMIR_CHUNK_SIZE
+    if remainder == 0 and len(data) > 0:
+        return data
+    return data + b"\x00" * (_SHAMIR_CHUNK_SIZE - remainder)
 
 
 @dataclass
@@ -202,24 +193,25 @@ class ByteShamirShare:
     """
     index: int
     chunk_shares: List[ShamirShare]  # one per chunk
+    secret_length: int = 0  # original secret length for reconstruction
 
     def to_bytes(self) -> bytes:
         """Serialize to a single byte string."""
-        # Header: 4-byte index, 4-byte num_chunks
-        buf = struct.pack(">II", self.index, len(self.chunk_shares))
+        # Header: 4-byte index, 4-byte num_chunks, 4-byte secret_length
+        buf = struct.pack(">III", self.index, len(self.chunk_shares), self.secret_length)
         for cs in self.chunk_shares:
             buf += cs.to_bytes()
         return buf
 
     @classmethod
     def from_bytes(cls, data: bytes, offset: int = 0) -> Tuple["ByteShamirShare", int]:
-        index, num_chunks = struct.unpack(">II", data[offset : offset + 8])
-        offset += 8
+        index, num_chunks, secret_length = struct.unpack(">III", data[offset : offset + 12])
+        offset += 12
         chunks: List[ShamirShare] = []
         for _ in range(num_chunks):
             cs, offset = ShamirShare.from_bytes(data, offset)
             chunks.append(cs)
-        return cls(index=index, chunk_shares=chunks), offset
+        return cls(index=index, chunk_shares=chunks, secret_length=secret_length), offset
 
 
 def create_shares_bytes(
@@ -231,16 +223,16 @@ def create_shares_bytes(
     """Shamir-share arbitrary bytes by splitting into 16-byte chunks.
 
     Each chunk is independently shared as an integer mod *modulus*.
-    PKCS7 padding is applied so the secret length need not be a multiple
+    Zero-padding is applied so the secret length need not be a multiple
     of 16.  The original bytes are exactly recovered by
-    :func:`combine_shares_bytes`.
+    :func:`combine_shares_bytes` using the stored secret length.
     """
-    padded = _pad_to_chunk_size(secret)
+    padded = _zero_pad_to_chunk_size(secret)
     num_chunks = len(padded) // _SHAMIR_CHUNK_SIZE
 
     # Pre-create result containers.
     result = [
-        ByteShamirShare(index=i + 1, chunk_shares=[])
+        ByteShamirShare(index=i + 1, chunk_shares=[], secret_length=len(secret))
         for i in range(total_shares)
     ]
 
@@ -262,14 +254,19 @@ def combine_shares_bytes(
         raise ValueError("Need at least one share")
 
     num_chunks = len(shares[0].chunk_shares)
+    secret_length = shares[0].secret_length
     reconstructed = bytearray()
 
     for c in range(num_chunks):
         chunk_shares = [s.chunk_shares[c] for s in shares]
         chunk_int = reconstruct_secret(chunk_shares)
-        reconstructed.extend(chunk_int.to_bytes(_SHAMIR_CHUNK_SIZE, "big"))
+        # Clamp to chunk size bytes (may overflow with insufficient shares)
+        chunk_bytes = (chunk_int % (1 << (_SHAMIR_CHUNK_SIZE * 8))).to_bytes(
+            _SHAMIR_CHUNK_SIZE, "big"
+        )
+        reconstructed.extend(chunk_bytes)
 
-    return bytes(_unpad(bytes(reconstructed)))
+    return bytes(reconstructed[:secret_length]) if secret_length > 0 else bytes(reconstructed)
 
 
 # ---------------------------------------------------------------------------
@@ -597,21 +594,19 @@ def _pseudo_rand_gen(
     num_range: int,
     count: int,
 ) -> List[int]:
-    """Seeded pseudo-random number generator matching the Flower ``pseudo_rand_gen``.
+    """SHA-256 counter mode PRG. Cross-platform compatible with server/Android/iOS.
 
-    Folds ``seed`` into a 32-bit seed for deterministic mask generation,
-    then produces ``count`` integers in ``[0, num_range - 1]``.
+    For each index i in [0, count), computes SHA-256(seed || i.to_bytes(4, 'big')),
+    takes the first 4 bytes as a big-endian uint32, and mods by num_range.
     """
-    # Fold seed bytes into a single 32-bit value (XOR of 4-byte chunks).
-    assert len(seed) % 4 == 0, "seed length must be a multiple of 4"
-    seed32 = 0
-    for i in range(0, len(seed), 4):
-        seed32 ^= int.from_bytes(seed[i : i + 4], "little")
+    import hashlib
 
-    import random as _random
-
-    rng = _random.Random(seed32)
-    return [rng.randrange(0, num_range) for _ in range(count)]
+    masks: List[int] = []
+    for i in range(count):
+        h = hashlib.sha256(seed + i.to_bytes(4, "big")).digest()
+        val = int.from_bytes(h[:4], "big") % num_range
+        masks.append(val)
+    return masks
 
 
 def derive_pairwise_mask(
