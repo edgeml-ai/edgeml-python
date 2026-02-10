@@ -45,6 +45,7 @@ dev = [
     "flwr-datasets>=0.3.0",
 ]
 auth = ["keyring>=24.0.0"]
+secagg = ["cryptography>=41.0.0"]
 
 [project.urls]
 Homepage = "https://edgeml.io"

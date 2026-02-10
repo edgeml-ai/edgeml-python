@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import io
 import logging
-import math
 import uuid
 from pathlib import Path
 from typing import (
@@ -20,6 +19,8 @@ from typing import (
 from .api_client import EdgeMLClientError, _ApiClient
 from .control_plane import ExperimentsAPI, RolloutsAPI
 from .data_loader import DataLoadError, DataSource, load_data, validate_target
+from .filters import apply_filters as _apply_filters_impl
+from .filters import FilterRegistry, FilterResult  # noqa: F401 -- re-export
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -39,72 +40,6 @@ _TRAINING_WEIGHTS_ENDPOINT = "/training/weights"
 WeightsData = Union[bytes, bytearray, Dict[str, Any], Any]
 TrainResult = Tuple[Dict[str, Any], int, Optional[Dict[str, float]]]
 LocalTrainFn = Callable[[Dict[str, Any]], TrainResult]
-
-
-def _apply_gradient_clip(torch, result: Dict[str, Any], f: Dict[str, Any]) -> None:
-    """Clip per-tensor norms to ``max_norm``."""
-    max_norm = float(f.get("max_norm", 1.0))
-    for key, tensor in result.items():
-        if not torch.is_tensor(tensor):
-            continue
-        norm = torch.norm(tensor.float().flatten(), dim=0)
-        if norm > max_norm:
-            result[key] = tensor * (max_norm / norm)
-
-
-def _apply_gaussian_noise(torch, result: Dict[str, Any], f: Dict[str, Any]) -> None:
-    """Add N(0, stddev^2) noise to each tensor."""
-    stddev = float(f.get("stddev", 0.01))
-    for key, tensor in result.items():
-        if not torch.is_tensor(tensor):
-            continue
-        result[key] = tensor + torch.randn_like(tensor.float()) * stddev
-
-
-def _apply_norm_validation(torch, result: Dict[str, Any], f: Dict[str, Any]) -> None:
-    """Drop tensors whose norm exceeds ``max_norm``."""
-    max_norm = float(f.get("max_norm", 10.0))
-    for key in list(result.keys()):
-        tensor = result[key]
-        if torch.is_tensor(tensor) and torch.norm(tensor.float().flatten(), dim=0) > max_norm:
-            del result[key]
-
-
-def _apply_sparsification(torch, result: Dict[str, Any], f: Dict[str, Any]) -> None:
-    """Zero out values below the top-k% by magnitude."""
-    top_k_percent = float(f.get("top_k_percent", 10.0))
-    for key, tensor in result.items():
-        if not torch.is_tensor(tensor):
-            continue
-        flat = tensor.float().abs().flatten()
-        k = max(1, int(math.ceil(flat.numel() * top_k_percent / 100.0)))
-        threshold = torch.topk(flat, k).values[-1]
-        mask = tensor.abs() >= threshold
-        result[key] = tensor * mask
-
-
-def _apply_quantization(torch, result: Dict[str, Any], f: Dict[str, Any]) -> None:
-    """Round tensor values to ``bits``-bit resolution."""
-    bits = int(f.get("bits", 8))
-    levels = (1 << bits) - 1
-    for key, tensor in result.items():
-        if not torch.is_tensor(tensor):
-            continue
-        t_min = tensor.min()
-        t_max = tensor.max()
-        if t_min == t_max:
-            continue
-        scale = (t_max - t_min) / levels
-        result[key] = (torch.round((tensor - t_min) / scale) * scale) + t_min
-
-
-_FILTER_HANDLERS = {
-    "gradient_clip": _apply_gradient_clip,
-    "gaussian_noise": _apply_gaussian_noise,
-    "norm_validation": _apply_norm_validation,
-    "sparsification": _apply_sparsification,
-    "quantization": _apply_quantization,
-}
 
 
 def _apply_fedprox_correction(delta: Dict[str, Any], mu: float) -> Dict[str, Any]:
@@ -140,26 +75,14 @@ def _apply_fedprox_correction(delta: Dict[str, Any], mu: float) -> Dict[str, Any
 def apply_filters(delta: Dict[str, Any], filters: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Apply a composable filter pipeline to a state-dict delta.
 
-    Supported filter types:
-      - gradient_clip: clip per-tensor norms to ``max_norm``
-      - gaussian_noise: add N(0, stddev^2) noise
-      - norm_validation: drop tensors exceeding ``max_norm``
-      - sparsification: zero out values below top-k% by magnitude
-      - quantization: round values to ``bits``-bit resolution
+    This is a backward-compatible wrapper around :func:`edgeml.filters.apply_filters`.
+    It accepts the same dict-based filter configs and returns a plain dict.
+
+    For the full API with audit trail and :class:`~edgeml.filters.DeltaFilter`
+    support, use :func:`edgeml.filters.apply_filters` directly.
     """
-    try:
-        import torch  # type: ignore
-    except Exception as exc:
-        raise EdgeMLClientError("torch is required for filter pipeline") from exc
-
-    result = {k: v.clone() if torch.is_tensor(v) else v for k, v in delta.items()}
-
-    for f in filters:
-        handler = _FILTER_HANDLERS.get(f.get("type", ""))
-        if handler is not None:
-            handler(torch, result, f)
-
-    return result
+    result = _apply_filters_impl(delta, filters)
+    return result.delta
 
 
 class FederatedClient:
