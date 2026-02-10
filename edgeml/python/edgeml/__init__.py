@@ -5,6 +5,7 @@ from .edge import EdgeML
 from .federated_client import FederatedClient, apply_filters, compute_state_dict_delta
 from .federation import Federation
 from .registry import ModelRegistry
+from .secagg import SecAggClient, SecAggConfig
 
 __all__ = [
     "EdgeML",
@@ -17,4 +18,6 @@ __all__ = [
     "compute_state_dict_delta",
     "apply_filters",
     "DeviceAuthClient",
+    "SecAggClient",
+    "SecAggConfig",
 ]
