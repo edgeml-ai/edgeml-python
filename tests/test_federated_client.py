@@ -1304,7 +1304,7 @@ class FedProxCorrectionTests(unittest.TestCase):
     def test_participate_in_round_applies_fedprox(self):
         """participate_in_round should apply FedProx when proximal_mu is in config."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -1346,7 +1346,7 @@ class FedProxCorrectionTests(unittest.TestCase):
     def test_participate_in_round_no_fedprox_without_mu(self):
         """Without proximal_mu, no FedProx correction is applied."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -1374,7 +1374,7 @@ class FedProxCorrectionTests(unittest.TestCase):
     def test_participate_in_round_zero_mu_no_correction(self):
         """proximal_mu=0 should not apply any correction."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 

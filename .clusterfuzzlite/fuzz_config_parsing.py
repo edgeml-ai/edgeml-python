@@ -12,7 +12,7 @@ def TestOneInput(data):
     # Fuzz JSON config parsing
     try:
         raw = fdp.ConsumeUnicodeNoSurrogates(fdp.ConsumeIntInRange(0, 4096))
-        config = json.loads(raw)
+        _config = json.loads(raw)
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         pass
 
@@ -21,8 +21,8 @@ def TestOneInput(data):
         metadata_str = fdp.ConsumeUnicodeNoSurrogates(fdp.ConsumeIntInRange(0, 2048))
         parts = metadata_str.split(":")
         if len(parts) >= 2:
-            model_id = parts[0]
-            version = parts[1]
+            _model_id = parts[0]
+            _version = parts[1]
     except (ValueError, IndexError):
         pass
 
