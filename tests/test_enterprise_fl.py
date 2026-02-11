@@ -12,20 +12,16 @@ Tests for enterprise FL features in the Python SDK:
 import io
 import struct
 import unittest
-from unittest.mock import patch, MagicMock
 
 from edgeml.api_client import EdgeMLClientError
 from edgeml.federated_client import (
     FederatedClient,
     apply_filters,
-    compute_state_dict_delta,
     _apply_fedprox_correction,
 )
 from edgeml.secagg import (
     SecAggClient,
     SecAggConfig,
-    ShamirShare,
-    generate_shares,
     reconstruct_secret,
     model_bytes_to_field_elements,
     field_elements_to_model_bytes,
@@ -124,7 +120,7 @@ class SecAggRoundIntegrationTests(unittest.TestCase):
     def test_secagg_activated_by_constructor_flag(self):
         """SecAgg enabled via constructor should mask update and submit shares."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -152,7 +148,7 @@ class SecAggRoundIntegrationTests(unittest.TestCase):
     def test_secagg_activated_by_round_config(self):
         """SecAgg enabled via round config should mask update even if constructor flag is off."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -180,7 +176,7 @@ class SecAggRoundIntegrationTests(unittest.TestCase):
     def test_secagg_not_activated_when_both_disabled(self):
         """No SecAgg calls when both constructor and config are off."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -203,7 +199,7 @@ class SecAggRoundIntegrationTests(unittest.TestCase):
     def test_secagg_mask_changes_uploaded_data(self):
         """Verify that SecAgg masking actually changes the uploaded payload."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -285,7 +281,7 @@ class SecAggSessionTests(unittest.TestCase):
             total_clients=5,
         )
         client = SecAggClient(config)
-        shares = client.generate_key_shares()
+        _shares = client.generate_key_shares()
 
         share_1 = client.get_seed_share_for_peer(1)
         share_3 = client.get_seed_share_for_peer(3)
@@ -354,7 +350,7 @@ class FedProxFilterInteractionTests(unittest.TestCase):
     def test_fedprox_then_gradient_clip(self):
         """FedProx correction followed by gradient clipping."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -381,7 +377,7 @@ class FedProxFilterInteractionTests(unittest.TestCase):
     def test_fedprox_then_sparsification(self):
         """FedProx correction followed by sparsification."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -407,7 +403,7 @@ class FedProxFilterInteractionTests(unittest.TestCase):
     def test_fedprox_then_noise_then_quantization(self):
         """Three-stage pipeline: FedProx -> noise -> quantization."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -436,7 +432,7 @@ class FedProxFilterInteractionTests(unittest.TestCase):
     def test_clip_norm_injected_before_filters(self):
         """clip_norm in config should be injected before the filter list."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -462,7 +458,7 @@ class FedProxFilterInteractionTests(unittest.TestCase):
     def test_fedprox_with_secagg(self):
         """FedProx + SecAgg together -- correction applied before masking."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -984,7 +980,7 @@ class RoundParticipationEdgeCaseTests(unittest.TestCase):
     def test_participate_with_empty_config(self):
         """Round with minimal config (only model_id) should work."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -1006,7 +1002,7 @@ class RoundParticipationEdgeCaseTests(unittest.TestCase):
     def test_participate_uploads_correct_round_id(self):
         """Verify round_id is correctly included in the upload payload."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -1034,7 +1030,7 @@ class RoundParticipationEdgeCaseTests(unittest.TestCase):
     def test_participate_version_from_round_config(self):
         """Version should be taken from round config when present."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -1058,7 +1054,7 @@ class RoundParticipationEdgeCaseTests(unittest.TestCase):
     def test_participate_version_falls_back_to_latest(self):
         """When round config has no version, should fall back to /versions/latest."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 
@@ -1092,7 +1088,7 @@ class EndToEndEnterpriseTests(unittest.TestCase):
     def test_full_enterprise_round_fedprox_filters_secagg(self):
         """Simulate a complete enterprise round: FedProx + filters + SecAgg."""
         try:
-            import torch
+            import torch  # noqa: F401
         except ImportError:
             self.skipTest("torch not installed")
 

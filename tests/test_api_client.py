@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from edgeml.api_client import EdgeMLClientError, _ApiClient
 
@@ -436,7 +436,7 @@ class ConnectionPoolingTests(unittest.TestCase):
 
     def test_client_reused_across_requests(self):
         """Multiple requests should reuse the same httpx.Client."""
-        response = _FakeResponse(200, {"ok": True})
+        _response = _FakeResponse(200, {"ok": True})
         create_count = 0
         original_init = _FakeHttpxClient.__init__
 

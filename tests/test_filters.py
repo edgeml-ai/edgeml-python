@@ -12,7 +12,7 @@ Covers:
 """
 
 import unittest
-from typing import Any, Dict, List, Optional
+from typing import List
 
 from edgeml.filters import (
     DataKind,

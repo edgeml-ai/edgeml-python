@@ -12,11 +12,9 @@ Covers:
 - End-to-end: multiple clients mask, server reconstructs aggregate
 """
 
-import struct
 import unittest
 
 from edgeml.secagg import (
-    DEFAULT_FIELD_SIZE,
     HKDF_INFO_PAIRWISE_MASK,
     HKDF_INFO_SELF_MASK,
     HKDF_INFO_SHARE_ENCRYPTION,
@@ -36,7 +34,6 @@ from edgeml.secagg import (
     generate_pairwise_key,
     generate_share_encryption_key,
     generate_shared_key,
-    generate_shares,
     quantize,
     reconstruct_secret,
 )
@@ -506,8 +503,8 @@ class EndToEndSecAggPlusTests(unittest.TestCase):
                 agg[j] = (agg[j] + masked[j]) % mod
 
         # Stage 4: Unmask -- all survive, reveal rd_seed shares.
-        active = list(range(1, n + 1))
-        dropped = []
+        _active = list(range(1, n + 1))
+        _dropped = []
 
         # Server collects rd_seed shares and reconstructs self-masks.
         for i in range(n):
@@ -657,7 +654,7 @@ class EndToEndSecAggPlusTests(unittest.TestCase):
                 agg[j] = (agg[j] + masked[j]) % mod
 
         # Clients 4, 5 drop (0-indexed: 3, 4).
-        surviving = [0, 1, 2]
+        _surviving = [0, 1, 2]
 
         # Remove self-masks for all 5 clients.
         for i in range(n):

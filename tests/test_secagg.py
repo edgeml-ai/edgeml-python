@@ -208,7 +208,7 @@ class SecAggClientTests(unittest.TestCase):
 
     def test_get_seed_share_for_peer(self):
         sac = SecAggClient(self._make_config(total_clients=5, threshold=3))
-        shares = sac.generate_key_shares()
+        _shares = sac.generate_key_shares()
         peer_share = sac.get_seed_share_for_peer(3)
         self.assertIsNotNone(peer_share)
         self.assertEqual(peer_share.index, 3)

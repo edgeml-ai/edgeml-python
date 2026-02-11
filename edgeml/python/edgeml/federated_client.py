@@ -19,8 +19,8 @@ from typing import (
 from .api_client import EdgeMLClientError, _ApiClient
 from .control_plane import ExperimentsAPI, RolloutsAPI
 from .data_loader import DataLoadError, DataSource, load_data, validate_target
-from .filters import apply_filters as _apply_filters_impl
 from .filters import FilterRegistry, FilterResult  # noqa: F401 -- re-export
+from .filters import apply_filters as _apply_filters_impl
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -451,7 +451,8 @@ class FederatedClient:
 
     def _secagg_mask_and_share(self, round_id: str, weights_data: bytes) -> bytes:
         """Run the client side of the SecAgg protocol and return masked weights."""
-        from .secagg import SecAggClient, SecAggConfig as _SAConfig
+        from .secagg import SecAggClient
+        from .secagg import SecAggConfig as _SAConfig
 
         # Fetch session parameters from the server.
         session_info = self.api.secagg_get_session(round_id, self.device_id)
