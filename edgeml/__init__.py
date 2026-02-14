@@ -33,7 +33,9 @@ from .python.edgeml import (
     model,
     connect,
     deploy,
+    deploy_remote,
     DeployedModel,
+    Deployment,
     Engine,
 )
 
@@ -66,6 +68,8 @@ __all__ = [
     "model",
     "connect",
     "deploy",
+    "deploy_remote",
     "DeployedModel",
+    "Deployment",
     "Engine",
 ]
