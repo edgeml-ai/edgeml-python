@@ -63,6 +63,41 @@ pip install edgeml-sdk[dev]     # Testing and linting tools
 
 ## Quick Start
 
+### Local Inference — No Server Required
+
+Track any model with a single decorator. Works fully offline, no API key needed:
+
+```python
+import edgeml
+
+@edgeml.model("phi-3-mini", format="gguf", version="q4")
+def generate(prompt):
+    for token in llm.stream(prompt):
+        yield token
+
+for token in generate("Hello"):
+    print(token, end="")
+# stderr: [edgeml] phi-3-mini gguf q4 | 128 tok | TTFC 183ms | 42.1 tok/s | p99 61ms
+```
+
+Non-streaming works too:
+
+```python
+@edgeml.model("classifier", format="onnx")
+def classify(image):
+    return onnx_session.run(None, {"input": image})[0]
+
+classify(my_image)
+# stderr: [edgeml] classifier onnx | 12ms
+```
+
+When you're ready to send metrics to the EdgeML platform, add one line:
+
+```python
+edgeml.connect(api_key="edgeml_...")
+# All subsequent runs automatically report to the server
+```
+
 ### Enterprise Runtime Authentication
 
 For production deployments, use secure token-based authentication:

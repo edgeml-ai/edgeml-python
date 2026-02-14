@@ -29,6 +29,9 @@ from .python.edgeml import (
     HKDF_INFO_PAIRWISE_MASK,
     HKDF_INFO_SHARE_ENCRYPTION,
     HKDF_INFO_SELF_MASK,
+    OpenAIClient,
+    model,
+    connect,
 )
 
 __all__ = [
@@ -56,4 +59,7 @@ __all__ = [
     "HKDF_INFO_PAIRWISE_MASK",
     "HKDF_INFO_SHARE_ENCRYPTION",
     "HKDF_INFO_SELF_MASK",
+    "OpenAIClient",
+    "model",
+    "connect",
 ]
