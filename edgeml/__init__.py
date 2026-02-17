@@ -32,6 +32,11 @@ from .python.edgeml import (
     OpenAIClient,
     model,
     connect,
+    deploy,
+    deploy_remote,
+    DeployedModel,
+    Deployment,
+    Engine,
 )
 
 __all__ = [
@@ -62,4 +67,9 @@ __all__ = [
     "OpenAIClient",
     "model",
     "connect",
+    "deploy",
+    "deploy_remote",
+    "DeployedModel",
+    "Deployment",
+    "Engine",
 ]
