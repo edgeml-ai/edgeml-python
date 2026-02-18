@@ -1,9 +1,12 @@
 """
-Compatibility exports for the Python SDK package layout.
+Octomil Python SDK.
+
+Serve, deploy, and observe ML models on edge devices.
 
 Primary SDK code lives in `octomil/python/octomil`.
 """
 
+from .client import Client
 from .python.octomil import (
     Octomil,
     OctomilClientError,
@@ -32,6 +35,7 @@ from .python.octomil import (
 )
 
 __all__ = [
+    "Client",
     "Octomil",
     "OctomilClientError",
     "Federation",
