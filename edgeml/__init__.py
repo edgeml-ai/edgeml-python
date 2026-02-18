@@ -1,9 +1,12 @@
 """
-Compatibility exports for the Python SDK package layout.
+EdgeML Python SDK.
+
+Serve, deploy, and observe ML models on edge devices.
 
 Primary SDK code lives in `edgeml/python/edgeml`.
 """
 
+from .client import Client
 from .python.edgeml import (
     EdgeML,
     EdgeMLClientError,
@@ -32,6 +35,7 @@ from .python.edgeml import (
 )
 
 __all__ = [
+    "Client",
     "EdgeML",
     "EdgeMLClientError",
     "Federation",
