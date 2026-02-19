@@ -1038,7 +1038,7 @@ def benchmark(
 
     from .serve import _detect_backend
 
-    backend, _log = _detect_backend(model, engine_override=engine)
+    backend = _detect_backend(model, engine_override=engine)
     click.echo(f"Backend: {backend.name}")
 
     from .serve import GenerationRequest
