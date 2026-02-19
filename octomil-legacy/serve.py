@@ -611,7 +611,7 @@ def _detect_backend(
     cache_size_mb: int = 2048,
     cache_enabled: bool = True,
     engine_override: Optional[str] = None,
-) -> tuple[InferenceBackend, list[dict[str, Any]]]:
+) -> InferenceBackend:
     """Auto-detect engines, benchmark each, and return the fastest backend.
 
     Uses the engine registry plugin system. Each registered engine is:
@@ -619,15 +619,11 @@ def _detect_backend(
     2. Benchmarked (quick 32-token generation to measure tok/s)
     3. Ranked (highest tok/s wins)
 
-    Returns (backend, benchmark_results) where benchmark_results is a list
-    of dicts with engine name, tok/s, and status for display.
-
     If engine_override is set, skip benchmarking and use that engine directly.
     """
     from .engines import get_registry
 
     registry = get_registry()
-    benchmark_log: list[dict[str, Any]] = []
 
     backend_kwargs = {
         "cache_size_mb": cache_size_mb,
@@ -642,13 +638,7 @@ def _detect_backend(
                 f"Unknown engine '{engine_override}'. "
                 f"Available: {', '.join(available)}"
             )
-        backend = engine.create_backend(model_name, **backend_kwargs)
-        benchmark_log.append({
-            "engine": engine.name,
-            "status": "selected (override)",
-            "tokens_per_second": 0,
-        })
-        return backend, benchmark_log
+        return engine.create_backend(model_name, **backend_kwargs)
 
     # Detect all available engines for this model
     detections = registry.detect_all(model_name)
@@ -660,61 +650,22 @@ def _detect_backend(
         else:
             logger.debug("Engine unavailable: %s", d.engine.name)
 
-    if not available_engines:
-        # Fall back to echo
-        echo = EchoBackend()
-        echo.load_model(model_name)
-        benchmark_log.append({
-            "engine": "echo",
-            "status": "fallback (no engines available)",
-            "tokens_per_second": 0,
-        })
-        return echo, benchmark_log
-
-    # If only echo is available, skip benchmarking
+    # No real engines → echo fallback
     real_engines = [e for e in available_engines if e.name != "echo"]
     if not real_engines:
         echo = EchoBackend()
         echo.load_model(model_name)
-        benchmark_log.append({
-            "engine": "echo",
-            "status": "fallback (no real engines)",
-            "tokens_per_second": 0,
-        })
-        return echo, benchmark_log
+        return echo
 
-    # Benchmark real engines
+    # Benchmark real engines and pick fastest
     ranked = registry.benchmark_all(model_name, n_tokens=32, engines=real_engines)
-
-    for r in ranked:
-        if r.result.ok:
-            benchmark_log.append({
-                "engine": r.engine.name,
-                "status": "ok",
-                "tokens_per_second": round(r.result.tokens_per_second, 1),
-                "ttft_ms": round(r.result.ttft_ms, 1),
-            })
-        else:
-            benchmark_log.append({
-                "engine": r.engine.name,
-                "status": f"error: {r.result.error}",
-                "tokens_per_second": 0,
-            })
-
     best = registry.select_best(ranked)
     if best is None:
         echo = EchoBackend()
         echo.load_model(model_name)
-        benchmark_log.append({
-            "engine": "echo",
-            "status": "fallback (all benchmarks failed)",
-            "tokens_per_second": 0,
-        })
-        return echo, benchmark_log
+        return echo
 
-    # Create the actual backend from the winning engine
-    backend = best.engine.create_backend(model_name, **backend_kwargs)
-    return backend, benchmark_log
+    return best.engine.create_backend(model_name, **backend_kwargs)
 
 
 
@@ -738,7 +689,6 @@ class ServerState:
     backend: Optional[InferenceBackend] = None
     model_name: str = ""
     engine_name: str = ""
-    benchmark_results: list[dict[str, Any]] = field(default_factory=list)
     start_time: float = field(default_factory=time.time)
     request_count: int = 0
     api_key: Optional[str] = None
@@ -840,14 +790,12 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: Any) -> Any:
-        backend, benchmark_results = _detect_backend(
+        state.backend = _detect_backend(
             model_name,
             cache_size_mb=state.cache_size_mb,
             cache_enabled=state.cache_enabled,
             engine_override=state.engine_override,
         )
-        state.backend = backend
-        state.benchmark_results = benchmark_results
         state.engine_name = state.backend.name if state.backend else "none"
         state.start_time = time.time()
         yield
@@ -1016,11 +964,6 @@ def create_app(
                     state.backend is not None and state.backend.name == d.engine.name
                 ),
             }
-            # Attach benchmark results if available
-            for br in state.benchmark_results:
-                if br["engine"] == d.engine.name:
-                    entry["benchmark"] = br
-                    break
             engines_list.append(entry)
 
         return {
@@ -1047,7 +990,6 @@ def create_app(
             "requests_served": state.request_count,
             "uptime_seconds": int(time.time() - state.start_time),
             "cache": cache_info,
-            "benchmark_results": state.benchmark_results,
         }
 
     return app
