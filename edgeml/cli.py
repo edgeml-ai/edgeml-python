@@ -1036,9 +1036,9 @@ def benchmark(
         _benchmark_all_engines(model, iterations, max_tokens)
         return
 
-    from .serve import _detect_backend_simple
+    from .serve import _detect_backend
 
-    backend = _detect_backend_simple(model, engine_override=engine)
+    backend, _log = _detect_backend(model, engine_override=engine)
     click.echo(f"Backend: {backend.name}")
 
     from .serve import GenerationRequest

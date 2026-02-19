@@ -717,21 +717,6 @@ def _detect_backend(
     return backend, benchmark_log
 
 
-def _detect_backend_simple(
-    model_name: str,
-    *,
-    cache_size_mb: int = 2048,
-    cache_enabled: bool = True,
-    engine_override: Optional[str] = None,
-) -> InferenceBackend:
-    """Compatibility wrapper — returns just the backend without benchmark log."""
-    backend, _log = _detect_backend(
-        model_name,
-        cache_size_mb=cache_size_mb,
-        cache_enabled=cache_enabled,
-        engine_override=engine_override,
-    )
-    return backend
 
 
 def _get_cache_manager(backend: InferenceBackend) -> Any:
