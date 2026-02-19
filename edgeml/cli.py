@@ -470,6 +470,8 @@ def deploy(
     if phone:
         import httpx
 
+        from .qr import render_qr_terminal
+
         # Detect ollama models before deploying
         from .ollama import get_ollama_model
 
@@ -479,7 +481,6 @@ def deploy(
                 f"Detected ollama model: {ollama_model.name} "
                 f"({ollama_model.size_display}, {ollama_model.quantization})"
             )
-
 
         api_key = _require_api_key()
         api_base = os.environ.get("EDGEML_API_BASE", "https://api.edgeml.io/api/v1")
@@ -501,14 +502,36 @@ def deploy(
 
         session = resp.json()
         code = session["code"]
+        pair_url = f"{dashboard_url}/deploy/phone?code={code}&model={name}"
 
-        click.echo(f"\nPairing code: {code}")
-        click.echo("Enter this code in the EdgeML app on your phone.")
-        click.echo(f"Expires: {session['expires_at']}")
-        click.echo("\nOpening dashboard...")
-        webbrowser.open(f"{dashboard_url}/deploy/phone?code={code}&model={name}")
+        # Render QR code in a styled box
+        qr_art = render_qr_terminal(pair_url)
+        qr_lines = qr_art.split("\n")
+        # Determine box width: widest QR line or minimum for text
+        max_qr_width = max((len(line) for line in qr_lines), default=0)
+        box_inner = max(max_qr_width + 4, 45)
 
-        click.echo("\nWaiting for device to connect (Ctrl+C to cancel)...")
+        click.echo()
+        click.echo("\u256d" + "\u2500" * box_inner + "\u256e")
+        click.echo(
+            "\u2502" + "  Scan this QR code with your phone".ljust(box_inner) + "\u2502"
+        )
+        click.echo("\u2502" + " " * box_inner + "\u2502")
+        for line in qr_lines:
+            padded = ("  " + line).ljust(box_inner)
+            click.echo("\u2502" + padded + "\u2502")
+        click.echo("\u2502" + " " * box_inner + "\u2502")
+        click.echo(
+            "\u2502" + f"  Or enter code manually: {code}".ljust(box_inner) + "\u2502"
+        )
+        click.echo("\u2502" + "  Expires in 5 minutes".ljust(box_inner) + "\u2502")
+        click.echo("\u2570" + "\u2500" * box_inner + "\u256f")
+        click.echo()
+
+        webbrowser.open(pair_url)
+
+        click.echo("Waiting for device to connect (Ctrl+C to cancel)...")
+        last_status = ""
         try:
             while True:
                 import time
@@ -519,15 +542,38 @@ def deploy(
                     continue
                 data = poll.json()
                 status_val = data.get("status", "pending")
+                if status_val == last_status:
+                    continue
+                last_status = status_val
                 if status_val == "connected":
                     device = data.get("device_name") or data.get("device_id", "unknown")
                     platform = data.get("device_platform", "unknown")
-                    click.echo(f"Device connected: {device} ({platform})")
-                    click.echo("Deployment in progress...")
+                    click.echo(
+                        click.style(
+                            f"  \u2713 Device connected: {device} ({platform})",
+                            fg="green",
+                        )
+                    )
+                elif status_val == "converting":
+                    click.echo(
+                        click.style(
+                            "  \u2713 Converting model for device...", fg="yellow"
+                        )
+                    )
                 elif status_val == "deploying":
-                    click.echo("Deploying...")
+                    click.echo(
+                        click.style("  \u2713 Deploying to device...", fg="yellow")
+                    )
                 elif status_val == "done":
-                    click.echo("Deployment complete.")
+                    device = data.get("device_name") or data.get("device_id", "device")
+                    click.echo(
+                        click.style(
+                            f"  \u2713 Deployment complete! Model running on {device}",
+                            fg="green",
+                            bold=True,
+                        )
+                    )
+                    click.echo(f"  Open dashboard: {dashboard_url}")
                     break
                 elif status_val in ("expired", "cancelled"):
                     click.echo(f"Session {status_val}.", err=True)
