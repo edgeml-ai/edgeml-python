@@ -3,6 +3,26 @@
 from __future__ import annotations
 
 import sys
+import urllib.parse
+
+
+def build_deep_link(token: str, host: str) -> str:
+    """Build an ``octomil://pair`` deep link URL.
+
+    The URL uses the ``octomil://`` scheme so that scanning the QR code
+    opens the Octomil mobile app directly to the pairing screen.
+
+    Args:
+        token: Pairing token/code from the server.
+        host: Server base URL (e.g. ``https://api.octomil.io/api/v1``).
+
+    Returns:
+        A URL like ``octomil://pair?token=TOKEN&host=HOST`` with both
+        parameters properly URL-encoded.
+    """
+    encoded_token = urllib.parse.quote(token, safe="")
+    encoded_host = urllib.parse.quote(host, safe="")
+    return f"octomil://pair?token={encoded_token}&host={encoded_host}"
 
 
 def render_qr_terminal(url: str, *, border: int = 1) -> str:
