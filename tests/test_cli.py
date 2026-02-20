@@ -179,8 +179,9 @@ class TestDeployCommand:
         assert "ABC123" in result.output
         mock_open.assert_called_once()
         call_url = mock_open.call_args[0][0]
-        assert "edgeml.io/pair" in call_url
-        assert "code=ABC123" in call_url
+        assert call_url.startswith("edgeml://pair?")
+        assert "token=ABC123" in call_url
+        assert "host=" in call_url
 
     @patch("edgeml.cli._get_client")
     def test_deploy_rollout(self, mock_get_client, monkeypatch):
