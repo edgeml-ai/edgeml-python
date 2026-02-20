@@ -702,7 +702,7 @@ def deploy(
     if phone:
         import httpx
 
-        from .qr import render_qr_terminal
+        from .qr import build_deep_link, render_qr_terminal
 
         # Detect ollama models before deploying
         from .ollama import get_ollama_model
@@ -767,13 +767,10 @@ def deploy(
         session = resp.json()
         code = session["code"]
 
-        # Build the universal link URL for App Clip
-        pair_url = f"https://edgeml.io/pair?code={code}"
-        # Include server URL for non-production environments
-        if api_base != "https://api.edgeml.io/api/v1":
-            import urllib.parse
-
-            pair_url += f"&server={urllib.parse.quote(api_base, safe='')}"
+        # Build the deep link URL for the EdgeML mobile app.
+        # The edgeml:// scheme is handled by DeepLinkHandler in the
+        # iOS and Android SDKs, opening the app directly to pairing.
+        pair_url = build_deep_link(token=code, host=api_base)
 
         # Render QR code in a styled box
         qr_art = render_qr_terminal(pair_url)
@@ -785,7 +782,9 @@ def deploy(
         click.echo()
         click.echo("\u256d" + "\u2500" * box_inner + "\u256e")
         click.echo(
-            "\u2502" + "  Scan this QR code with your phone".ljust(box_inner) + "\u2502"
+            "\u2502"
+            + "  Scan this QR code with your phone camera:".ljust(box_inner)
+            + "\u2502"
         )
         click.echo("\u2502" + " " * box_inner + "\u2502")
         for line in qr_lines:
@@ -793,7 +792,7 @@ def deploy(
             click.echo("\u2502" + padded + "\u2502")
         click.echo("\u2502" + " " * box_inner + "\u2502")
         click.echo(
-            "\u2502" + f"  Or enter code manually: {code}".ljust(box_inner) + "\u2502"
+            "\u2502" + f"  Or open manually: {pair_url}".ljust(box_inner) + "\u2502"
         )
         click.echo("\u2502" + "  Expires in 5 minutes".ljust(box_inner) + "\u2502")
         click.echo("\u2570" + "\u2500" * box_inner + "\u256f")
