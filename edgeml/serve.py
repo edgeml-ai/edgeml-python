@@ -736,6 +736,27 @@ class ServerState:
     reporter: Optional["TelemetryReporter"] = None
 
 
+@dataclass
+class MultiModelServerState:
+    """Shared mutable state for multi-model serving with routing."""
+
+    backends: dict[str, InferenceBackend] = field(default_factory=dict)
+    model_names: list[str] = field(default_factory=list)
+    router: Any = None  # QueryRouter instance
+    start_time: float = field(default_factory=time.time)
+    request_count: int = 0
+    routed_counts: dict[str, int] = field(default_factory=dict)
+    fallback_counts: int = 0
+    api_key: Optional[str] = None
+    api_base: str = "https://api.edgeml.io/api/v1"
+    default_json_mode: bool = False
+    cache_size_mb: int = 2048
+    cache_enabled: bool = True
+    engine_override: Optional[str] = None
+    reporter: Optional["TelemetryReporter"] = None
+    route_strategy: str = "complexity"
+
+
 def _resolve_grammar(
     body: ChatCompletionBody, default_json_mode: bool = False
 ) -> tuple[Optional[str], bool]:
@@ -1238,5 +1259,397 @@ def run_server(
         cache_size_mb=cache_size_mb,
         cache_enabled=cache_enabled,
         engine=engine,
+    )
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+# ---------------------------------------------------------------------------
+# Multi-model serving with query routing
+# ---------------------------------------------------------------------------
+
+
+def create_multi_model_app(
+    model_names: list[str],
+    *,
+    api_key: Optional[str] = None,
+    api_base: str = "https://api.edgeml.io/api/v1",
+    json_mode: bool = False,
+    cache_size_mb: int = 2048,
+    cache_enabled: bool = True,
+    engine: Optional[str] = None,
+    route_strategy: str = "complexity",
+) -> Any:
+    """Create a FastAPI app that loads multiple models and routes queries.
+
+    Parameters
+    ----------
+    model_names:
+        Ordered list of model names, smallest to largest.
+    route_strategy:
+        Routing strategy (currently only ``"complexity"``).
+    """
+    from contextlib import asynccontextmanager
+
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse, StreamingResponse
+
+    from .routing import QueryRouter, RoutingDecision, assign_tiers
+
+    state = MultiModelServerState(
+        model_names=model_names,
+        api_key=api_key,
+        api_base=api_base,
+        default_json_mode=json_mode,
+        cache_size_mb=cache_size_mb,
+        cache_enabled=cache_enabled,
+        engine_override=engine,
+        route_strategy=route_strategy,
+    )
+
+    @asynccontextmanager
+    async def lifespan(app: Any) -> Any:
+        # Load all models
+        for name in model_names:
+            try:
+                backend = _detect_backend(
+                    name,
+                    cache_size_mb=state.cache_size_mb,
+                    cache_enabled=state.cache_enabled,
+                    engine_override=state.engine_override,
+                )
+                state.backends[name] = backend
+                state.routed_counts[name] = 0
+                logger.info("Loaded model: %s (engine: %s)", name, backend.name)
+            except Exception as exc:
+                _log_startup_error(name, exc)
+                raise
+
+        # Build router with auto-assigned tiers
+        model_infos = assign_tiers(model_names)
+        state.router = QueryRouter(
+            model_infos,
+            strategy=state.route_strategy,
+        )
+
+        state.start_time = time.time()
+
+        # Create telemetry reporter
+        if state.api_key:
+            try:
+                from .telemetry import TelemetryReporter as _TR
+
+                state.reporter = _TR(
+                    api_key=state.api_key,
+                    api_base=state.api_base,
+                    org_id="default",
+                )
+            except Exception as exc:
+                logger.warning("Failed to initialise telemetry: %s", exc)
+
+        yield
+
+        if state.reporter is not None:
+            state.reporter.close()
+
+    app = FastAPI(title="EdgeML Serve (Multi-Model)", version="1.0.0", lifespan=lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.get("/v1/models")
+    async def list_models() -> dict[str, Any]:
+        all_models: list[str] = []
+        for backend in state.backends.values():
+            all_models.extend(backend.list_models())
+        return {
+            "object": "list",
+            "data": [
+                {
+                    "id": m,
+                    "object": "model",
+                    "created": int(state.start_time),
+                    "owned_by": "edgeml",
+                }
+                for m in all_models
+            ],
+        }
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(body: ChatCompletionBody) -> Any:
+        if not state.backends:
+            raise HTTPException(status_code=503, detail="No models loaded")
+
+        messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+        # Route the request
+        assert state.router is not None
+        decision: RoutingDecision = state.router.route(messages)
+
+        routed_model = decision.model_name
+        fallback_chain = decision.fallback_chain
+
+        # Try the routed model, then fallback chain
+        last_error: Optional[Exception] = None
+        tried_models: list[str] = [routed_model] + fallback_chain
+        used_fallback = False
+
+        for model_name in tried_models:
+            backend = state.backends.get(model_name)
+            if backend is None:
+                continue
+
+            grammar_str, is_json = _resolve_grammar(body, state.default_json_mode)
+
+            req_messages = list(messages)
+            uses_grammar_natively = isinstance(backend, LlamaCppBackend)
+            schema_for_prompt: Optional[dict[str, Any]] = None
+            if is_json and not uses_grammar_natively:
+                rf = body.response_format or {}
+                if rf.get("type") == "json_schema":
+                    raw = rf.get("json_schema") or rf.get("schema")
+                    schema_for_prompt = raw.get("schema", raw) if raw else None
+                req_messages = _inject_json_system_prompt(req_messages, schema_for_prompt)
+
+            gen_req = GenerationRequest(
+                model=model_name,
+                messages=req_messages,
+                max_tokens=body.max_tokens,
+                temperature=body.temperature,
+                top_p=body.top_p,
+                stream=body.stream,
+                grammar=grammar_str if uses_grammar_natively else None,
+                json_mode=is_json,
+            )
+
+            state.request_count += 1
+            state.routed_counts[model_name] = state.routed_counts.get(model_name, 0) + 1
+            req_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+            session_id = uuid.uuid4().hex
+            model_version = "latest"
+            _reporter = state.reporter
+
+            # Report generation_started
+            if _reporter is not None:
+                try:
+                    _reporter.report_generation_started(
+                        model_id=model_name,
+                        version=model_version,
+                        session_id=session_id,
+                    )
+                except Exception:
+                    pass
+
+            if gen_req.stream:
+                headers = {
+                    "X-EdgeML-Routed-Model": model_name,
+                    "X-EdgeML-Complexity": str(decision.complexity_score),
+                    "X-EdgeML-Tier": decision.tier,
+                }
+                if used_fallback:
+                    headers["X-EdgeML-Fallback"] = "true"
+
+                return StreamingResponse(
+                    _stream_response(
+                        _MultiModelStateAdapter(state, backend, model_name),
+                        gen_req,
+                        req_id,
+                        session_id,
+                    ),
+                    media_type="text/event-stream",
+                    headers=headers,
+                )
+
+            gen_start = time.monotonic()
+            try:
+                text, metrics = backend.generate(gen_req)
+            except Exception as exc:
+                last_error = exc
+                used_fallback = True
+                state.fallback_counts += 1
+                logger.warning(
+                    "Model %s failed, trying fallback: %s", model_name, exc
+                )
+                if _reporter is not None:
+                    try:
+                        _reporter.report_generation_failed(
+                            session_id=session_id,
+                            model_id=model_name,
+                            version=model_version,
+                        )
+                    except Exception:
+                        pass
+                continue
+            gen_elapsed_ms = (time.monotonic() - gen_start) * 1000
+
+            # JSON validation + retry for non-grammar backends
+            if is_json and not uses_grammar_natively:
+                from .grammar import extract_json, validate_json_output
+
+                if not validate_json_output(text):
+                    extracted = extract_json(text)
+                    if extracted is not None:
+                        text = json.dumps(extracted)
+                    else:
+                        retry_messages = _inject_json_system_prompt(
+                            messages, schema_for_prompt
+                        )
+                        retry_req = GenerationRequest(
+                            model=model_name,
+                            messages=retry_messages,
+                            max_tokens=gen_req.max_tokens,
+                            temperature=max(gen_req.temperature - 0.2, 0.0),
+                            top_p=gen_req.top_p,
+                            stream=False,
+                            json_mode=True,
+                        )
+                        text, metrics = backend.generate(retry_req)
+                        if not validate_json_output(text):
+                            extracted = extract_json(text)
+                            if extracted is not None:
+                                text = json.dumps(extracted)
+
+            # Report generation_completed
+            if _reporter is not None:
+                try:
+                    total_tokens = metrics.total_tokens
+                    throughput = (
+                        total_tokens / (gen_elapsed_ms / 1000)
+                        if gen_elapsed_ms > 0
+                        else 0.0
+                    )
+                    _reporter.report_generation_completed(
+                        session_id=session_id,
+                        model_id=model_name,
+                        version=model_version,
+                        total_chunks=total_tokens,
+                        total_duration_ms=gen_elapsed_ms,
+                        ttfc_ms=metrics.ttfc_ms,
+                        throughput=throughput,
+                    )
+                except Exception:
+                    pass
+
+            response_data = {
+                "id": req_id,
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": model_name,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": text},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": metrics.prompt_tokens,
+                    "completion_tokens": metrics.total_tokens,
+                    "total_tokens": metrics.prompt_tokens + metrics.total_tokens,
+                    "cache_hit": metrics.cache_hit,
+                },
+            }
+
+            resp = JSONResponse(content=response_data)
+            resp.headers["X-EdgeML-Routed-Model"] = model_name
+            resp.headers["X-EdgeML-Complexity"] = str(decision.complexity_score)
+            resp.headers["X-EdgeML-Tier"] = decision.tier
+            if used_fallback:
+                resp.headers["X-EdgeML-Fallback"] = "true"
+            return resp
+
+        # All models failed
+        raise HTTPException(
+            status_code=503,
+            detail=f"All models failed. Last error: {last_error}",
+        )
+
+    @app.get("/v1/routing/stats")
+    async def routing_stats() -> dict[str, Any]:
+        """Return routing statistics."""
+        return {
+            "total_requests": state.request_count,
+            "routed_counts": dict(state.routed_counts),
+            "fallback_count": state.fallback_counts,
+            "models": state.model_names,
+            "strategy": state.route_strategy,
+        }
+
+    @app.get("/health")
+    async def health() -> dict[str, Any]:
+        models_status = {}
+        for name, backend in state.backends.items():
+            models_status[name] = {
+                "engine": backend.name,
+                "requests": state.routed_counts.get(name, 0),
+            }
+        return {
+            "status": "ok",
+            "mode": "multi-model",
+            "models": models_status,
+            "strategy": state.route_strategy,
+            "requests_served": state.request_count,
+            "fallback_count": state.fallback_counts,
+            "uptime_seconds": int(time.time() - state.start_time),
+        }
+
+    return app
+
+
+class _MultiModelStateAdapter:
+    """Adapts MultiModelServerState for ``_stream_response`` compatibility.
+
+    ``_stream_response`` expects a ``ServerState``-like object with
+    ``.backend`` and ``.reporter``.  This adapter provides those.
+    """
+
+    def __init__(
+        self,
+        state: MultiModelServerState,
+        backend: InferenceBackend,
+        model_name: str,
+    ) -> None:
+        self.backend = backend
+        self.reporter = state.reporter
+        self.model_name = model_name
+
+
+def run_multi_model_server(
+    model_names: list[str],
+    *,
+    port: int = 8080,
+    host: str = "0.0.0.0",
+    api_key: Optional[str] = None,
+    api_base: str = "https://api.edgeml.io/api/v1",
+    json_mode: bool = False,
+    cache_size_mb: int = 2048,
+    cache_enabled: bool = True,
+    engine: Optional[str] = None,
+    route_strategy: str = "complexity",
+) -> None:
+    """Start a multi-model inference server with query routing (blocking).
+
+    Parameters
+    ----------
+    model_names:
+        Ordered list of model names, smallest to largest.
+    route_strategy:
+        Routing strategy (``"complexity"`` is the only one currently).
+    """
+    import uvicorn
+
+    app = create_multi_model_app(
+        model_names,
+        api_key=api_key,
+        api_base=api_base,
+        json_mode=json_mode,
+        cache_size_mb=cache_size_mb,
+        cache_enabled=cache_enabled,
+        engine=engine,
+        route_strategy=route_strategy,
     )
     uvicorn.run(app, host=host, port=port, log_level="info")
