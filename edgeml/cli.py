@@ -112,6 +112,24 @@ def main() -> None:
     help="Force a specific engine (mlx-lm, llama.cpp, mnn, onnxruntime). "
     "Default: auto-benchmark all available engines and pick fastest.",
 )
+@click.option(
+    "--models",
+    default=None,
+    help="Comma-separated list of models to load (ordered small to large). "
+    "Enables multi-model serving. Example: smollm-360m,phi-mini,llama-3b",
+)
+@click.option(
+    "--auto-route",
+    is_flag=True,
+    help="Enable automatic query routing across loaded models. "
+    "Requires --models with 2+ models.",
+)
+@click.option(
+    "--route-strategy",
+    default="complexity",
+    type=click.Choice(["complexity"]),
+    help="Routing strategy for --auto-route (default: complexity).",
+)
 def serve(
     model: str,
     port: int,
@@ -122,25 +140,33 @@ def serve(
     cache_size: int,
     no_cache: bool,
     engine: str | None,
+    models: str | None,
+    auto_route: bool,
+    route_strategy: str,
 ) -> None:
     """Start a local OpenAI-compatible inference server.
 
     Auto-detects all available inference engines, benchmarks each,
     and picks the fastest for your hardware. Override with --engine.
 
-    Example:
-
+    \b
+    Single-model mode:
         edgeml serve gemma-1b --port 8080
 
-        curl localhost:8080/v1/chat/completions \\
-            -d '{"model":"gemma-1b","messages":[{"role":"user","content":"Hi"}]}'
+    \b
+    Multi-model with auto-routing:
+        edgeml serve smollm-360m --models smollm-360m,phi-mini,llama-3b --auto-route
 
+    Simple queries (greetings, short factual) route to the smallest model.
+    Complex queries (code, reasoning, multi-step) route to the largest.
+    If a model fails, the next larger model is tried automatically.
+
+    \b
     Force a specific engine:
-
         edgeml serve gemma-1b --engine llama.cpp
 
+    \b
     Use --json-mode to default all responses to valid JSON output:
-
         edgeml serve gemma-1b --json-mode
     """
     api_key = _get_api_key() if share else None
@@ -151,7 +177,42 @@ def serve(
     )
     cache_enabled = not no_cache
 
-    # Show engine detection before starting server
+    # Determine if multi-model mode
+    model_list: list[str] | None = None
+    if models:
+        model_list = [m.strip() for m in models.split(",") if m.strip()]
+
+    if auto_route and not model_list:
+        click.echo(
+            "Error: --auto-route requires --models with 2+ models.",
+            err=True,
+        )
+        sys.exit(1)
+
+    if auto_route and model_list and len(model_list) < 2:
+        click.echo(
+            "Error: --auto-route requires at least 2 models in --models.",
+            err=True,
+        )
+        sys.exit(1)
+
+    # Multi-model routing mode
+    if auto_route and model_list:
+        _serve_multi_model(
+            model_list=model_list,
+            port=port,
+            host=host,
+            api_key=api_key,
+            api_base=api_base,
+            json_mode=json_mode,
+            cache_size=cache_size,
+            cache_enabled=cache_enabled,
+            engine=engine,
+            route_strategy=route_strategy,
+        )
+        return
+
+    # Single-model mode (original behaviour)
     _print_engine_detection(model, engine)
 
     click.echo(f"\nStarting EdgeML serve on {host}:{port}")
@@ -191,6 +252,59 @@ def serve(
         cache_size_mb=cache_size,
         cache_enabled=cache_enabled,
         engine=engine,
+    )
+
+
+def _serve_multi_model(
+    model_list: list[str],
+    port: int,
+    host: str,
+    api_key: str | None,
+    api_base: str,
+    json_mode: bool,
+    cache_size: int,
+    cache_enabled: bool,
+    engine: str | None,
+    route_strategy: str,
+) -> None:
+    """Start multi-model serving with query routing."""
+    from .routing import assign_tiers
+
+    # Show tier assignment
+    tiers = assign_tiers(model_list)
+    tier_labels = {
+        "fast": "<0.3 complexity",
+        "balanced": "0.3-0.7 complexity",
+        "quality": ">0.7 complexity",
+    }
+
+    click.echo(f"\nLoading {len(model_list)} models for auto-routing...")
+    for name in model_list:
+        info = tiers[name]
+        label = tier_labels.get(info.tier, info.tier)
+        click.echo(f"  {name}: tier={info.tier} ({label})")
+
+    click.echo(f"\nRouting enabled (strategy: {route_strategy})")
+    click.echo(f"Serving on {host}:{port}")
+    click.echo(f"OpenAI-compatible API: http://localhost:{port}/v1/chat/completions")
+    click.echo(f"Routing stats: http://localhost:{port}/v1/routing/stats")
+    click.echo(f"Health check: http://localhost:{port}/health")
+    if json_mode:
+        click.echo("JSON mode: enabled (all responses default to valid JSON)")
+
+    from .serve import run_multi_model_server
+
+    run_multi_model_server(
+        model_list,
+        port=port,
+        host=host,
+        api_key=api_key,
+        api_base=api_base,
+        json_mode=json_mode,
+        cache_size_mb=cache_size,
+        cache_enabled=cache_enabled,
+        engine=engine,
+        route_strategy=route_strategy,
     )
 
 
