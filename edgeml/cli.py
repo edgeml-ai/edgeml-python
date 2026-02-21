@@ -272,7 +272,11 @@ def _serve_multi_model(
 
     # Show tier assignment
     tiers = assign_tiers(model_list)
-    tier_labels = {"fast": "<0.3 complexity", "balanced": "0.3-0.7 complexity", "quality": ">0.7 complexity"}
+    tier_labels = {
+        "fast": "<0.3 complexity",
+        "balanced": "0.3-0.7 complexity",
+        "quality": ">0.7 complexity",
+    }
 
     click.echo(f"\nLoading {len(model_list)} models for auto-routing...")
     for name in model_list:

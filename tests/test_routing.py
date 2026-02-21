@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -13,7 +12,6 @@ from edgeml.routing import (
     TIER_ORDER,
     ModelInfo,
     QueryRouter,
-    RoutingDecision,
     _estimate_complexity,
     assign_tiers,
 )
@@ -81,7 +79,9 @@ class TestComplexityEstimation:
             "delete, and balance operations. Include proper error handling and "
             "type hints. The algorithm should handle edge cases like duplicate keys."
         )
-        assert score > 0.4, f"Complex code request should be high complexity, got {score}"
+        assert score > 0.4, (
+            f"Complex code request should be high complexity, got {score}"
+        )
 
     def test_complex_reasoning(self):
         score = _estimate_complexity(
@@ -130,7 +130,9 @@ class TestComplexityEstimation:
         ]
         for text in test_cases:
             score = _estimate_complexity(text)
-            assert 0.0 <= score <= 1.0, f"Score out of bounds for '{text[:30]}...': {score}"
+            assert 0.0 <= score <= 1.0, (
+                f"Score out of bounds for '{text[:30]}...': {score}"
+            )
 
     def test_code_indicators_raise_complexity(self):
         score_no_code = _estimate_complexity("explain sorting")
@@ -225,28 +227,32 @@ class TestQueryRouter:
         assert decision.complexity_score < 0.3
 
     def test_routes_complex_to_large(self, router):
-        decision = router.route([
-            {
-                "role": "user",
-                "content": (
-                    "Write a complete implementation of a distributed hash table "
-                    "with consistent hashing, virtual nodes, and replication. "
-                    "Include the algorithm for node join/leave and key redistribution. "
-                    "Prove the load balance properties step by step."
-                ),
-            }
-        ])
+        decision = router.route(
+            [
+                {
+                    "role": "user",
+                    "content": (
+                        "Write a complete implementation of a distributed hash table "
+                        "with consistent hashing, virtual nodes, and replication. "
+                        "Include the algorithm for node join/leave and key redistribution. "
+                        "Prove the load balance properties step by step."
+                    ),
+                }
+            ]
+        )
         assert decision.model_name == "large"
         assert decision.tier == "quality"
         assert decision.complexity_score >= 0.7
 
     def test_routes_medium_to_balanced(self, router):
-        decision = router.route([
-            {
-                "role": "user",
-                "content": "Explain the difference between REST and GraphQL APIs",
-            }
-        ])
+        decision = router.route(
+            [
+                {
+                    "role": "user",
+                    "content": "Explain the difference between REST and GraphQL APIs",
+                }
+            ]
+        )
         assert decision.tier in ("balanced", "fast", "quality")
         # The exact routing depends on the heuristic, but the score should
         # be in a reasonable range
@@ -288,9 +294,9 @@ class TestQueryRouter:
     def test_custom_thresholds(self, three_models):
         # Very permissive fast tier (0-0.8)
         router = QueryRouter(three_models, thresholds=(0.8, 0.95))
-        decision = router.route([
-            {"role": "user", "content": "Explain how binary search works"}
-        ])
+        decision = router.route(
+            [{"role": "user", "content": "Explain how binary search works"}]
+        )
         # With a very high threshold, most things route to fast
         assert decision.tier == "fast"
 
@@ -337,12 +343,14 @@ class TestQueryRouter:
         router = QueryRouter(models)
         # A medium-complexity query targets "balanced", but no balanced model exists
         # Should fall back to quality
-        decision = router.route([
-            {
-                "role": "user",
-                "content": "Compare and contrast the TCP and UDP protocols in networking",
-            }
-        ])
+        decision = router.route(
+            [
+                {
+                    "role": "user",
+                    "content": "Compare and contrast the TCP and UDP protocols in networking",
+                }
+            ]
+        )
         # The model should be resolved (either fast or quality, not crash)
         assert decision.model_name in ("small", "big")
 
@@ -554,7 +562,9 @@ class TestFallbackChain:
 
         async def _run():
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 resp = await client.post(
                     "/v1/chat/completions",
                     json={"messages": [{"role": "user", "content": "hello"}]},
@@ -592,7 +602,9 @@ class TestFallbackChain:
 
         async def _run():
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 resp = await client.post(
                     "/v1/chat/completions",
                     json={"messages": [{"role": "user", "content": "hello"}]},

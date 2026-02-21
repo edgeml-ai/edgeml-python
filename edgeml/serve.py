@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 import logging
-import platform
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -85,8 +84,14 @@ _MLX_MODELS: dict[str, str] = {
 # GGUF models for llama.cpp (cross-platform)
 _GGUF_MODELS: dict[str, tuple[str, str]] = {
     # (repo_id, filename)
-    "gemma-1b": ("bartowski/google_gemma-3-1b-it-GGUF", "google_gemma-3-1b-it-Q4_K_M.gguf"),
-    "gemma-4b": ("bartowski/google_gemma-3-4b-it-GGUF", "google_gemma-3-4b-it-Q4_K_M.gguf"),
+    "gemma-1b": (
+        "bartowski/google_gemma-3-1b-it-GGUF",
+        "google_gemma-3-1b-it-Q4_K_M.gguf",
+    ),
+    "gemma-4b": (
+        "bartowski/google_gemma-3-4b-it-GGUF",
+        "google_gemma-3-4b-it-Q4_K_M.gguf",
+    ),
     "llama-1b": (
         "bartowski/Llama-3.2-1B-Instruct-GGUF",
         "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
@@ -638,8 +643,7 @@ def _detect_backend(
         if engine is None:
             available = [e.name for e in registry.engines]
             raise ValueError(
-                f"Unknown engine '{engine_override}'. "
-                f"Available: {', '.join(available)}"
+                f"Unknown engine '{engine_override}'. Available: {', '.join(available)}"
             )
         return engine.create_backend(model_name, **backend_kwargs)
 
@@ -669,8 +673,6 @@ def _detect_backend(
         return echo
 
     return best.engine.create_backend(model_name, **backend_kwargs)
-
-
 
 
 def _log_startup_error(model_name: str, exc: Exception) -> None:
@@ -1352,7 +1354,9 @@ def create_multi_model_app(
         if state.reporter is not None:
             state.reporter.close()
 
-    app = FastAPI(title="EdgeML Serve (Multi-Model)", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(
+        title="EdgeML Serve (Multi-Model)", version="1.0.0", lifespan=lifespan
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -1413,7 +1417,9 @@ def create_multi_model_app(
                 if rf.get("type") == "json_schema":
                     raw = rf.get("json_schema") or rf.get("schema")
                     schema_for_prompt = raw.get("schema", raw) if raw else None
-                req_messages = _inject_json_system_prompt(req_messages, schema_for_prompt)
+                req_messages = _inject_json_system_prompt(
+                    req_messages, schema_for_prompt
+                )
 
             gen_req = GenerationRequest(
                 model=model_name,
@@ -1471,9 +1477,7 @@ def create_multi_model_app(
                 last_error = exc
                 used_fallback = True
                 state.fallback_counts += 1
-                logger.warning(
-                    "Model %s failed, trying fallback: %s", model_name, exc
-                )
+                logger.warning("Model %s failed, trying fallback: %s", model_name, exc)
                 if _reporter is not None:
                     try:
                         _reporter.report_generation_failed(
