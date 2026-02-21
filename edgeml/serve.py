@@ -35,6 +35,12 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, Field
 
+from .model_registry import (
+    MODEL_FAMILIES,
+    ModelResolutionError,
+    resolve_model,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,13 +68,6 @@ class ChatCompletionBody(BaseModel):
 # ---------------------------------------------------------------------------
 # Model catalog — powered by the model registry
 # ---------------------------------------------------------------------------
-
-from .model_registry import (
-    MODEL_FAMILIES,
-    ModelResolutionError,
-    parse_model_tag,
-    resolve_model,
-)
 
 # Backwards-compatible dicts derived from the registry.
 # These are kept for code that references them directly (e.g. tests,
