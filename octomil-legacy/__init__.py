@@ -34,6 +34,12 @@ from .models import (
     RollbackResult,
     TrainingSession,
 )
+from .routing import (
+    ModelInfo,
+    QueryRouter,
+    RoutingDecision,
+    assign_tiers,
+)
 from .python.octomil import (
     Octomil,
     OctomilClientError,
@@ -222,4 +228,8 @@ __all__ = [
     "TelemetryReporter",
     "init",
     "get_reporter",
+    "ModelInfo",
+    "QueryRouter",
+    "RoutingDecision",
+    "assign_tiers",
 ]
