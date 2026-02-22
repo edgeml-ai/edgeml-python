@@ -66,8 +66,9 @@ class SubTaskResult:
 # ---------------------------------------------------------------------------
 
 # Numbered list: "1. ... 2. ... 3. ..." or "1) ... 2) ... 3) ..."
+# Handles both newline-separated and inline numbered lists.
 _NUMBERED_LIST = re.compile(
-    r"(?:^|\n)\s*(\d+)[.)]\s+(.+?)(?=(?:\n\s*\d+[.)]\s)|\Z)",
+    r"(?:^|\n|\s)(\d+)[.)]\s+(.+?)(?=(?:\s\d+[.)]\s)|\Z)",
     re.DOTALL,
 )
 
@@ -165,6 +166,8 @@ def _split_comma_separated_imperatives(text: str) -> list[str] | None:
     """Split comma-separated imperative clauses.
 
     Detects patterns like: "Summarize X, translate Y, and format Z"
+    Requires ALL parts to start with an imperative verb to avoid
+    splitting mid-sentence lists (e.g. "implement X, Y, and Z").
     Returns None if no valid split.
     """
     # Remove a trailing period
@@ -175,19 +178,18 @@ def _split_comma_separated_imperatives(text: str) -> list[str] | None:
     if len(parts) < 2:
         return None
 
-    # Check that at least 2 parts start with an imperative verb
-    imperative_count = 0
+    # Require ALL parts to start with an imperative verb
     cleaned: list[str] = []
     for part in parts:
         part = part.strip()
         if not part:
             continue
         first_word = part.split()[0].lower() if part.split() else ""
-        if first_word in _IMPERATIVE_VERBS:
-            imperative_count += 1
+        if first_word not in _IMPERATIVE_VERBS:
+            return None
         cleaned.append(part)
 
-    if imperative_count >= 2 and len(cleaned) >= 2:
+    if len(cleaned) >= 2:
         return cleaned
     return None
 
@@ -220,25 +222,53 @@ def _split_sequential_markers(text: str) -> list[str] | None:
 def _split_multi_sentence_imperatives(text: str) -> list[str] | None:
     """Split multi-sentence text where each sentence starts with an imperative verb.
 
-    Returns None if fewer than 2 imperative sentences found.
+    Only triggers when ALL sentences start with imperative verbs and
+    the sentences represent distinct tasks (not elaborations on a single
+    request).  Returns None if fewer than 2 qualifying sentences found.
     """
     # Split on sentence boundaries (period followed by space + uppercase or end)
     sentences = re.split(r"(?<=[.!?])\s+", text)
     if len(sentences) < 2:
         return None
 
-    imperative_sentences: list[str] = []
+    cleaned: list[str] = []
     for sent in sentences:
         sent = sent.strip().rstrip(".")
         if not sent:
             continue
         first_word = sent.split()[0].lower() if sent.split() else ""
-        if first_word in _IMPERATIVE_VERBS:
-            imperative_sentences.append(sent)
+        if first_word not in _IMPERATIVE_VERBS:
+            # Not all sentences are imperative -- bail out
+            return None
+        cleaned.append(sent)
 
-    if len(imperative_sentences) >= 2:
-        return imperative_sentences
-    return None
+    if len(cleaned) < 2:
+        return None
+
+    # Reject when sentences are elaborations on a single task.
+    # Elaboration verbs ("implement", "include", "ensure", "handle", "add",
+    # "use", "consider") following a creation verb ("write", "create", "build",
+    # "design", "develop") are not independent tasks.
+    _CREATION_VERBS = {"write", "create", "build", "design", "develop", "generate"}
+    _ELABORATION_VERBS = {
+        "implement",
+        "include",
+        "ensure",
+        "handle",
+        "add",
+        "use",
+        "consider",
+        "make",
+        "provide",
+        "show",
+    }
+    first_verb = cleaned[0].split()[0].lower()
+    if first_verb in _CREATION_VERBS:
+        following_verbs = {s.split()[0].lower() for s in cleaned[1:]}
+        if following_verbs & _ELABORATION_VERBS:
+            return None
+
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
