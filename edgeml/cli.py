@@ -456,36 +456,83 @@ def _serve_multi_model(
     )
 
 
-def _get_engine_install_hint() -> str:
-    """Return platform-aware install instructions for inference engines."""
+def _get_recommended_engines() -> list[tuple[str, str, str]]:
+    """Return platform-aware engine recommendations as (package, pip_extra, description)."""
     import platform as _platform
 
     system = _platform.system()
     machine = _platform.machine()
 
     if system == "Darwin" and machine == "arm64":
-        return (
-            "  Recommended for Apple Silicon:\n"
-            "\n"
-            "    pip install mlx-lm          # Best performance (MLX)\n"
-            "    pip install llama-cpp-python # Good alternative (llama.cpp)\n"
-        )
+        return [
+            ("mlx-lm", "mlx", "MLX — best performance on Apple Silicon"),
+            ("llama-cpp-python", "llama", "llama.cpp — good alternative"),
+        ]
     elif system == "Darwin":
-        return (
-            "  Recommended for macOS (Intel):\n"
-            "\n"
-            "    pip install llama-cpp-python # llama.cpp\n"
-            "    pip install onnxruntime      # ONNX Runtime\n"
-        )
+        return [
+            ("llama-cpp-python", "llama", "llama.cpp"),
+            ("onnxruntime", "onnx", "ONNX Runtime"),
+        ]
     elif system == "Linux":
-        return (
-            "  Recommended for Linux:\n"
-            "\n"
-            "    pip install llama-cpp-python # llama.cpp\n"
-            "    pip install onnxruntime      # ONNX Runtime\n"
-        )
+        return [
+            ("llama-cpp-python", "llama", "llama.cpp"),
+            ("onnxruntime", "onnx", "ONNX Runtime"),
+        ]
     else:
-        return "  pip install llama-cpp-python\n"
+        return [("llama-cpp-python", "llama", "llama.cpp")]
+
+
+def _prompt_engine_install() -> bool:
+    """Prompt user to install the recommended engine. Returns True if installed."""
+    import subprocess
+
+    recommendations = _get_recommended_engines()
+    if not recommendations:
+        return False
+
+    top_pkg, top_extra, top_desc = recommendations[0]
+
+    click.echo(
+        click.style(
+            "\nNo inference engines found.",
+            fg="yellow",
+        )
+    )
+    click.echo(f"  Recommended: {top_desc}\n")
+
+    # Non-interactive (piped) — just print the hint and return
+    if not sys.stdin.isatty():
+        click.echo(f"    pip install {top_pkg}\n")
+        return False
+
+    if click.confirm(f"  Install {top_pkg} now?", default=True):
+        click.echo()
+        # When running as PyInstaller binary, sys.executable is the frozen
+        # bootstrap — use 'pip' from PATH instead.
+        if getattr(sys, "frozen", False):
+            pip_cmd = ["pip", "install", top_pkg]
+        else:
+            pip_cmd = [sys.executable, "-m", "pip", "install", top_pkg]
+        try:
+            subprocess.check_call(pip_cmd)
+            click.echo(
+                click.style(f"\n  {top_pkg} installed successfully.\n", fg="green")
+            )
+            return True
+        except subprocess.CalledProcessError:
+            click.echo(
+                click.style(f"\n  Failed to install {top_pkg}.", fg="red"),
+                err=True,
+            )
+            click.echo(f"  Try manually: pip install {top_pkg}\n")
+            return False
+    else:
+        # Show alternatives
+        click.echo("\n  Other options:\n")
+        for pkg, _extra, desc in recommendations:
+            click.echo(f"    pip install {pkg:<22s} # {desc}")
+        click.echo()
+        return False
 
 
 def _print_engine_detection(model: str, engine_override: str | None) -> None:
@@ -519,13 +566,19 @@ def _print_engine_detection(model: str, engine_override: str | None) -> None:
             f"\nUsing {available[0].engine.display_name} (only available engine)"
         )
     else:
-        click.echo(
-            click.style(
-                "\nNo inference engines found. Install one to get started:\n",
-                fg="yellow",
-            )
-        )
-        click.echo(_get_engine_install_hint())
+        installed = _prompt_engine_install()
+        if installed:
+            # Re-detect after installation
+            detections = registry.detect_all(model)
+            available = [
+                d for d in detections if d.available and d.engine.name != "echo"
+            ]
+            if available:
+                click.echo(
+                    f"  Using {available[0].engine.display_name}"
+                )
+                return
+            # Still nothing — fall through to echo
         click.echo(
             click.style(
                 "  Using echo backend for now (mirrors input, no real inference).\n",
