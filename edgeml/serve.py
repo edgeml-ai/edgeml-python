@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 if TYPE_CHECKING:
+    from .early_exit import EarlyExitConfig, EarlyExitMonitor
     from .telemetry import TelemetryReporter
 
 from pydantic import BaseModel, Field
@@ -172,6 +173,8 @@ class InferenceMetrics:
     total_duration_ms: float = 0.0
     cache_hit: bool = False
     attention_backend: str = "standard"
+    early_exit_tokens: int = 0
+    avg_layers_used: float = 0.0
 
 
 class InferenceBackend:
@@ -783,6 +786,9 @@ class ServerState:
     moe_config: MoEConfig = field(default_factory=MoEConfig)
     is_moe_model: bool = False
     moe_metadata: Any = None  # MoEMetadata from catalog
+    compressor: Any = None  # PromptCompressor instance
+    early_exit_config: Optional["EarlyExitConfig"] = None
+    early_exit_monitor: Optional["EarlyExitMonitor"] = None
 
 
 @dataclass
@@ -804,6 +810,7 @@ class MultiModelServerState:
     engine_override: Optional[str] = None
     reporter: Optional["TelemetryReporter"] = None
     route_strategy: str = "complexity"
+    compressor: Any = None  # PromptCompressor instance
 
 
 def _resolve_grammar(
@@ -869,6 +876,12 @@ def create_app(
     engine: Optional[str] = None,
     max_queue_depth: int = 32,
     moe_config: Optional[MoEConfig] = None,
+    compress_context: bool = False,
+    compression_strategy: str = "token_pruning",
+    compression_ratio: float = 0.5,
+    compression_max_turns: int = 4,
+    compression_threshold: int = 256,
+    early_exit_config: Optional["EarlyExitConfig"] = None,
 ) -> Any:
     """Create a FastAPI app with OpenAI-compatible endpoints.
 
@@ -886,6 +899,20 @@ def create_app(
     moe_config:
         Configuration for Mixture of Experts model features.
         When ``None``, uses defaults (auto-detection enabled).
+    compress_context:
+        Enable prompt compression.  Long prompts are compressed before
+        inference to reduce context window usage and speed up prefill.
+    compression_strategy:
+        Compression strategy: ``"token_pruning"`` or ``"sliding_window"``.
+    compression_ratio:
+        Target compression ratio (0.0--1.0) for token pruning.
+    compression_max_turns:
+        Number of recent turns to keep verbatim (sliding_window strategy).
+    compression_threshold:
+        Minimum estimated token count before compression activates.
+    early_exit_config:
+        Configuration for early exit / adaptive computation depth.
+        When ``None`` or not enabled, early exit monitoring is disabled.
     """
     from contextlib import asynccontextmanager
 
@@ -899,6 +926,21 @@ def create_app(
     _moe_detected = _is_moe(model_name)
     _moe_meta = get_moe_metadata(model_name)
 
+    # Build compressor if enabled
+    _compressor = None
+    if compress_context:
+        from .compression import CompressionConfig, PromptCompressor
+
+        _compressor = PromptCompressor(
+            CompressionConfig(
+                enabled=True,
+                strategy=compression_strategy,
+                target_ratio=compression_ratio,
+                max_turns_verbatim=compression_max_turns,
+                token_threshold=compression_threshold,
+            )
+        )
+
     state = ServerState(
         model_name=model_name,
         api_key=api_key,
@@ -911,6 +953,8 @@ def create_app(
         moe_config=moe_config or MoEConfig(),
         is_moe_model=_moe_detected,
         moe_metadata=_moe_meta,
+        compressor=_compressor,
+        early_exit_config=early_exit_config,
     )
 
     @asynccontextmanager
@@ -955,6 +999,20 @@ def create_app(
                 raise
             state.engine_name = state.backend.name if state.backend else "none"
         state.start_time = time.time()
+
+        # Initialise early exit monitor
+        if state.early_exit_config is not None and state.early_exit_config.enabled:
+            from .early_exit import EarlyExitMonitor as _EEM
+
+            state.early_exit_monitor = _EEM(config=state.early_exit_config)
+            logger.info(
+                "Early exit enabled (threshold=%.2f, min_layers_frac=%.2f%s)",
+                state.early_exit_config.effective_threshold,
+                state.early_exit_config.effective_min_layers_fraction,
+                f", preset={state.early_exit_config.preset.value}"
+                if state.early_exit_config.preset
+                else "",
+            )
 
         # Initialise request queue
         if state.max_queue_depth > 0:
@@ -1074,6 +1132,11 @@ def create_app(
 
         messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
+        # --- Prompt compression ---
+        compression_stats = None
+        if state.compressor is not None:
+            messages, compression_stats = state.compressor.compress(messages)
+
         # For backends without native grammar support (MLX, echo),
         # inject a system prompt nudging JSON output when json_mode is on.
         uses_grammar_natively = isinstance(state.backend, LlamaCppBackend)
@@ -1109,6 +1172,22 @@ def create_app(
                     model_id=gen_req.model,
                     version=model_version,
                     session_id=session_id,
+                )
+            except Exception:
+                pass
+
+        # Report compression telemetry (best-effort)
+        if _reporter is not None and compression_stats is not None:
+            try:
+                _reporter.report_prompt_compressed(
+                    session_id=session_id,
+                    model_id=gen_req.model,
+                    version=model_version,
+                    original_tokens=compression_stats.original_tokens,
+                    compressed_tokens=compression_stats.compressed_tokens,
+                    compression_ratio=compression_stats.compression_ratio,
+                    strategy=compression_stats.strategy,
+                    duration_ms=compression_stats.duration_ms,
                 )
             except Exception:
                 pass
@@ -1193,6 +1272,23 @@ def create_app(
                         if extracted is not None:
                             text = json.dumps(extracted)
 
+        # Early exit monitoring (best-effort)
+        _ee_monitor = state.early_exit_monitor
+        ee_metrics_dict: Optional[dict[str, Any]] = None
+        if _ee_monitor is not None and _ee_monitor.config.enabled:
+            try:
+                total_layers = _ee_monitor.config.total_layers or 32
+                ee_req_metrics = _ee_monitor.simulate_token_exits(
+                    token_count=metrics.total_tokens,
+                    total_layers=total_layers,
+                )
+                _ee_monitor.record_request(ee_req_metrics)
+                metrics.early_exit_tokens = ee_req_metrics.early_exit_tokens
+                metrics.avg_layers_used = ee_req_metrics.avg_layers_used
+                ee_metrics_dict = ee_req_metrics.to_dict()
+            except Exception:
+                pass
+
         # Report generation_completed (best-effort)
         if _reporter is not None:
             try:
@@ -1211,9 +1307,30 @@ def create_app(
                     ttfc_ms=metrics.ttfc_ms,
                     throughput=throughput,
                     attention_backend=metrics.attention_backend,
+                    early_exit_stats=ee_metrics_dict,
                 )
             except Exception:
                 pass
+
+        usage: dict[str, Any] = {
+            "prompt_tokens": metrics.prompt_tokens,
+            "completion_tokens": metrics.total_tokens,
+            "total_tokens": metrics.prompt_tokens + metrics.total_tokens,
+            "cache_hit": metrics.cache_hit,
+        }
+
+
+        # Include compression stats when compression was applied
+        if compression_stats is not None and compression_stats.strategy != "none":
+            usage["compression"] = {
+                "original_tokens": compression_stats.original_tokens,
+                "compressed_tokens": compression_stats.compressed_tokens,
+                "ratio": round(compression_stats.compression_ratio, 4),
+                "strategy": compression_stats.strategy,
+                "duration_ms": round(compression_stats.duration_ms, 2),
+            }
+        if ee_metrics_dict is not None:
+            usage["early_exit"] = ee_metrics_dict
 
         return {
             "id": req_id,
@@ -1227,12 +1344,7 @@ def create_app(
                     "finish_reason": "stop",
                 }
             ],
-            "usage": {
-                "prompt_tokens": metrics.prompt_tokens,
-                "completion_tokens": metrics.total_tokens,
-                "total_tokens": metrics.prompt_tokens + metrics.total_tokens,
-                "cache_hit": metrics.cache_hit,
-            },
+            "usage": usage,
         }
 
     @app.get("/v1/cache/stats")
@@ -1282,6 +1394,24 @@ def create_app(
             "enabled": True,
         }
 
+    @app.get("/v1/early-exit/stats")
+    async def early_exit_stats() -> dict[str, Any]:
+        """Return early exit / adaptive computation depth statistics."""
+        if state.early_exit_monitor is None:
+            return {
+                "enabled": False,
+                "config": {},
+                "stats": {
+                    "total_requests": 0,
+                    "total_tokens": 0,
+                    "total_early_exit_tokens": 0,
+                    "exit_percentage": 0.0,
+                    "avg_layers_used": 0.0,
+                    "avg_entropy": 0.0,
+                },
+            }
+        return state.early_exit_monitor.get_stats_dict()
+
     @app.get("/v1/engines")
     async def list_engines() -> dict[str, Any]:
         """List detected engines and their benchmark results."""
@@ -1325,7 +1455,7 @@ def create_app(
         elif state.backend is not None:
             backend_name = state.backend.name
 
-        return {
+        health_data: dict[str, Any] = {
             "status": "ok",
             "model": state.model_name,
             "engine": state.engine_name,
@@ -1334,6 +1464,14 @@ def create_app(
             "uptime_seconds": int(time.time() - state.start_time),
             "cache": cache_info,
         }
+        if state.early_exit_monitor is not None:
+            ee_stats = state.early_exit_monitor.stats
+            health_data["early_exit"] = {
+                "enabled": True,
+                "exit_percentage": round(ee_stats.exit_percentage, 2),
+                "avg_layers_used": round(ee_stats.avg_layers_used, 2),
+            }
+        return health_data
 
     @app.post("/v1/audio/transcriptions")
     async def transcribe_audio(
@@ -1558,6 +1696,12 @@ def run_server(
     engine: Optional[str] = None,
     max_queue_depth: int = 32,
     moe_config: Optional[MoEConfig] = None,
+    compress_context: bool = False,
+    compression_strategy: str = "token_pruning",
+    compression_ratio: float = 0.5,
+    compression_max_turns: int = 4,
+    compression_threshold: int = 256,
+    early_exit_config: Optional["EarlyExitConfig"] = None,
 ) -> None:
     """Start the inference server (blocking).
 
@@ -1574,6 +1718,18 @@ def run_server(
     moe_config:
         Configuration for Mixture of Experts model features.
         When ``None``, uses defaults (auto-detection enabled).
+    compress_context:
+        Enable prompt compression before inference.
+    compression_strategy:
+        Compression strategy: ``"token_pruning"`` or ``"sliding_window"``.
+    compression_ratio:
+        Target compression ratio (0.0--1.0) for token pruning.
+    compression_max_turns:
+        Number of recent turns to keep verbatim (sliding_window).
+    compression_threshold:
+        Minimum token count before compression activates.
+    early_exit_config:
+        Configuration for early exit / adaptive computation depth.
     """
     import uvicorn
 
@@ -1587,6 +1743,12 @@ def run_server(
         engine=engine,
         max_queue_depth=max_queue_depth,
         moe_config=moe_config,
+        compress_context=compress_context,
+        compression_strategy=compression_strategy,
+        compression_ratio=compression_ratio,
+        compression_max_turns=compression_max_turns,
+        compression_threshold=compression_threshold,
+        early_exit_config=early_exit_config,
     )
     uvicorn.run(app, host=host, port=port, log_level="info")
 
