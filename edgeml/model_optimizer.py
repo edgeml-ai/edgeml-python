@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import math
+import shutil
 from dataclasses import dataclass
 from enum import Enum
 
@@ -172,6 +173,25 @@ def _total_memory_gb(model_size_b: float, quant: str, context_length: int) -> fl
 
 
 # ---------------------------------------------------------------------------
+# Engine auto-detection
+# ---------------------------------------------------------------------------
+
+
+def _detect_engine() -> str:
+    """Auto-detect the best available inference engine on PATH.
+
+    Priority: edgeml > ollama > llama-server. Falls back to "edgeml".
+    """
+    if shutil.which("edgeml"):
+        return "edgeml"
+    if shutil.which("ollama"):
+        return "ollama"
+    if shutil.which("llama-server"):
+        return "llama.cpp"
+    return "edgeml"
+
+
+# ---------------------------------------------------------------------------
 # Main optimizer
 # ---------------------------------------------------------------------------
 
@@ -215,11 +235,15 @@ class ModelOptimizer:
         # --- Backend label ---
         self._backend = gpu.backend if gpu is not None else "cpu"
 
+        # --- Auto-detect available inference engine ---
+        self._engine = _detect_engine()
+
         logger.info(
-            "ModelOptimizer init: vram=%.1f GB, ram=%.1f GB, backend=%s",
+            "ModelOptimizer init: vram=%.1f GB, ram=%.1f GB, backend=%s, engine=%s",
             self.usable_vram,
             self.usable_ram,
             self._backend,
+            self._engine,
         )
 
     # ------------------------------------------------------------------
@@ -532,18 +556,20 @@ class ModelOptimizer:
         self,
         model_tag: str,
         config: QuantOffloadResult,
-        engine: str = "edgeml",
+        engine: str | None = None,
     ) -> str:
         """Generate a ready-to-paste serve/run command.
 
         Args:
             model_tag: Model identifier (e.g., ``"phi-mini"``, ``"llama3.1:8b"``).
             config: Quantization/offload configuration.
-            engine: One of ``"edgeml"`` (default), ``"ollama"``, ``"llama.cpp"``.
+            engine: Override engine. ``None`` (default) auto-detects from PATH.
+                Explicit values: ``"edgeml"``, ``"ollama"``, ``"llama.cpp"``.
         """
-        if engine == "ollama":
+        resolved = engine or self._engine
+        if resolved == "ollama":
             return self._ollama_command(model_tag, config)
-        if engine == "llama.cpp":
+        if resolved == "llama.cpp":
             return self._llamacpp_command(model_tag, config)
         return self._edgeml_command(model_tag, config)
 
@@ -569,6 +595,99 @@ class ModelOptimizer:
         if config.gpu_layers >= 0:
             parts.extend(["-ngl", str(config.gpu_layers)])
         return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# One-liner API
+# ---------------------------------------------------------------------------
+
+
+def optimize(
+    model: str | float,
+    context_length: int = 4096,
+) -> ModelRecommendation:
+    """One-liner: detect hardware and optimize for a model.
+
+    Args:
+        model: Model name (``"llama3.1:8b"``, ``"phi-mini"``) or size in
+            billions (``8.0``). Names are resolved to sizes automatically.
+        context_length: Context window in tokens (default 4096).
+
+    Example::
+
+        from edgeml.model_optimizer import optimize
+        result = optimize("llama3.1:8b")
+        print(result.serve_command)
+    """
+    from edgeml.hardware import detect_hardware
+
+    if isinstance(model, str):
+        model_tag = model
+        model_size_b = _resolve_model_size(model)
+        if model_size_b is None:
+            raise ValueError(
+                f"Cannot determine model size from '{model}'. "
+                "Use a name with a size (e.g. 'llama3.1:8b') or pass a float."
+            )
+    else:
+        model_tag = f"{model}B"
+        model_size_b = model
+
+    hw = detect_hardware()
+    opt = ModelOptimizer(hw)
+    config = opt.pick_quant_and_offload(model_size_b, context_length)
+    speed = opt.predict_speed(model_size_b, config)
+    cmd = opt.serve_command(model_tag, config)
+    return ModelRecommendation(
+        model_size=f"{model_size_b}B",
+        quantization=config.quantization,
+        reason=opt._recommendation_reason(f"{model_size_b}B", config, speed),
+        config=config,
+        speed=speed,
+        serve_command=cmd,
+    )
+
+
+def _resolve_model_size(model: str) -> float | None:
+    """Resolve a model name or tag to parameter count in billions."""
+    import re
+
+    tag = model.lower().replace("-", "").replace("_", "")
+
+    # Try NB pattern (e.g., "8b", "70b", "0.5b")
+    match = re.search(r"(\d+\.?\d*)b", tag)
+    if match:
+        return float(match.group(1))
+
+    # Known model name -> size
+    _NAME_SIZES: dict[str, float] = {
+        "phimini": 3.8,
+        "phi4mini": 3.8,
+        "phimedium": 14.0,
+        "gemma1b": 1.0,
+        "gemma3b": 3.0,
+        "gemma4b": 4.0,
+        "mistral": 7.0,
+        "mixtral": 46.7,
+        "llama2": 7.0,
+        "llama3": 8.0,
+        "qwen2": 7.0,
+        "qwen3": 8.0,
+        "deepseekcoderv2": 6.7,
+        "smollm": 0.36,
+        "smollm360m": 0.36,
+        "whispertiny": 0.039,
+        "whisperbase": 0.074,
+        "whispersmall": 0.244,
+        "whispermedium": 0.769,
+        "whisperlargev3": 1.55,
+    }
+
+    for name, size in _NAME_SIZES.items():
+        if name in tag:
+            return size
+
+    return None
 
 
 # Backward compatibility alias

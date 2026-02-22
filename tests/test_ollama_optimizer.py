@@ -18,7 +18,9 @@ from edgeml.model_optimizer import (
     SpeedEstimate,
     _kv_cache_gb,
     _model_memory_gb,
+    _resolve_model_size,
     _total_memory_gb,
+    optimize,
 )
 
 
@@ -344,8 +346,13 @@ class TestRecommendations:
 
     def test_recommendations_have_serve_command(self):
         """Every recommendation includes a valid serve_command."""
-        profile = _make_profile(vram_gb=24.0, ram_gb=32.0, available_ram_gb=24.0)
-        opt = ModelOptimizer(profile)
+        from unittest.mock import patch
+
+        with patch(
+            "edgeml.model_optimizer.shutil.which", return_value="/usr/bin/edgeml"
+        ):
+            profile = _make_profile(vram_gb=24.0, ram_gb=32.0, available_ram_gb=24.0)
+            opt = ModelOptimizer(profile)
         recs = opt.recommend()
 
         for rec in recs:
@@ -438,8 +445,8 @@ class TestEnvVars:
 
 
 class TestServeCommand:
-    def test_edgeml_default_full_gpu(self):
-        """Default engine → 'edgeml serve tag'."""
+    def test_edgeml_explicit_full_gpu(self):
+        """Explicit edgeml engine → 'edgeml serve tag'."""
         profile = _make_profile(vram_gb=24.0)
         opt = ModelOptimizer(profile)
         config = QuantOffloadResult(
@@ -450,7 +457,7 @@ class TestServeCommand:
             ram_gb=0.0,
             total_gb=5.0,
         )
-        cmd = opt.serve_command("phi-mini", config)
+        cmd = opt.serve_command("phi-mini", config, engine="edgeml")
         assert cmd == "edgeml serve phi-mini"
 
     def test_edgeml_cpu_only(self):
@@ -465,8 +472,75 @@ class TestServeCommand:
             ram_gb=5.0,
             total_gb=5.0,
         )
-        cmd = opt.serve_command("phi-mini", config)
+        cmd = opt.serve_command("phi-mini", config, engine="edgeml")
         assert cmd == "edgeml serve phi-mini --engine cpu"
+
+    def test_auto_detects_edgeml(self):
+        """Auto-detect picks edgeml when on PATH."""
+        from unittest.mock import patch
+
+        with patch(
+            "edgeml.model_optimizer.shutil.which",
+            side_effect=lambda x: "/usr/bin/edgeml" if x == "edgeml" else None,
+        ):
+            profile = _make_profile(vram_gb=24.0)
+            opt = ModelOptimizer(profile)
+        config = QuantOffloadResult(
+            quantization="Q4_K_M",
+            gpu_layers=-1,
+            strategy=MemoryStrategy.FULL_GPU,
+            vram_gb=5.0,
+            ram_gb=0.0,
+            total_gb=5.0,
+        )
+        cmd = opt.serve_command("phi-mini", config)
+        assert cmd == "edgeml serve phi-mini"
+
+    def test_auto_detects_ollama(self):
+        """Auto-detect picks ollama when edgeml not on PATH."""
+        from unittest.mock import patch
+
+        def _which(name: str) -> str | None:
+            if name == "ollama":
+                return "/usr/bin/ollama"
+            return None
+
+        with patch("edgeml.model_optimizer.shutil.which", side_effect=_which):
+            profile = _make_profile(vram_gb=24.0)
+            opt = ModelOptimizer(profile)
+        config = QuantOffloadResult(
+            quantization="Q4_K_M",
+            gpu_layers=-1,
+            strategy=MemoryStrategy.FULL_GPU,
+            vram_gb=5.0,
+            ram_gb=0.0,
+            total_gb=5.0,
+        )
+        cmd = opt.serve_command("phi-mini", config)
+        assert cmd == "ollama run phi-mini"
+
+    def test_auto_detects_llamacpp(self):
+        """Auto-detect picks llama.cpp when only llama-server on PATH."""
+        from unittest.mock import patch
+
+        def _which(name: str) -> str | None:
+            if name == "llama-server":
+                return "/usr/bin/llama-server"
+            return None
+
+        with patch("edgeml.model_optimizer.shutil.which", side_effect=_which):
+            profile = _make_profile(vram_gb=24.0)
+            opt = ModelOptimizer(profile)
+        config = QuantOffloadResult(
+            quantization="Q4_K_M",
+            gpu_layers=-1,
+            strategy=MemoryStrategy.FULL_GPU,
+            vram_gb=5.0,
+            ram_gb=0.0,
+            total_gb=5.0,
+        )
+        cmd = opt.serve_command("phi-mini", config)
+        assert "llama-server" in cmd
 
     def test_ollama_engine_full_gpu(self):
         """Ollama engine → 'ollama run tag'."""
@@ -667,3 +741,114 @@ class TestEdgeCases:
         reason = ModelOptimizer._recommendation_reason("7B", config, speed)
         assert "aggressive quant" in reason
         assert "7B" in reason
+
+
+# ---------------------------------------------------------------------------
+# _resolve_model_size
+# ---------------------------------------------------------------------------
+
+
+class TestResolveModelSize:
+    @pytest.mark.parametrize(
+        "tag,expected",
+        [
+            ("llama3.1:8b", 8.0),
+            ("mistral:7b", 7.0),
+            ("llama3.1:70b", 70.0),
+            ("qwen2:0.5b", 0.5),
+            ("phi-mini", 3.8),
+            ("smollm", 0.36),
+            ("mixtral", 46.7),
+            ("whisper-tiny", 0.039),
+        ],
+    )
+    def test_known_models(self, tag: str, expected: float) -> None:
+        assert _resolve_model_size(tag) == pytest.approx(expected, rel=0.01)
+
+    def test_unknown_model_returns_none(self) -> None:
+        assert _resolve_model_size("totally-unknown-model") is None
+
+    def test_size_in_name(self) -> None:
+        """Model name with embedded size like 'llama3.1:8b-instruct'."""
+        assert _resolve_model_size("llama3.1:8b-instruct") == 8.0
+
+    def test_decimal_size(self) -> None:
+        assert _resolve_model_size("model:1.5b") == 1.5
+
+
+# ---------------------------------------------------------------------------
+# optimize() one-liner API
+# ---------------------------------------------------------------------------
+
+
+class TestOptimizeOneliner:
+    def test_optimize_with_string_model(self) -> None:
+        """optimize('llama3.1:8b') returns a recommendation."""
+        from unittest.mock import patch
+
+        profile = _make_profile(vram_gb=24.0, ram_gb=32.0)
+
+        with patch(
+            "edgeml.model_optimizer.shutil.which", return_value="/usr/bin/edgeml"
+        ):
+            with patch(
+                "edgeml.hardware._unified.UnifiedDetector.detect", return_value=profile
+            ):
+                result = optimize("llama3.1:8b")
+
+        assert result.model_size == "8.0B"
+        assert result.quantization in ("Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M")
+        assert result.serve_command  # non-empty
+
+    def test_optimize_with_float(self) -> None:
+        """optimize(7.0) works with numeric size."""
+        from unittest.mock import patch
+
+        profile = _make_profile(vram_gb=24.0, ram_gb=32.0)
+
+        with patch(
+            "edgeml.model_optimizer.shutil.which", return_value="/usr/bin/edgeml"
+        ):
+            with patch(
+                "edgeml.hardware._unified.UnifiedDetector.detect", return_value=profile
+            ):
+                result = optimize(7.0)
+
+        assert result.model_size == "7.0B"
+
+    def test_optimize_unknown_model_raises(self) -> None:
+        """optimize('unknown-xyz') raises ValueError."""
+        with pytest.raises(ValueError, match="Cannot determine model size"):
+            optimize("unknown-xyz-model")
+
+
+# ---------------------------------------------------------------------------
+# _has_explicit_quant (CLI helper)
+# ---------------------------------------------------------------------------
+
+
+class TestHasExplicitQuant:
+    def test_no_colon_no_quant(self) -> None:
+        from edgeml.cli import _has_explicit_quant
+
+        assert _has_explicit_quant("llama3.1") is False
+
+    def test_size_variant_not_quant(self) -> None:
+        from edgeml.cli import _has_explicit_quant
+
+        assert _has_explicit_quant("llama3.1:8b") is False
+
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            "llama3.1:q4_k_m",
+            "gemma-1b:8bit",
+            "model:fp16",
+            "model:q8_0",
+            "model:Q6_K",
+        ],
+    )
+    def test_explicit_quant_detected(self, tag: str) -> None:
+        from edgeml.cli import _has_explicit_quant
+
+        assert _has_explicit_quant(tag) is True
