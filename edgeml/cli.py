@@ -2836,5 +2836,15 @@ def launch(agent: str, model: Optional[str], port: int) -> None:
     launch_agent(agent, model=model, port=port)
 
 
+# ---------------------------------------------------------------------------
+# Hardware detection & optimization commands
+# ---------------------------------------------------------------------------
+
+from .cli_hw import hw, interactive_cmd_factory
+
+main.add_command(hw)
+main.add_command(interactive_cmd_factory(main), "interactive")
+
+
 if __name__ == "__main__":
     main()
