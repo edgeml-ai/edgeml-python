@@ -8,8 +8,6 @@ Build with::
 The resulting binary lands in ``dist/octomil``.
 """
 
-import sys
-from pathlib import Path
 
 block_cipher = None
 
@@ -18,6 +16,7 @@ block_cipher = None
 # ---------------------------------------------------------------------------
 hidden_imports = [
     "octomil.engines.mlx_engine",
+    "octomil.engines.mlc_engine",
     "octomil.engines.llamacpp_engine",
     "octomil.engines.mnn_engine",
     "octomil.engines.executorch_engine",
@@ -71,6 +70,7 @@ a = Analysis(
         "onnxruntime",
         "mlx",
         "mlx_lm",
+        "mlc_llm",
         "llama_cpp",
         "pywhispercpp",
         "executorch",
