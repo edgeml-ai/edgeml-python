@@ -183,6 +183,25 @@ def main() -> None:
     type=int,
     help="Minimum estimated token count before compression kicks in (default: 256).",
 )
+@click.option(
+    "--early-exit-threshold",
+    default=None,
+    type=float,
+    help="Enable early exit with this entropy threshold (0.0-1.0). "
+    "Tokens exit early when intermediate logit entropy drops below this value. "
+    "Lower = fewer exits (conservative), higher = more exits (aggressive). "
+    "Example: --early-exit-threshold 0.3",
+)
+@click.option(
+    "--speed-quality",
+    default=None,
+    type=click.Choice(["quality", "balanced", "fast"]),
+    help="Speed-quality preset for early exit. "
+    "quality: conservative (threshold=0.1), "
+    "balanced: moderate (threshold=0.3), "
+    "fast: aggressive (threshold=0.5). "
+    "Overridden by --early-exit-threshold if both are set.",
+)
 def serve(
     model: str,
     port: int,
@@ -202,6 +221,8 @@ def serve(
     compression_ratio: float,
     compression_max_turns: int,
     compression_threshold: int,
+    early_exit_threshold: float | None,
+    speed_quality: str | None,
 ) -> None:
     """Start a local OpenAI-compatible inference server.
 
@@ -317,6 +338,25 @@ def serve(
                 f"threshold={compression_threshold} tokens)"
             )
 
+    # Build early exit config
+    from .early_exit import config_from_cli as _ee_config_from_cli
+
+    ee_config = _ee_config_from_cli(
+        early_exit_threshold=early_exit_threshold,
+        speed_quality=speed_quality,
+    )
+
+    if not is_whisper and ee_config.enabled:
+        preset_label = (
+            f" (preset: {ee_config.preset.value})" if ee_config.preset else ""
+        )
+        click.echo(
+            f"Early exit: enabled (threshold={ee_config.effective_threshold:.2f}"
+            f", min_layers_frac={ee_config.effective_min_layers_fraction:.2f}"
+            f"{preset_label})"
+        )
+        click.echo(f"Early exit stats: http://localhost:{port}/v1/early-exit/stats")
+
     if benchmark:
         click.echo("Benchmark mode: will run latency test after model loads.")
 
@@ -345,6 +385,7 @@ def serve(
         compression_ratio=compression_ratio,
         compression_max_turns=compression_max_turns,
         compression_threshold=compression_threshold,
+        early_exit_config=ee_config if ee_config.enabled else None,
     )
 
 
