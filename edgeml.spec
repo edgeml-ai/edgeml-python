@@ -53,7 +53,7 @@ datas = []
 # Analysis
 # ---------------------------------------------------------------------------
 a = Analysis(
-    ["octomil/cli.py"],
+    ["octomil/__main__.py"],
     pathex=[],
     binaries=[],
     datas=datas,
