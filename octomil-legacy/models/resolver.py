@@ -17,8 +17,8 @@ import difflib
 from dataclasses import dataclass
 from typing import Optional
 
-from .catalog import CATALOG, GGUFSource, ModelEntry
-from .parser import ParsedModel, normalize_variant, parse
+from .catalog import CATALOG, ModelEntry, _resolve_alias
+from .parser import normalize_variant, parse
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,15 @@ _ENGINE_ALIASES: dict[str, str] = {
 
 # Engine priority order — used when picking the best engine automatically.
 # Lower index = higher priority.
-_ENGINE_PRIORITY = ["mlx-lm", "mnn", "llama.cpp", "executorch", "onnxruntime", "whisper.cpp", "echo"]
+_ENGINE_PRIORITY = [
+    "mlx-lm",
+    "mnn",
+    "llama.cpp",
+    "executorch",
+    "onnxruntime",
+    "whisper.cpp",
+    "echo",
+]
 
 
 def _normalize_engine(engine: str) -> str:
@@ -162,9 +170,10 @@ def resolve(
             raw=name,
         )
 
-    # --- Catalog lookup ---
+    # --- Catalog lookup (with alias resolution) ---
     assert parsed.family is not None
-    entry = CATALOG.get(parsed.family)
+    canonical = _resolve_alias(parsed.family)
+    entry = CATALOG.get(canonical)
     if entry is None:
         suggestions = _suggest_models(parsed.family)
         hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -195,9 +204,7 @@ def resolve(
         resolved_engine = _pick_engine(entry, quant, available_engines)
     else:
         # No engine info — pick based on artifact availability
-        resolved_engine = _pick_engine(
-            entry, quant, list(_ENGINE_ALIASES.values())
-        )
+        resolved_engine = _pick_engine(entry, quant, list(_ENGINE_ALIASES.values()))
 
     # Build result based on engine
     hf_repo: str
@@ -227,7 +234,7 @@ def resolve(
         )
 
     return ResolvedModel(
-        family=parsed.family,
+        family=canonical,
         quant=quant,
         engine=resolved_engine,
         hf_repo=hf_repo,
