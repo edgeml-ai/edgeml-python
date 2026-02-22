@@ -322,14 +322,17 @@ class MLXBackend(InferenceBackend):
         ttfc = ((first_token_time or start) - start) * 1000
         text = "".join(tokens)
 
-        return text, InferenceMetrics(
-            ttfc_ms=ttfc,
-            prompt_tokens=prompt_tokens,
-            total_tokens=len(tokens),
-            tokens_per_second=final_tps,
-            total_duration_ms=elapsed * 1000,
-            cache_hit=cache_hit,
-            attention_backend="metal_fused",  # MLX uses Metal fused attention automatically
+        return (
+            text,
+            InferenceMetrics(
+                ttfc_ms=ttfc,
+                prompt_tokens=prompt_tokens,
+                total_tokens=len(tokens),
+                tokens_per_second=final_tps,
+                total_duration_ms=elapsed * 1000,
+                cache_hit=cache_hit,
+                attention_backend="metal_fused",  # MLX uses Metal fused attention automatically
+            ),
         )
 
     async def generate_stream(
@@ -761,6 +764,7 @@ class ServerState:
     reporter: Optional["TelemetryReporter"] = None
     max_queue_depth: int = 32
     request_queue: Any = None  # RequestQueue instance
+    compressor: Any = None  # PromptCompressor instance
 
 
 @dataclass
@@ -782,6 +786,7 @@ class MultiModelServerState:
     engine_override: Optional[str] = None
     reporter: Optional["TelemetryReporter"] = None
     route_strategy: str = "complexity"
+    compressor: Any = None  # PromptCompressor instance
 
 
 def _resolve_grammar(
@@ -846,6 +851,11 @@ def create_app(
     cache_enabled: bool = True,
     engine: Optional[str] = None,
     max_queue_depth: int = 32,
+    compress_context: bool = False,
+    compression_strategy: str = "token_pruning",
+    compression_ratio: float = 0.5,
+    compression_max_turns: int = 4,
+    compression_threshold: int = 256,
 ) -> Any:
     """Create a FastAPI app with OpenAI-compatible endpoints.
 
@@ -860,12 +870,38 @@ def create_app(
     max_queue_depth:
         Maximum number of pending requests in the queue.  When full, new
         requests get a 503 response.  Set to 0 to disable queueing.
+    compress_context:
+        Enable prompt compression.  Long prompts are compressed before
+        inference to reduce context window usage and speed up prefill.
+    compression_strategy:
+        Compression strategy: ``"token_pruning"`` or ``"sliding_window"``.
+    compression_ratio:
+        Target compression ratio (0.0--1.0) for token pruning.
+    compression_max_turns:
+        Number of recent turns to keep verbatim (sliding_window strategy).
+    compression_threshold:
+        Minimum estimated token count before compression activates.
     """
     from contextlib import asynccontextmanager
 
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import StreamingResponse
+
+    # Build compressor if enabled
+    _compressor = None
+    if compress_context:
+        from .compression import CompressionConfig, PromptCompressor
+
+        _compressor = PromptCompressor(
+            CompressionConfig(
+                enabled=True,
+                strategy=compression_strategy,
+                target_ratio=compression_ratio,
+                max_turns_verbatim=compression_max_turns,
+                token_threshold=compression_threshold,
+            )
+        )
 
     state = ServerState(
         model_name=model_name,
@@ -876,6 +912,7 @@ def create_app(
         cache_enabled=cache_enabled,
         engine_override=engine,
         max_queue_depth=max_queue_depth,
+        compressor=_compressor,
     )
 
     @asynccontextmanager
@@ -1015,6 +1052,11 @@ def create_app(
 
         messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
+        # --- Prompt compression ---
+        compression_stats = None
+        if state.compressor is not None:
+            messages, compression_stats = state.compressor.compress(messages)
+
         # For backends without native grammar support (MLX, echo),
         # inject a system prompt nudging JSON output when json_mode is on.
         uses_grammar_natively = isinstance(state.backend, LlamaCppBackend)
@@ -1050,6 +1092,22 @@ def create_app(
                     model_id=gen_req.model,
                     version=model_version,
                     session_id=session_id,
+                )
+            except Exception:
+                pass
+
+        # Report compression telemetry (best-effort)
+        if _reporter is not None and compression_stats is not None:
+            try:
+                _reporter.report_prompt_compressed(
+                    session_id=session_id,
+                    model_id=gen_req.model,
+                    version=model_version,
+                    original_tokens=compression_stats.original_tokens,
+                    compressed_tokens=compression_stats.compressed_tokens,
+                    compression_ratio=compression_stats.compression_ratio,
+                    strategy=compression_stats.strategy,
+                    duration_ms=compression_stats.duration_ms,
                 )
             except Exception:
                 pass
@@ -1156,6 +1214,23 @@ def create_app(
             except Exception:
                 pass
 
+        usage: dict[str, Any] = {
+            "prompt_tokens": metrics.prompt_tokens,
+            "completion_tokens": metrics.total_tokens,
+            "total_tokens": metrics.prompt_tokens + metrics.total_tokens,
+            "cache_hit": metrics.cache_hit,
+        }
+
+        # Include compression stats when compression was applied
+        if compression_stats is not None and compression_stats.strategy != "none":
+            usage["compression"] = {
+                "original_tokens": compression_stats.original_tokens,
+                "compressed_tokens": compression_stats.compressed_tokens,
+                "ratio": round(compression_stats.compression_ratio, 4),
+                "strategy": compression_stats.strategy,
+                "duration_ms": round(compression_stats.duration_ms, 2),
+            }
+
         return {
             "id": req_id,
             "object": "chat.completion",
@@ -1168,12 +1243,7 @@ def create_app(
                     "finish_reason": "stop",
                 }
             ],
-            "usage": {
-                "prompt_tokens": metrics.prompt_tokens,
-                "completion_tokens": metrics.total_tokens,
-                "total_tokens": metrics.prompt_tokens + metrics.total_tokens,
-                "cache_hit": metrics.cache_hit,
-            },
+            "usage": usage,
         }
 
     @app.get("/v1/cache/stats")
@@ -1498,6 +1568,11 @@ def run_server(
     cache_enabled: bool = True,
     engine: Optional[str] = None,
     max_queue_depth: int = 32,
+    compress_context: bool = False,
+    compression_strategy: str = "token_pruning",
+    compression_ratio: float = 0.5,
+    compression_max_turns: int = 4,
+    compression_threshold: int = 256,
 ) -> None:
     """Start the inference server (blocking).
 
@@ -1511,6 +1586,16 @@ def run_server(
     max_queue_depth:
         Maximum number of pending requests in the queue (default 32).
         Set to 0 to disable queueing.
+    compress_context:
+        Enable prompt compression before inference.
+    compression_strategy:
+        Compression strategy: ``"token_pruning"`` or ``"sliding_window"``.
+    compression_ratio:
+        Target compression ratio (0.0--1.0) for token pruning.
+    compression_max_turns:
+        Number of recent turns to keep verbatim (sliding_window).
+    compression_threshold:
+        Minimum token count before compression activates.
     """
     import uvicorn
 
@@ -1523,6 +1608,11 @@ def run_server(
         cache_enabled=cache_enabled,
         engine=engine,
         max_queue_depth=max_queue_depth,
+        compress_context=compress_context,
+        compression_strategy=compression_strategy,
+        compression_ratio=compression_ratio,
+        compression_max_turns=compression_max_turns,
+        compression_threshold=compression_threshold,
     )
     uvicorn.run(app, host=host, port=port, log_level="info")
 
