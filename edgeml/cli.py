@@ -41,13 +41,23 @@ import click
 
 
 def _get_api_key() -> str:
-    """Read API key from env, keychain, or raise."""
+    """Read API key from env or ~/.edgeml/credentials (JSON or legacy format)."""
+    import json
+
     key = os.environ.get("EDGEML_API_KEY", "")
     if not key:
         config_path = os.path.expanduser("~/.edgeml/credentials")
         if os.path.exists(config_path):
             with open(config_path) as f:
-                for line in f:
+                raw = f.read().strip()
+            if not raw:
+                return ""
+            # Try JSON format first (new), fall back to legacy key=value
+            try:
+                data = json.loads(raw)
+                key = data.get("api_key", "")
+            except (json.JSONDecodeError, ValueError):
+                for line in raw.splitlines():
                     if line.startswith("api_key="):
                         key = line.split("=", 1)[1].strip()
                         break
@@ -621,13 +631,19 @@ def convert(model_path: str, target: str, output: str, input_shape: str) -> None
 # ---------------------------------------------------------------------------
 
 
-def _save_credentials(api_key: str) -> None:
-    """Save an API key to ~/.edgeml/credentials with restrictive permissions."""
+def _save_credentials(api_key: str, org: Optional[str] = None) -> None:
+    """Save credentials to ~/.edgeml/credentials as JSON with restrictive permissions."""
+    import json
+
     config_dir = os.path.expanduser("~/.edgeml")
     os.makedirs(config_dir, exist_ok=True)
     config_path = os.path.join(config_dir, "credentials")
+    data: dict[str, str] = {"api_key": api_key}
+    if org:
+        data["org"] = org
     with open(config_path, "w") as f:
-        f.write(f"api_key={api_key}\n")
+        json.dump(data, f, indent=2)
+        f.write("\n")
     os.chmod(config_path, 0o600)
 
 
@@ -704,7 +720,7 @@ def _browser_login() -> None:
     server.shutdown()
 
     if received_key:
-        _save_credentials(received_key)
+        _save_credentials(received_key, org=received_org)
         org_display = received_org or "unknown"
         click.echo(
             click.style(f"\u2713 Authenticated as org: {org_display}", fg="green")
