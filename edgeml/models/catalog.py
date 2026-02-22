@@ -433,14 +433,43 @@ CATALOG: dict[str, ModelEntry] = {
 }
 
 
+# User-friendly aliases -> canonical catalog key.
+# Allows docs to reference full model names (phi-4-mini, llama-3.2-1b)
+# while the catalog uses shorter keys.
+MODEL_ALIASES: dict[str, str] = {
+    "phi-4-mini": "phi-mini",
+    "phi-mini-3.8b": "phi-mini",
+    "phi-3.5-mini": "phi-mini",
+    "llama-3.2-1b": "llama-1b",
+    "llama-3.2-3b": "llama-3b",
+    "llama-3.1-8b": "llama-8b",
+    "gemma-3-1b": "gemma-1b",
+    "gemma-3-4b": "gemma-4b",
+    "gemma-3-12b": "gemma-12b",
+    "gemma-3-27b": "gemma-27b",
+    "gemma-3b": "gemma-4b",
+    "qwen-2.5-1.5b": "qwen-1.5b",
+    "qwen-2.5-3b": "qwen-3b",
+    "qwen-2.5-7b": "qwen-7b",
+    "phi4": "phi-4",
+    "phi4-mini": "phi-mini",
+}
+
+
+def _resolve_alias(name: str) -> str:
+    """Resolve a model name alias to its canonical catalog key."""
+    return MODEL_ALIASES.get(name.lower(), name.lower())
+
+
 def list_models() -> list[str]:
     """Return sorted list of all known model family names."""
     return sorted(CATALOG.keys())
 
 
 def get_model(name: str) -> Optional[ModelEntry]:
-    """Look up a model entry by family name."""
-    return CATALOG.get(name.lower())
+    """Look up a model entry by family name, checking aliases."""
+    key = _resolve_alias(name)
+    return CATALOG.get(key)
 
 
 def supports_engine(name: str, engine: str) -> bool:

@@ -17,9 +17,16 @@ import pytest
 # Ensure the edgeml package is importable from the repo root.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from edgeml.models.parser import ParsedModel, normalize_variant, parse
-from edgeml.models.catalog import CATALOG, GGUFSource, get_model, list_models, supports_engine
-from edgeml.models.resolver import ModelResolutionError, ResolvedModel, resolve
+from edgeml.models.parser import normalize_variant, parse
+from edgeml.models.catalog import (
+    CATALOG,
+    MODEL_ALIASES,
+    _resolve_alias,
+    get_model,
+    list_models,
+    supports_engine,
+)
+from edgeml.models.resolver import ModelResolutionError, resolve
 
 
 # =====================================================================
@@ -194,11 +201,20 @@ class TestCatalogMLXCoverage:
     """Verify all models that should have MLX artifacts do."""
 
     EXPECTED_MLX_MODELS = [
-        "gemma-1b", "gemma-4b", "gemma-12b", "gemma-27b",
-        "llama-1b", "llama-3b", "llama-8b",
-        "phi-4", "phi-mini",
-        "qwen-1.5b", "qwen-3b", "qwen-7b",
-        "mistral-7b", "smollm-360m",
+        "gemma-1b",
+        "gemma-4b",
+        "gemma-12b",
+        "gemma-27b",
+        "llama-1b",
+        "llama-3b",
+        "llama-8b",
+        "phi-4",
+        "phi-mini",
+        "qwen-1.5b",
+        "qwen-3b",
+        "qwen-7b",
+        "mistral-7b",
+        "smollm-360m",
     ]
 
     def test_mlx_artifacts_present(self) -> None:
@@ -206,20 +222,23 @@ class TestCatalogMLXCoverage:
         for name in self.EXPECTED_MLX_MODELS:
             entry = CATALOG[name]
             default = entry.variants[entry.default_quant]
-            assert default.mlx is not None, (
-                f"{name} default variant missing MLX repo"
-            )
+            assert default.mlx is not None, f"{name} default variant missing MLX repo"
 
 
 class TestCatalogGGUFCoverage:
     """Verify all models that should have GGUF artifacts do."""
 
     EXPECTED_GGUF_MODELS = [
-        "gemma-1b", "gemma-4b",
-        "llama-1b", "llama-3b", "llama-8b",
+        "gemma-1b",
+        "gemma-4b",
+        "llama-1b",
+        "llama-3b",
+        "llama-8b",
         "phi-mini",
-        "qwen-1.5b", "qwen-3b",
-        "mistral-7b", "smollm-360m",
+        "qwen-1.5b",
+        "qwen-3b",
+        "mistral-7b",
+        "smollm-360m",
     ]
 
     def test_gguf_artifacts_present(self) -> None:
@@ -227,12 +246,76 @@ class TestCatalogGGUFCoverage:
         for name in self.EXPECTED_GGUF_MODELS:
             entry = CATALOG[name]
             default = entry.variants[entry.default_quant]
-            assert default.gguf is not None, (
-                f"{name} default variant missing GGUF source"
-            )
-            assert default.gguf.filename.endswith(".gguf"), (
-                f"{name} GGUF filename does not end with .gguf"
-            )
+            assert (
+                default.gguf is not None
+            ), f"{name} default variant missing GGUF source"
+            assert default.gguf.filename.endswith(
+                ".gguf"
+            ), f"{name} GGUF filename does not end with .gguf"
+
+
+# =====================================================================
+# Alias tests
+# =====================================================================
+
+
+class TestModelAliases:
+    """Tests for user-friendly model name aliases."""
+
+    def test_phi_4_mini_alias(self) -> None:
+        """phi-4-mini resolves to phi-mini."""
+        assert _resolve_alias("phi-4-mini") == "phi-mini"
+        entry = get_model("phi-4-mini")
+        assert entry is not None
+        assert entry.publisher == "Microsoft"
+
+    def test_llama_3_2_aliases(self) -> None:
+        """llama-3.2-* aliases resolve to llama-* catalog keys."""
+        assert _resolve_alias("llama-3.2-1b") == "llama-1b"
+        assert _resolve_alias("llama-3.2-3b") == "llama-3b"
+        assert get_model("llama-3.2-1b") is not None
+        assert get_model("llama-3.2-3b") is not None
+
+    def test_qwen_2_5_aliases(self) -> None:
+        """qwen-2.5-* aliases resolve to qwen-* catalog keys."""
+        assert _resolve_alias("qwen-2.5-1.5b") == "qwen-1.5b"
+        assert _resolve_alias("qwen-2.5-3b") == "qwen-3b"
+        assert get_model("qwen-2.5-1.5b") is not None
+
+    def test_gemma_3_aliases(self) -> None:
+        """gemma-3-* aliases resolve to gemma-* catalog keys."""
+        assert _resolve_alias("gemma-3-1b") == "gemma-1b"
+        assert _resolve_alias("gemma-3-4b") == "gemma-4b"
+        assert get_model("gemma-3-1b") is not None
+
+    def test_canonical_names_pass_through(self) -> None:
+        """Canonical names (already in catalog) pass through unchanged."""
+        assert _resolve_alias("phi-mini") == "phi-mini"
+        assert _resolve_alias("llama-1b") == "llama-1b"
+        assert _resolve_alias("gemma-4b") == "gemma-4b"
+
+    def test_unknown_names_pass_through(self) -> None:
+        """Unknown names pass through (let resolver handle the error)."""
+        assert _resolve_alias("totally-fake-model") == "totally-fake-model"
+
+    def test_all_aliases_map_to_valid_catalog_entries(self) -> None:
+        """Every alias must point to a real catalog key."""
+        for alias, canonical in MODEL_ALIASES.items():
+            assert (
+                canonical in CATALOG
+            ), f"Alias '{alias}' maps to '{canonical}' which is not in CATALOG"
+
+    def test_resolve_with_alias(self) -> None:
+        """resolve() works with aliased model names."""
+        r = resolve("phi-4-mini")
+        assert r.family == "phi-mini"
+        assert r.quant == "4bit"
+
+    def test_resolve_alias_with_variant(self) -> None:
+        """resolve() works with aliased name + variant."""
+        r = resolve("llama-3.2-1b:8bit")
+        assert r.family == "llama-1b"
+        assert r.quant == "8bit"
 
 
 # =====================================================================
@@ -441,11 +524,6 @@ class TestBackwardCompat:
         """Legacy data classes are importable from edgeml.models."""
         from edgeml.models import (
             DeploymentPlan,
-            DeploymentResult,
-            DeviceDeployment,
-            DeviceDeploymentStatus,
-            RollbackResult,
-            TrainingSession,
         )
 
         # Quick sanity check
