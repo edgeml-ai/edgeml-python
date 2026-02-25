@@ -572,6 +572,793 @@ CATALOG: dict[str, ModelEntry] = {
         },
     ),
     # -------------------------------------------------------------------
+    # DeepSeek R1 — distilled dense models
+    # -------------------------------------------------------------------
+    "deepseek-r1-1.5b": ModelEntry(
+        publisher="DeepSeek",
+        params="1.5B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "deepseek-r1-7b": ModelEntry(
+        publisher="DeepSeek",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "deepseek-r1-8b": ModelEntry(
+        publisher="DeepSeek",
+        params="8B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "deepseek-r1-14b": ModelEntry(
+        publisher="DeepSeek",
+        params="14B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "deepseek-r1-32b": ModelEntry(
+        publisher="DeepSeek",
+        params="32B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "deepseek-r1-70b": ModelEntry(
+        publisher="DeepSeek",
+        params="70B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Alibaba Qwen 3
+    # -------------------------------------------------------------------
+    "qwen3-0.6b": ModelEntry(
+        publisher="Qwen",
+        params="0.6B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "qwen3-1.7b": ModelEntry(
+        publisher="Qwen",
+        params="1.7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "qwen3-4b": ModelEntry(
+        publisher="Qwen",
+        params="4B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "qwen3-8b": ModelEntry(
+        publisher="Qwen",
+        params="8B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "qwen3-14b": ModelEntry(
+        publisher="Qwen",
+        params="14B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "qwen3-32b": ModelEntry(
+        publisher="Qwen",
+        params="32B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Alibaba Qwen 2.5 Coder
+    # -------------------------------------------------------------------
+    "qwen2.5-coder-1.5b": ModelEntry(
+        publisher="Qwen",
+        params="1.5B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "qwen2.5-coder-7b": ModelEntry(
+        publisher="Qwen",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Google Gemma 2
+    # -------------------------------------------------------------------
+    "gemma2-2b": ModelEntry(
+        publisher="Google",
+        params="2B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "gemma2-9b": ModelEntry(
+        publisher="Google",
+        params="9B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "gemma2-27b": ModelEntry(
+        publisher="Google",
+        params="27B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Meta Llama 3.1 / 3.3
+    # -------------------------------------------------------------------
+    "llama-3.1-70b": ModelEntry(
+        publisher="Meta",
+        params="70B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "llama-3.3-70b": ModelEntry(
+        publisher="Meta",
+        params="70B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Mistral AI — expanded
+    # -------------------------------------------------------------------
+    "mistral-nemo": ModelEntry(
+        publisher="Mistral AI",
+        params="12B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "mistral-small": ModelEntry(
+        publisher="Mistral AI",
+        params="24B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Meta CodeLlama
+    # -------------------------------------------------------------------
+    "codellama-7b": ModelEntry(
+        publisher="Meta",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "codellama-13b": ModelEntry(
+        publisher="Meta",
+        params="13B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "codellama-34b": ModelEntry(
+        publisher="Meta",
+        params="34B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # BigCode StarCoder2
+    # -------------------------------------------------------------------
+    "starcoder2-3b": ModelEntry(
+        publisher="BigCode",
+        params="3B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "starcoder2-7b": ModelEntry(
+        publisher="BigCode",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "starcoder2-15b": ModelEntry(
+        publisher="BigCode",
+        params="15B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # 01.AI Yi 1.5
+    # -------------------------------------------------------------------
+    "yi-6b": ModelEntry(
+        publisher="01.AI",
+        params="6B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "yi-9b": ModelEntry(
+        publisher="01.AI",
+        params="9B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "yi-34b": ModelEntry(
+        publisher="01.AI",
+        params="34B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # TII Falcon 3
+    # -------------------------------------------------------------------
+    "falcon3-1b": ModelEntry(
+        publisher="TII",
+        params="1B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "falcon3-7b": ModelEntry(
+        publisher="TII",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "falcon3-10b": ModelEntry(
+        publisher="TII",
+        params="10B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Cohere Command-R
+    # -------------------------------------------------------------------
+    "command-r": ModelEntry(
+        publisher="Cohere",
+        params="35B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "command-r-plus": ModelEntry(
+        publisher="Cohere",
+        params="104B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
+    # Other popular models
+    # -------------------------------------------------------------------
+    "tinyllama": ModelEntry(
+        publisher="TinyLlama",
+        params="1.1B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "smollm2-1.7b": ModelEntry(
+        publisher="HuggingFace",
+        params="1.7B",
+        default_quant="4bit",
+        engines=frozenset({"llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "internlm2-7b": ModelEntry(
+        publisher="Shanghai AI Lab",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "codegemma-7b": ModelEntry(
+        publisher="Google",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "stable-code-3b": ModelEntry(
+        publisher="Stability AI",
+        params="3B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "mathstral-7b": ModelEntry(
+        publisher="Mistral AI",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "glm4-9b": ModelEntry(
+        publisher="Tsinghua",
+        params="9B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "granite-3.2-2b": ModelEntry(
+        publisher="IBM",
+        params="2B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "granite-3.2-8b": ModelEntry(
+        publisher="IBM",
+        params="8B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "olmo2-7b": ModelEntry(
+        publisher="AI2",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "zephyr-7b": ModelEntry(
+        publisher="HuggingFace",
+        params="7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    "solar-10.7b": ModelEntry(
+        publisher="Upstage",
+        params="10.7B",
+        default_quant="4bit",
+        engines=frozenset({"mlx-lm", "llama.cpp"}),
+        variants={
+            "4bit": VariantSpec(
+                mlx="REDACTED",
+                gguf=GGUFSource(
+                    "REDACTED",
+                    "REDACTED",
+                ),
+                source_repo="REDACTED",
+            ),
+        },
+    ),
+    # -------------------------------------------------------------------
     # OpenAI Whisper (Speech-to-Text)
     # -------------------------------------------------------------------
     "whisper-tiny": ModelEntry(
@@ -660,6 +1447,41 @@ MODEL_ALIASES: dict[str, str] = {
     "deepseek-v2-lite-chat": "deepseek-v2-lite",
     "qwen-1.5-moe": "qwen-moe-14b",
     "qwen-moe": "qwen-moe-14b",
+    # DeepSeek R1 aliases
+    "deepseek-r1": "deepseek-r1-7b",
+    "deepseek-r1-distill-qwen-1.5b": "deepseek-r1-1.5b",
+    "deepseek-r1-distill-qwen-7b": "deepseek-r1-7b",
+    "deepseek-r1-distill-llama-8b": "deepseek-r1-8b",
+    "deepseek-r1-distill-qwen-14b": "deepseek-r1-14b",
+    "deepseek-r1-distill-qwen-32b": "deepseek-r1-32b",
+    "deepseek-r1-distill-llama-70b": "deepseek-r1-70b",
+    # Qwen 3 aliases
+    "qwen3": "qwen3-4b",
+    # Gemma 2 aliases
+    "gemma2": "gemma2-9b",
+    # Llama 3.1 / 3.3 aliases
+    "llama3.1": "llama-8b",
+    "llama-3.1-8b": "llama-8b",
+    "llama3.3": "llama-3.3-70b",
+    # Mistral expanded aliases
+    "mistral-nemo-12b": "mistral-nemo",
+    "mistral-small-24b": "mistral-small",
+    # Code model aliases
+    "codellama": "codellama-7b",
+    "starcoder2": "starcoder2-15b",
+    "codegemma": "codegemma-7b",
+    "stable-code": "stable-code-3b",
+    # Other family aliases
+    "falcon3": "falcon3-7b",
+    "yi": "yi-6b",
+    "internlm2": "internlm2-7b",
+    "mathstral": "mathstral-7b",
+    "glm4": "glm4-9b",
+    "granite-3.2": "granite-3.2-8b",
+    "granite": "granite-3.2-8b",
+    "olmo2": "olmo2-7b",
+    "zephyr": "zephyr-7b",
+    "solar": "solar-10.7b",
 }
 
 
