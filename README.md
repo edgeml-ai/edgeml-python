@@ -5,8 +5,9 @@
 
 <p align="center">
   <a href="https://github.com/octomil/octomil-python/actions/workflows/ci.yml"><img src="https://github.com/octomil/octomil-python/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://pypi.org/project/octomil-sdk/"><img src="https://img.shields.io/pypi/v/octomil-sdk.svg" alt="PyPI"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT"></a>
+  <a href="https://github.com/octomil/octomil-python/actions/workflows/codeql.yml"><img src="https://github.com/octomil/octomil-python/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+  <a href="https://github.com/octomil/octomil-python/blob/main/LICENSE"><img src="https://img.shields.io/github/license/octomil/octomil-python" alt="License"></a>
+  <a href="https://pypi.org/project/octomil/"><img src="https://img.shields.io/pypi/v/octomil" alt="PyPI"></a>
 </p>
 
 ---
