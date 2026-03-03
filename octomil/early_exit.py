@@ -47,17 +47,12 @@ class SpeedQualityPreset(str, Enum):
     FAST = "fast"
 
 
-# Mapping from preset to early exit entropy threshold.
-# Lower entropy threshold → more tokens exit early (aggressive).
-# Higher entropy threshold → fewer tokens exit early (conservative).
 PRESET_THRESHOLDS: dict[SpeedQualityPreset, float] = {
     SpeedQualityPreset.QUALITY: 0.1,
     SpeedQualityPreset.BALANCED: 0.3,
     SpeedQualityPreset.FAST: 0.5,
 }
 
-# Mapping from preset to layer skip schedule.
-# Expressed as fraction of total layers to evaluate before considering exit.
 PRESET_MIN_LAYERS_FRACTION: dict[SpeedQualityPreset, float] = {
     SpeedQualityPreset.QUALITY: 0.75,
     SpeedQualityPreset.BALANCED: 0.5,
@@ -149,8 +144,7 @@ def config_from_cli(
             preset = SpeedQualityPreset(speed_quality)
         except ValueError:
             logger.warning(
-                "Unknown speed-quality preset '%s', ignoring. "
-                "Valid presets: quality, balanced, fast",
+                "Unknown speed-quality preset '%s', ignoring. " "Valid presets: quality, balanced, fast",
                 speed_quality,
             )
 
@@ -404,9 +398,7 @@ class EarlyExitMonitor:
             self._stats.total_requests += 1
             self._stats.total_tokens += metrics.total_tokens
             self._stats.total_early_exit_tokens += metrics.early_exit_tokens
-            self._stats.total_layers_used += (
-                metrics.avg_layers_used * metrics.total_tokens
-            )
+            self._stats.total_layers_used += metrics.avg_layers_used * metrics.total_tokens
             self._stats.total_entropy_sum += metrics.avg_entropy * metrics.total_tokens
 
     def simulate_token_exits(
@@ -448,10 +440,7 @@ class EarlyExitMonitor:
         min_frac = self.config.effective_min_layers_fraction
         min_layers = max(1, int(total_layers * min_frac))
 
-        # Estimate: tokens with low complexity (predictable continuations)
-        # exit early.  We use the threshold as a rough proxy for exit rate.
-        # Higher threshold → more tokens exit early.
-        exit_rate = threshold  # e.g., 0.3 threshold → ~30% of tokens exit early
+        exit_rate = threshold
 
         early_count = int(token_count * exit_rate)
         normal_count = token_count - early_count
@@ -460,18 +449,13 @@ class EarlyExitMonitor:
         early_avg_layers = (min_layers + total_layers) / 2.0
         normal_avg_layers = float(total_layers)
 
-        total_layers_sum = (early_count * early_avg_layers) + (
-            normal_count * normal_avg_layers
-        )
+        total_layers_sum = (early_count * early_avg_layers) + (normal_count * normal_avg_layers)
         avg_layers = total_layers_sum / token_count if token_count > 0 else 0.0
 
-        # Synthetic entropy: early-exit tokens have low entropy, normal tokens vary
-        early_entropy = threshold * 0.5  # well below threshold
-        normal_entropy = 0.6  # moderate entropy
+        early_entropy = threshold * 0.5
+        normal_entropy = 0.6
         avg_entropy = (
-            (early_count * early_entropy + normal_count * normal_entropy) / token_count
-            if token_count > 0
-            else 0.0
+            (early_count * early_entropy + normal_count * normal_entropy) / token_count if token_count > 0 else 0.0
         )
 
         return EarlyExitRequestMetrics(

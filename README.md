@@ -181,10 +181,6 @@ octomil serve gemma-1b
 | 60+ models in catalog            | yes                  | yes (different catalog) | yes (manual download)  | varies     |
 | Python SDK                       | yes                  | yes                     | community              | yes        |
 
-**When to use Octomil over Ollama:** You need to deploy models to phones, manage a fleet of edge devices, do canary rollouts, or want auto-engine-selection that benchmarks MLX vs llama.cpp vs ONNX and picks the fastest for your hardware. If you're one process on one machine — which is every CLI user, every mobile app, every desktop app — a server layer buys you nothing.
-
-**When to use Ollama instead:** You have multiple processes or users hitting the same model. Your Python backend, Node API, and Go CLI all need completions from the same Llama 3B — Ollama gives them one shared endpoint instead of each loading the model separately (3x memory). Same for a team dev server (Mac Studio serving 5 devs) or container isolation (app in Docker, model on host GPU).
-
 ## Python SDK
 
 For fleet management, model registry, and A/B testing:

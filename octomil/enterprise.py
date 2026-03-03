@@ -32,7 +32,7 @@ _DEFAULT_API_BASE = "https://api.octomil.com/api/v1"
 COMPLIANCE_PRESETS: dict[str, dict[str, Any]] = {
     "hipaa": {
         "hipaa_mode": True,
-        "audit_retention_days": 2190,  # 6 years
+        "audit_retention_days": 2190,
         "require_mfa_for_admin": True,
         "mfa_required": True,
         "require_admin_approval": True,
@@ -41,7 +41,7 @@ COMPLIANCE_PRESETS: dict[str, dict[str, Any]] = {
         "policy_profile": "regulated",
     },
     "gdpr": {
-        "audit_retention_days": 1825,  # 5 years
+        "audit_retention_days": 1825,
         "require_mfa_for_admin": True,
         "policy_profile": "balanced",
     },
@@ -127,12 +127,7 @@ class EnterpriseClient:
         api_key: str,
         api_base: str | None = None,
     ) -> None:
-        base = (
-            api_base
-            or os.environ.get("OCTOMIL_API_URL")
-            or os.environ.get("OCTOMIL_API_BASE")
-            or _DEFAULT_API_BASE
-        )
+        base = api_base or os.environ.get("OCTOMIL_API_URL") or os.environ.get("OCTOMIL_API_BASE") or _DEFAULT_API_BASE
         self._http = httpx.Client(
             base_url=base.rstrip("/"),
             headers={"Authorization": f"Bearer {api_key}"},
@@ -215,8 +210,7 @@ class EnterpriseClient:
         """
         if preset not in COMPLIANCE_PRESETS:
             raise EnterpriseClientError(
-                f"Unknown compliance preset '{preset}'. "
-                f"Valid options: {', '.join(sorted(COMPLIANCE_PRESETS))}"
+                f"Unknown compliance preset '{preset}'. " f"Valid options: {', '.join(sorted(COMPLIANCE_PRESETS))}"
             )
 
         settings = dict(COMPLIANCE_PRESETS[preset])
