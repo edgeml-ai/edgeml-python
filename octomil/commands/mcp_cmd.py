@@ -74,6 +74,55 @@ def status() -> None:
         click.echo("Run 'octomil mcp register' to set up.")
 
 
+@mcp.command()
+@click.option("--port", "-p", default=8402, help="Port to listen on (default: 8402).")
+@click.option("--host", "-h", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0).")
+@click.option("--model", "-m", default=None, help="Model to use (default: qwen-coder-7b).")
+@click.option("--x402", is_flag=True, default=False, help="Enable x402 payment gating.")
+def serve(port: int, host: str, model: Optional[str], x402: bool) -> None:
+    """Start the Octomil HTTP agent server.
+
+    Exposes all tools via REST, serves an A2A agent card for discovery,
+    and auto-generates OpenAPI docs at /docs.
+
+    Examples:
+
+        octomil mcp serve
+
+        octomil mcp serve --port 9000 --model gemma-3b
+
+        OCTOMIL_X402_ADDRESS=0x... octomil mcp serve --x402
+    """
+    try:
+        import fastapi as _fa  # noqa: F401
+        import uvicorn as _uv  # noqa: F401
+    except ImportError:
+        click.echo("Error: fastapi and uvicorn are required for the HTTP server.", err=True)
+        click.echo("Install with: pip install 'octomil-sdk[serve]'", err=True)
+        raise SystemExit(1)
+
+    from octomil.mcp.http_server import HTTPServerConfig, create_http_app
+
+    config = HTTPServerConfig(
+        host=host,
+        port=port,
+        model=model,
+        enable_x402=x402,
+    )
+    app = create_http_app(config)
+
+    click.echo(f"Starting Octomil agent server on {host}:{port}")
+    click.echo(f"  Agent card: http://{host}:{port}/.well-known/agent-card.json")
+    click.echo(f"  OpenAPI docs: http://{host}:{port}/docs")
+    click.echo(f"  Health: http://{host}:{port}/health")
+    if x402:
+        click.echo("  x402 payment gating: enabled")
+
+    import uvicorn
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 def register_cmd(cli: click.Group) -> None:
     """Register the mcp command group with the CLI."""
     cli.add_command(mcp)
