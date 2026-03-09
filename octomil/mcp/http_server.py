@@ -448,14 +448,43 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
 
     @app.get("/api/v1/metrics", tags=["monitoring"], dependencies=[Depends(require_auth)])
     async def api_metrics() -> JSONResponse:
-        """Get model and engine status."""
-        return JSONResponse(
-            content={
-                "model": backend.model_name,
-                "engine": backend._engine_name,
-                "loaded": backend.is_loaded,
+        """Get model, engine, and device status."""
+        result: dict[str, Any] = {
+            "model": backend.model_name,
+            "engine": backend._engine_name,
+            "loaded": backend.is_loaded,
+        }
+
+        # Hardware
+        try:
+            from octomil.hardware._unified import detect_hardware
+
+            hw = detect_hardware()
+            result["hardware"] = {
+                "platform": hw.platform,
+                "best_backend": hw.best_backend,
+                "total_ram_gb": round(hw.total_ram_gb, 2),
+                "available_ram_gb": round(hw.available_ram_gb, 2),
+                "cpu": hw.cpu.brand,
+                "architecture": hw.cpu.architecture,
             }
-        )
+            if hw.gpu:
+                result["hardware"]["gpu"] = hw.gpu.backend
+                result["hardware"]["vram_gb"] = round(hw.gpu.total_vram_gb, 2)
+        except Exception:
+            pass
+
+        # Available engines
+        try:
+            from octomil.engines.registry import get_registry
+
+            registry = get_registry()
+            detections = registry.detect_all()
+            result["engines"] = [d.engine.name for d in detections if d.available and d.engine.name != "echo"]
+        except Exception:
+            pass
+
+        return JSONResponse(content=result)
 
     @app.post("/api/v1/deploy_model", tags=["deployment"], dependencies=[Depends(require_auth)])
     async def api_deploy_model(req: DeployModelRequest) -> JSONResponse:
