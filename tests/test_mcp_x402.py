@@ -1213,3 +1213,110 @@ class TestX402CloudPricing:
         data = resp.json()
         assert data["metrics"]["engine"] == "cloud"
         assert data["metrics"]["fallback"] is True
+
+
+# ---------------------------------------------------------------------------
+# X-Inference-Preference header
+# ---------------------------------------------------------------------------
+
+
+class TestInferencePreference:
+    @pytest.mark.asyncio
+    async def test_local_only_returns_503_when_local_fails(self, x402_client: Any) -> None:
+        """local-only preference skips cloud fallback entirely."""
+        import time as _time
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(mock_backend, "generate", side_effect=RuntimeError("no model")),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded, "x-inference-preference": "local-only"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "local_only"
+
+    @pytest.mark.asyncio
+    async def test_cloud_only_skips_local(self, x402_client: Any) -> None:
+        """cloud-only preference skips local model and goes straight to cloud."""
+        import time as _time
+        from unittest.mock import MagicMock
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        mock_cloud_client = MagicMock()
+        mock_cloud_client.chat.return_value = {"message": {"role": "assistant", "content": "cloud result"}}
+        with (
+            patch.object(mock_backend, "generate", return_value=("local result", {})) as local_mock,
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+            patch.dict("os.environ", {"OCTOMIL_API_KEY": "test-key"}),
+            patch("octomil.client.OctomilClient", return_value=mock_cloud_client),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded, "x-inference-preference": "cloud-only"},
+            )
+            # Local model should NOT have been called
+            local_mock.assert_not_called()
+        assert resp.status_code == 200
+        assert resp.json()["metrics"]["engine"] == "cloud"
+
+    @pytest.mark.asyncio
+    async def test_invalid_preference_defaults_to_auto(self, x402_client: Any) -> None:
+        """Invalid preference values fall back to auto behavior."""
+        import time as _time
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(mock_backend, "generate", return_value=("local result", {"engine": "test"})),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded, "x-inference-preference": "garbage-value"},
+            )
+        # Should behave like auto — local model works, returns 200
+        assert resp.status_code == 200

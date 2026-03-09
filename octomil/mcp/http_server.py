@@ -464,12 +464,20 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
             getattr(request.state, "x402_cloud_price", 0),
         )
 
+    _VALID_PREFERENCES = {"auto", "local-only", "cloud-only"}
+
+    def _inference_preference(request: Request) -> str:
+        """Read X-Inference-Preference header (auto | local-only | cloud-only)."""
+        pref = request.headers.get("x-inference-preference", "auto").lower().strip()
+        return pref if pref in _VALID_PREFERENCES else "auto"
+
     @app.post("/api/v1/run_inference", tags=["inference"], dependencies=[Depends(require_auth)])
     async def api_run_inference(req: RunInferenceRequest, request: Request) -> JSONResponse:
         """Run inference through the local on-device model."""
         messages = [{"role": "user", "content": req.prompt}]
         paid, cloud = _x402_pricing(request)
-        return _code_tool_response("run_inference", messages, paid_amount=paid, cloud_price=cloud)
+        pref = _inference_preference(request)
+        return _code_tool_response("run_inference", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.get("/api/v1/metrics", tags=["monitoring"], dependencies=[Depends(require_auth)])
     async def api_metrics() -> JSONResponse:
@@ -817,28 +825,37 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
         messages: list[dict[str, str]],
         paid_amount: int = 0,
         cloud_price: int = 0,
+        preference: str = "auto",
     ) -> JSONResponse:
         """Run a code tool through local model with cloud fallback.
 
-        1. Try local model (backend.generate)
-        2. On failure, try cloud fallback if the agent paid enough
+        1. Try local model (unless preference is ``cloud-only``)
+        2. On failure, try cloud fallback if the agent paid enough (unless ``local-only``)
         3. If both fail, return 503 with machine-readable next actions
 
-        When x402 is active, cloud fallback requires ``paid_amount >= cloud_price``
-        ($0.01 default, 10x the local inference price). If the agent only paid
-        the local rate ($0.001), they get 503 with the cloud price so they can
-        resubmit with a higher payment.
+        The ``preference`` parameter is read from the ``X-Inference-Preference``
+        header and can be ``auto`` (default), ``local-only``, or ``cloud-only``.
         """
         # 1. Try local model
-        try:
-            text, metrics = backend.generate(messages)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as local_exc:
-            logger.warning("%s: local model failed: %s", tool_name, local_exc)
+        if preference != "cloud-only":
+            try:
+                text, metrics = backend.generate(messages)
+                return JSONResponse(content={"text": text, "metrics": metrics})
+            except Exception as local_exc:
+                logger.warning("%s: local model failed: %s", tool_name, local_exc)
 
         # 2. Try cloud fallback
-        # When x402 is enabled, only allow cloud if the agent paid the cloud price.
-        # Without x402, cloud fallback is free (gated by OCTOMIL_API_KEY only).
+        if preference == "local-only":
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "local_only",
+                    "message": f"Local model unavailable for {tool_name} and preference is local-only.",
+                    "retryable": True,
+                    "retryAfterSeconds": 30,
+                },
+            )
+
         allow_cloud = True
         if config.enable_x402 and cloud_price > 0 and paid_amount < cloud_price:
             allow_cloud = False
@@ -889,7 +906,8 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
             parts.append(f"\nContext:\n{req.context}")
         messages = build_messages("generate_code", "\n".join(parts))
         paid, cloud = _x402_pricing(request)
-        return _code_tool_response("generate_code", messages, paid_amount=paid, cloud_price=cloud)
+        pref = _inference_preference(request)
+        return _code_tool_response("generate_code", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/review_code", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_review_code(req: ReviewCodeRequest, request: Request) -> JSONResponse:
@@ -900,7 +918,8 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
         parts.append(f"\n```{req.language}\n{req.code}\n```")
         messages = build_messages("review_code", "\n".join(parts))
         paid, cloud = _x402_pricing(request)
-        return _code_tool_response("review_code", messages, paid_amount=paid, cloud_price=cloud)
+        pref = _inference_preference(request)
+        return _code_tool_response("review_code", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/explain_code", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_explain_code(req: ExplainCodeRequest, request: Request) -> JSONResponse:
@@ -909,7 +928,8 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
         parts.append(f"\n```{req.language}\n{req.code}\n```")
         messages = build_messages("explain_code", "\n".join(parts))
         paid, cloud = _x402_pricing(request)
-        return _code_tool_response("explain_code", messages, paid_amount=paid, cloud_price=cloud)
+        pref = _inference_preference(request)
+        return _code_tool_response("explain_code", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/write_tests", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_write_tests(req: WriteTestsRequest, request: Request) -> JSONResponse:
@@ -922,7 +942,8 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
         parts.append(f"\n```{req.language}\n{req.code}\n```")
         messages = build_messages("write_tests", "\n".join(parts))
         paid, cloud = _x402_pricing(request)
-        return _code_tool_response("write_tests", messages, paid_amount=paid, cloud_price=cloud)
+        pref = _inference_preference(request)
+        return _code_tool_response("write_tests", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/general_task", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_general_task(req: GeneralTaskRequest, request: Request) -> JSONResponse:
@@ -932,6 +953,7 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
             content = f"{req.prompt}\n\nContext:\n{req.context}"
         messages = build_messages("general_task", content)
         paid, cloud = _x402_pricing(request)
-        return _code_tool_response("general_task", messages, paid_amount=paid, cloud_price=cloud)
+        pref = _inference_preference(request)
+        return _code_tool_response("general_task", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     return app
