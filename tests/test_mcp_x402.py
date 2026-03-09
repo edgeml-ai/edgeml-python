@@ -77,7 +77,7 @@ class TestPaymentRequired:
     @pytest.mark.asyncio
     async def test_402_has_payment_required_header(self, x402_client: Any) -> None:
         """402 response includes base64-encoded PAYMENT-REQUIRED header."""
-        resp = await x402_client.post("/api/v1/list_models", json={})
+        resp = await x402_client.post("/api/v1/run_inference", json={"prompt": "test"})
         assert resp.status_code == 402
         header = resp.headers.get("payment-required")
         assert header is not None
@@ -91,8 +91,8 @@ class TestPaymentRequired:
     @pytest.mark.asyncio
     async def test_402_contains_unique_responses(self, x402_client: Any) -> None:
         """Each 402 response is consistent with the config."""
-        resp1 = await x402_client.post("/api/v1/list_models", json={})
-        resp2 = await x402_client.post("/api/v1/list_models", json={})
+        resp1 = await x402_client.post("/api/v1/run_inference", json={"prompt": "test"})
+        resp2 = await x402_client.post("/api/v1/run_inference", json={"prompt": "test"})
         accepts1 = resp1.json()["requirements"]["accepts"][0]
         accepts2 = resp2.json()["requirements"]["accepts"][0]
         # Both should have the same payTo and amount from config
@@ -110,10 +110,18 @@ class TestPaymentAcceptance:
     async def test_valid_payment_passes_through(self, x402_client: Any) -> None:
         """Valid PAYMENT-SIGNATURE header allows request through."""
         sig = _make_payment_signature()
-        with patch("octomil.models.catalog.CATALOG", {}):
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with patch.object(
+            mock_backend,
+            "generate",
+            return_value=(
+                "ok",
+                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+            ),
+        ):
             resp = await x402_client.post(
-                "/api/v1/list_models",
-                json={},
+                "/api/v1/run_inference",
+                json={"prompt": "test"},
                 headers={"payment-signature": sig},
             )
         # Should pass through to the actual handler
@@ -123,8 +131,8 @@ class TestPaymentAcceptance:
     async def test_invalid_base64_returns_400(self, x402_client: Any) -> None:
         """Malformed base64 in PAYMENT-SIGNATURE returns 400."""
         resp = await x402_client.post(
-            "/api/v1/list_models",
-            json={},
+            "/api/v1/run_inference",
+            json={"prompt": "test"},
             headers={"payment-signature": "not-valid-base64!!!"},
         )
         assert resp.status_code == 400
@@ -135,8 +143,8 @@ class TestPaymentAcceptance:
         """PAYMENT-SIGNATURE missing required fields returns 400."""
         incomplete = base64.b64encode(json.dumps({"paymentId": "x"}).encode()).decode()
         resp = await x402_client.post(
-            "/api/v1/list_models",
-            json={},
+            "/api/v1/run_inference",
+            json={"prompt": "test"},
             headers={"payment-signature": incomplete},
         )
         assert resp.status_code == 400
@@ -182,8 +190,16 @@ class TestX402Disabled:
     @pytest.mark.asyncio
     async def test_no_402_when_disabled(self, no_x402_client: Any) -> None:
         """Without x402, protected endpoints work normally."""
-        with patch("octomil.models.catalog.CATALOG", {}):
-            resp = await no_x402_client.post("/api/v1/list_models", json={})
+        mock_backend = no_x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with patch.object(
+            mock_backend,
+            "generate",
+            return_value=(
+                "ok",
+                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+            ),
+        ):
+            resp = await no_x402_client.post("/api/v1/run_inference", json={"prompt": "test"})
         # Should work without payment
         assert resp.status_code == 200
 
@@ -390,8 +406,7 @@ class TestEIP712Verification:
         }
         signable = encode_typed_data(
             domain_data=domain,
-            types=types,
-            primary_type="TransferWithAuthorization",
+            message_types=types,
             message_data=authorization,
         )
         signed = acct.sign_message(signable)
@@ -443,8 +458,7 @@ class TestEIP712Verification:
         }
         signable = encode_typed_data(
             domain_data=domain,
-            types=types,
-            primary_type="TransferWithAuthorization",
+            message_types=types,
             message_data=authorization,
         )
         signed = signer.sign_message(signable)  # signed by wrong account
@@ -481,10 +495,18 @@ class TestLegacyCompat:
     async def test_legacy_payment_signature_still_works(self, x402_client: Any) -> None:
         """Old payment-signature header should still be accepted."""
         sig = _make_payment_signature()
-        with patch("octomil.models.catalog.CATALOG", {}):
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with patch.object(
+            mock_backend,
+            "generate",
+            return_value=(
+                "ok",
+                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+            ),
+        ):
             resp = await x402_client.post(
-                "/api/v1/list_models",
-                json={},
+                "/api/v1/run_inference",
+                json={"prompt": "test"},
                 headers={"payment-signature": sig},
             )
         assert resp.status_code == 200
@@ -514,10 +536,18 @@ class TestX402Header:
             "signature": "0xSIG",
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-        with patch("octomil.models.catalog.CATALOG", {}):
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with patch.object(
+            mock_backend,
+            "generate",
+            return_value=(
+                "ok",
+                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+            ),
+        ):
             resp = await x402_client.post(
-                "/api/v1/list_models",
-                json={},
+                "/api/v1/run_inference",
+                json={"prompt": "test"},
                 headers={"x-payment": encoded},
             )
         # Should pass through (verify_signatures defaults to True but no eth-account -> graceful skip)
@@ -542,8 +572,8 @@ class TestX402Header:
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         resp = await x402_client.post(
-            "/api/v1/list_models",
-            json={},
+            "/api/v1/run_inference",
+            json={"prompt": "test"},
             headers={"x-payment": encoded},
         )
         assert resp.status_code == 400
@@ -568,18 +598,26 @@ class TestX402Header:
             "signature": "0xSIG",
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-        with patch("octomil.models.catalog.CATALOG", {}):
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with patch.object(
+            mock_backend,
+            "generate",
+            return_value=(
+                "ok",
+                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+            ),
+        ):
             resp1 = await x402_client.post(
-                "/api/v1/list_models",
-                json={},
+                "/api/v1/run_inference",
+                json={"prompt": "test"},
                 headers={"x-payment": encoded},
             )
         assert resp1.status_code == 200
 
-        # Second request with same nonce
+        # Second request with same nonce — should be rejected as replay
         resp2 = await x402_client.post(
-            "/api/v1/list_models",
-            json={},
+            "/api/v1/run_inference",
+            json={"prompt": "test"},
             headers={"x-payment": encoded},
         )
         assert resp2.status_code == 400
@@ -604,8 +642,8 @@ class TestX402Header:
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         resp = await x402_client.post(
-            "/api/v1/list_models",
-            json={},
+            "/api/v1/run_inference",
+            json={"prompt": "test"},
             headers={"x-payment": encoded},
         )
         # Note: x402_client fixture uses x402_price="0.01", which as integer comparison:
@@ -690,10 +728,19 @@ class TestX402SettlementGating:
             "signature": "0xSIG",
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-        with patch("octomil.models.catalog.CATALOG", {}):
+        # Mock the backend to return a successful inference result
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with patch.object(
+            mock_backend,
+            "generate",
+            return_value=(
+                "hello",
+                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+            ),
+        ):
             resp = await x402_client.post(
-                "/api/v1/list_models",
-                json={},
+                "/api/v1/run_inference",
+                json={"prompt": "test"},
                 headers={"x-payment": encoded},
             )
         assert resp.status_code == 200
@@ -745,3 +792,36 @@ class TestX402SettlementGating:
         resp = await x402_client.get("/api/v1/ready")
         assert resp.status_code in (200, 503)
         assert resp.status_code != 402
+
+    @pytest.mark.asyncio
+    async def test_platform_metadata_tools_exempt(self, x402_client: Any) -> None:
+        """Platform metadata tools should not require payment."""
+        exempt_endpoints = [
+            ("POST", "/api/v1/resolve_model", {"name": "test"}),
+            ("POST", "/api/v1/list_models", {}),
+            ("POST", "/api/v1/detect_engines", {}),
+            ("GET", "/api/v1/hardware_profile", None),
+            ("POST", "/api/v1/recommend_model", {"priority": "speed"}),
+            ("GET", "/api/v1/metrics", None),
+        ]
+        for method, path, body in exempt_endpoints:
+            if method == "GET":
+                resp = await x402_client.get(path)
+            else:
+                resp = await x402_client.post(path, json=body)
+            assert resp.status_code != 402, f"{path} should be exempt but got 402"
+
+    @pytest.mark.asyncio
+    async def test_inference_tools_require_payment(self, x402_client: Any) -> None:
+        """Inference tools should require payment when x402 is enabled."""
+        paid_endpoints = [
+            ("/api/v1/run_inference", {"prompt": "test"}),
+            ("/api/v1/generate_code", {"description": "test"}),
+            ("/api/v1/review_code", {"code": "x=1"}),
+            ("/api/v1/explain_code", {"code": "x=1"}),
+            ("/api/v1/write_tests", {"code": "x=1"}),
+            ("/api/v1/general_task", {"prompt": "test"}),
+        ]
+        for path, body in paid_endpoints:
+            resp = await x402_client.post(path, json=body)
+            assert resp.status_code == 402, f"{path} should require payment but got {resp.status_code}"

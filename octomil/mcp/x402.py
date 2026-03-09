@@ -69,14 +69,29 @@ class X402Config:
     protected_prefixes: list[str] = field(default_factory=lambda: ["/api/v1/"])
     exempt_paths: list[str] = field(
         default_factory=lambda: [
+            # Discovery & readiness — agents need these to bootstrap
             "/.well-known/agent-card.json",
             "/health",
-            "/api/v1/metrics",
             "/api/v1/ready",
             "/api/v1/warmup",
             "/docs",
             "/openapi.json",
             "/redoc",
+            # Platform metadata tools — no GPU, no cost
+            "/api/v1/metrics",
+            "/api/v1/resolve_model",
+            "/api/v1/list_models",
+            "/api/v1/detect_engines",
+            "/api/v1/hardware_profile",
+            "/api/v1/recommend_model",
+            "/api/v1/scan_codebase",
+            "/api/v1/compress_prompt",
+            # Cloud-proxied tools — gated by OCTOMIL_API_KEY, not x402
+            "/api/v1/deploy_model",
+            "/api/v1/optimize_model",
+            "/api/v1/plan_deployment",
+            "/api/v1/embed",
+            "/api/v1/convert_model",
         ]
     )
     expiry_seconds: int = _DEFAULT_EXPIRY_SECONDS
@@ -262,8 +277,7 @@ def verify_eip712_signature(
 
         signable = encode_typed_data(
             domain_data=domain,
-            types=types,
-            primary_type="TransferWithAuthorization",
+            message_types=types,
             message_data=message,
         )
 
