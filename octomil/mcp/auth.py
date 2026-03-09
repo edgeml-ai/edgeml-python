@@ -41,7 +41,7 @@ async def require_auth(
     if not api_key:
         if not _DEV_MODE_WARNED:
             logger.warning(
-                "OCTOMIL_MCP_API_KEY not set — running in dev mode. " "All requests are allowed without authentication."
+                "OCTOMIL_MCP_API_KEY not set — running in dev mode. All requests are allowed without authentication."
             )
             _DEV_MODE_WARNED = True
         return None

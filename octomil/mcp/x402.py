@@ -17,7 +17,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from .x402_settlement import SettlementStore
@@ -149,7 +149,7 @@ def encode_payment_requirements(requirements: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def decode_x402_payment(header_value: str) -> dict[str, Any] | None:
+def decode_x402_payment(header_value: str) -> Optional[dict[str, Any]]:
     """Decode an x-payment header (x402 spec format).
 
     The payload is a base64-encoded JSON object with EIP-3009
@@ -169,7 +169,7 @@ def decode_x402_payment(header_value: str) -> dict[str, Any] | None:
     return data
 
 
-def decode_payment_signature(header_value: str) -> dict[str, Any] | None:
+def decode_payment_signature(header_value: str) -> Optional[dict[str, Any]]:
     """Decode and validate structure of a legacy payment-signature header.
 
     Returns the parsed JSON if it has required fields, None otherwise.
@@ -376,12 +376,12 @@ class X402Middleware(BaseHTTPMiddleware):
     8. Pass through to handler
     """
 
-    def __init__(self, app: Any, config: X402Config, settlement_store: SettlementStore | None = None) -> None:
+    def __init__(self, app: Any, config: X402Config, settlement_store: Optional[SettlementStore] = None) -> None:
         super().__init__(app)
         self.config = config
         self.nonce_tracker = NonceTracker()
         if settlement_store is not None:
-            self.settlement_store: SettlementStore | None = settlement_store
+            self.settlement_store: Optional[SettlementStore] = settlement_store
         elif config.enable_settlement:
             from .x402_settlement import SettlementStore as _SS
 

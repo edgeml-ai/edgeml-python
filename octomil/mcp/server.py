@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ def _detect_language(file_path: str) -> str:
     return _EXT_TO_LANG.get(ext, "")
 
 
-def create_mcp_server(model: str | None = None) -> Any:
+def create_mcp_server(model: Optional[str] = None) -> Any:
     """Create and configure the FastMCP server with all tools."""
     from mcp.server.fastmcp import FastMCP  # type: ignore[import-untyped]
 
