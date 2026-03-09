@@ -377,12 +377,9 @@ class TestRegistration:
         expected = {"resolve_model", "list_models", "detect_engines", "run_inference", "get_metrics", "deploy_model"}
         assert set(tools.keys()) == expected
 
-    @pytest.mark.skipif(
-        not pytest.importorskip("mcp.server.fastmcp", reason="mcp not installed"),
-        reason="mcp not installed",
-    )
     def test_platform_tools_on_real_fastmcp(self) -> None:
         """Verify tools register on a real FastMCP instance without errors."""
+        pytest.importorskip("mcp.server.fastmcp", reason="mcp not installed")
         from mcp.server.fastmcp import FastMCP
 
         from octomil.mcp.platform_tools import register_platform_tools
