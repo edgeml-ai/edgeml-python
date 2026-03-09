@@ -72,6 +72,8 @@ class X402Config:
             "/.well-known/agent-card.json",
             "/health",
             "/api/v1/metrics",
+            "/api/v1/ready",
+            "/api/v1/warmup",
             "/docs",
             "/openapi.json",
             "/redoc",
@@ -440,10 +442,15 @@ class X402Middleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        # Add payment response header on success
-        if response.status_code < 400:
-            # Note: BaseHTTPMiddleware wraps responses, so we can set headers
-            response.headers["x-payment-response"] = json.dumps({"status": "accepted"})
+        # Only settle payment on successful (2xx) responses.
+        # If the service fails (5xx) or returns client error (4xx), the agent
+        # shouldn't be charged — their payment is accepted but not settled.
+        if 200 <= response.status_code < 300:
+            response.headers["x-payment-response"] = json.dumps({"status": "settled"})
+        elif response.status_code >= 400:
+            response.headers["x-payment-response"] = json.dumps(
+                {"status": "refunded", "reason": f"Service returned {response.status_code}"}
+            )
 
         return response
 

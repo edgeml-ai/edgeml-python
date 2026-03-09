@@ -28,7 +28,7 @@ async def x402_client():
         port=8402,
         enable_x402=True,
         x402_address="0xTEST_ADDRESS",
-        x402_price="0.01",
+        x402_price="1000",  # base units (e.g. 1000 = 0.001 USDC with 6 decimals)
     )
     app = create_http_app(config)
     transport = ASGITransport(app=app)
@@ -72,7 +72,7 @@ class TestPaymentRequired:
         assert "requirements" in data
         assert data["requirements"]["x402Version"] == 1
         assert data["requirements"]["accepts"][0]["payTo"] == "0xTEST_ADDRESS"
-        assert data["requirements"]["accepts"][0]["maxAmountRequired"] == "0.01"
+        assert data["requirements"]["accepts"][0]["maxAmountRequired"] == "1000"
 
     @pytest.mark.asyncio
     async def test_402_has_payment_required_header(self, x402_client: Any) -> None:
@@ -664,3 +664,84 @@ class TestVerificationHelpers:
             tracker.check_and_mark(f"nonce-{i}")
         # After exceeding max, old entries should be cleaned
         assert len(tracker._seen) <= 10  # cleanup happens on next check
+
+
+# ---------------------------------------------------------------------------
+# x402 settlement gating on 2xx
+# ---------------------------------------------------------------------------
+
+
+class TestX402SettlementGating:
+    @pytest.mark.asyncio
+    async def test_settlement_on_2xx(self, x402_client: Any) -> None:
+        """Successful responses should include settled payment header."""
+        import time as _time
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        with patch("octomil.models.catalog.CATALOG", {}):
+            resp = await x402_client.post(
+                "/api/v1/list_models",
+                json={},
+                headers={"x-payment": encoded},
+            )
+        assert resp.status_code == 200
+        payment_resp = json.loads(resp.headers["x-payment-response"])
+        assert payment_resp["status"] == "settled"
+
+    @pytest.mark.asyncio
+    async def test_no_settlement_on_5xx(self, x402_client: Any) -> None:
+        """Failed responses should include refunded payment header."""
+        import time as _time
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        # Code tool without a loaded model returns 503
+        with patch.dict("os.environ", {}, clear=False):
+            import os as _os
+
+            _os.environ.pop("OCTOMIL_API_KEY", None)
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded},
+            )
+        assert resp.status_code == 503
+        payment_resp = json.loads(resp.headers["x-payment-response"])
+        assert payment_resp["status"] == "refunded"
+
+    @pytest.mark.asyncio
+    async def test_warmup_exempt_from_x402(self, x402_client: Any) -> None:
+        """Warmup and ready endpoints should not require payment."""
+        resp = await x402_client.post("/api/v1/warmup")
+        assert resp.status_code in (200, 503)
+        # Should NOT be 402
+        assert resp.status_code != 402
+
+    @pytest.mark.asyncio
+    async def test_ready_exempt_from_x402(self, x402_client: Any) -> None:
+        resp = await x402_client.get("/api/v1/ready")
+        assert resp.status_code in (200, 503)
+        assert resp.status_code != 402

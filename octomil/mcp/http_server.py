@@ -181,7 +181,7 @@ def _get_tool_definitions() -> list[dict[str, Any]]:
     for name, desc in PLATFORM_TOOL_DESCRIPTIONS.items():
         tools.append({"name": name, "description": desc})
 
-    # Code tools (existing 7)
+    # Code tools (existing 7) — require a loaded model
     code_tools = {
         "generate_code": "Generate code from natural language description using on-device inference",
         "review_code": "Review code for bugs, security issues, and improvements",
@@ -192,7 +192,7 @@ def _get_tool_definitions() -> list[dict[str, Any]]:
         "analyze_files": "Read multiple files and answer a question about them",
     }
     for name, desc in code_tools.items():
-        tools.append({"name": name, "description": desc})
+        tools.append({"name": name, "description": desc, "requires_model": True})
 
     return tools
 
@@ -251,24 +251,26 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
     # Shared backend instance
     backend = OctomilMCPBackend(model=config.model)
 
-    # Agent card — built once at startup
+    # Agent card config — card is rebuilt per-request for live readiness
     base_url = config.base_url or f"http://{config.host}:{config.port}"
     card_config = AgentCardConfig(url=base_url)
     tool_defs = _get_tool_definitions()
-    agent_card = build_agent_card(tool_defs, card_config)
 
     # Store on app state for testing access
     app.state.backend = backend
-    app.state.agent_card = agent_card
 
     # ------------------------------------------------------------------
-    # Discovery & health endpoints (no auth)
+    # Discovery, readiness & health endpoints (no auth)
     # ------------------------------------------------------------------
 
     @app.get("/.well-known/agent-card.json", tags=["discovery"])
     async def get_agent_card() -> JSONResponse:
-        """A2A agent card for discovery by other agents."""
-        return JSONResponse(content=agent_card)
+        """A2A agent card for discovery by other agents.
+
+        Rebuilt per-request so skill readiness reflects current model state.
+        """
+        card = build_agent_card(tool_defs, card_config, model_ready=backend.is_loaded)
+        return JSONResponse(content=card)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, Any]:
@@ -278,6 +280,30 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
             "model": backend.model_name,
             "loaded": backend.is_loaded,
         }
+
+    @app.get("/api/v1/ready", tags=["readiness"])
+    async def api_ready() -> JSONResponse:
+        """Lightweight readiness probe. Returns model load status."""
+        status_code = 200 if backend.is_loaded else 503
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "ready": backend.is_loaded,
+                "model": backend.model_name,
+                "engine": backend._engine_name,
+            },
+        )
+
+    @app.post("/api/v1/warmup", tags=["readiness"])
+    async def api_warmup() -> JSONResponse:
+        """Trigger model loading (with auto-download if needed).
+
+        Call this before invoking code tools. Returns immediately if the
+        model is already loaded. No authentication required.
+        """
+        result = backend.warmup()
+        status_code = 200 if result["status"] == "ready" else 503
+        return JSONResponse(status_code=status_code, content=result)
 
     # ------------------------------------------------------------------
     # REST API endpoints (auth required)
@@ -688,80 +714,102 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
             return JSONResponse(status_code=500, content={"error": "embed_error", "message": str(exc)})
 
     # ------------------------------------------------------------------
-    # Code tool endpoints
+    # Code tool endpoints — with cloud fallback and 503 next actions
     # ------------------------------------------------------------------
+
+    def _code_tool_response(tool_name: str, messages: list[dict[str, str]]) -> JSONResponse:
+        """Run a code tool through local model with cloud fallback.
+
+        1. Try local model (backend.generate)
+        2. On failure, try cloud fallback via OctomilClient (if OCTOMIL_API_KEY set)
+        3. If both fail, return 503 with machine-readable next actions
+        """
+        # 1. Try local model
+        try:
+            text, metrics = backend.generate(messages)
+            return JSONResponse(content={"text": text, "metrics": metrics})
+        except Exception as local_exc:
+            logger.warning("%s: local model failed: %s", tool_name, local_exc)
+
+        # 2. Try cloud fallback
+        api_key = os.environ.get("OCTOMIL_API_KEY")
+        if api_key:
+            try:
+                from octomil.client import OctomilClient
+
+                client = OctomilClient(api_key=api_key)
+                result = client.chat(backend.model_name, messages)
+                text = result.get("message", {}).get("content", str(result))
+                return JSONResponse(
+                    content={
+                        "text": text,
+                        "metrics": {"engine": "cloud", "model": backend.model_name, "fallback": True},
+                    }
+                )
+            except Exception as cloud_exc:
+                logger.warning("%s: cloud fallback also failed: %s", tool_name, cloud_exc)
+
+        # 3. Return 503 with next actions
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "model_not_ready",
+                "message": f"No local model loaded and no cloud fallback available for {tool_name}.",
+                "retryable": True,
+                "retryAfterSeconds": 30,
+                "actions": {
+                    "warmup": f"{base_url}/api/v1/warmup",
+                    "ready": f"{base_url}/api/v1/ready",
+                },
+            },
+        )
 
     @app.post("/api/v1/generate_code", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_generate_code(req: GenerateCodeRequest) -> JSONResponse:
         """Generate code from a natural language description."""
-        try:
-            parts = [f"Generate {req.language + ' ' if req.language else ''}code: {req.description}"]
-            if req.context:
-                parts.append(f"\nContext:\n{req.context}")
-            messages = build_messages("generate_code", "\n".join(parts))
-            text, metrics = backend.generate(messages)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as exc:
-            logger.exception("generate_code failed")
-            return JSONResponse(status_code=500, content={"error": "generate_code_error", "message": str(exc)})
+        parts = [f"Generate {req.language + ' ' if req.language else ''}code: {req.description}"]
+        if req.context:
+            parts.append(f"\nContext:\n{req.context}")
+        messages = build_messages("generate_code", "\n".join(parts))
+        return _code_tool_response("generate_code", messages)
 
     @app.post("/api/v1/review_code", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_review_code(req: ReviewCodeRequest) -> JSONResponse:
         """Review code for bugs, security issues, and improvements."""
-        try:
-            parts = [f"Review this {req.language + ' ' if req.language else ''}code:"]
-            if req.focus:
-                parts.append(f"Focus on: {req.focus}")
-            parts.append(f"\n```{req.language}\n{req.code}\n```")
-            messages = build_messages("review_code", "\n".join(parts))
-            text, metrics = backend.generate(messages)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as exc:
-            logger.exception("review_code failed")
-            return JSONResponse(status_code=500, content={"error": "review_code_error", "message": str(exc)})
+        parts = [f"Review this {req.language + ' ' if req.language else ''}code:"]
+        if req.focus:
+            parts.append(f"Focus on: {req.focus}")
+        parts.append(f"\n```{req.language}\n{req.code}\n```")
+        messages = build_messages("review_code", "\n".join(parts))
+        return _code_tool_response("review_code", messages)
 
     @app.post("/api/v1/explain_code", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_explain_code(req: ExplainCodeRequest) -> JSONResponse:
         """Explain code in plain English."""
-        try:
-            parts = [f"Explain this {req.language + ' ' if req.language else ''}code ({req.detail_level} detail):"]
-            parts.append(f"\n```{req.language}\n{req.code}\n```")
-            messages = build_messages("explain_code", "\n".join(parts))
-            text, metrics = backend.generate(messages)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as exc:
-            logger.exception("explain_code failed")
-            return JSONResponse(status_code=500, content={"error": "explain_code_error", "message": str(exc)})
+        parts = [f"Explain this {req.language + ' ' if req.language else ''}code ({req.detail_level} detail):"]
+        parts.append(f"\n```{req.language}\n{req.code}\n```")
+        messages = build_messages("explain_code", "\n".join(parts))
+        return _code_tool_response("explain_code", messages)
 
     @app.post("/api/v1/write_tests", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_write_tests(req: WriteTestsRequest) -> JSONResponse:
         """Generate unit tests for code."""
-        try:
-            parts = [
-                f"Write {req.framework + ' ' if req.framework else ''}tests for this {req.language + ' ' if req.language else ''}code:"
-            ]
-            if req.focus:
-                parts.append(f"Focus on: {req.focus}")
-            parts.append(f"\n```{req.language}\n{req.code}\n```")
-            messages = build_messages("write_tests", "\n".join(parts))
-            text, metrics = backend.generate(messages)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as exc:
-            logger.exception("write_tests failed")
-            return JSONResponse(status_code=500, content={"error": "write_tests_error", "message": str(exc)})
+        parts = [
+            f"Write {req.framework + ' ' if req.framework else ''}tests for this {req.language + ' ' if req.language else ''}code:"
+        ]
+        if req.focus:
+            parts.append(f"Focus on: {req.focus}")
+        parts.append(f"\n```{req.language}\n{req.code}\n```")
+        messages = build_messages("write_tests", "\n".join(parts))
+        return _code_tool_response("write_tests", messages)
 
     @app.post("/api/v1/general_task", tags=["code"], dependencies=[Depends(require_auth)])
     async def api_general_task(req: GeneralTaskRequest) -> JSONResponse:
         """Run a free-form prompt through the local model."""
-        try:
-            content = req.prompt
-            if req.context:
-                content = f"{req.prompt}\n\nContext:\n{req.context}"
-            messages = build_messages("general_task", content)
-            text, metrics = backend.generate(messages)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as exc:
-            logger.exception("general_task failed")
-            return JSONResponse(status_code=500, content={"error": "general_task_error", "message": str(exc)})
+        content = req.prompt
+        if req.context:
+            content = f"{req.prompt}\n\nContext:\n{req.context}"
+        messages = build_messages("general_task", content)
+        return _code_tool_response("general_task", messages)
 
     return app

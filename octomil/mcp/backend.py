@@ -101,6 +101,38 @@ class OctomilMCPBackend:
         }
         return text, metrics_dict
 
+    def warmup(self) -> dict[str, Any]:
+        """Eagerly load the model, returning status info.
+
+        Unlike generate(), this doesn't require a prompt — it just ensures
+        the model is downloaded and loaded into memory. Useful for warmup
+        endpoints so agents can trigger model readiness before calling tools.
+
+        Returns dict with status, model name, engine, and any error.
+        """
+        if self._backend is not _NOT_LOADED:
+            return {
+                "status": "ready",
+                "model": self._model_name,
+                "engine": self._engine_name,
+            }
+
+        try:
+            self._ensure_loaded()
+            return {
+                "status": "ready",
+                "model": self._model_name,
+                "engine": self._engine_name,
+            }
+        except Exception as exc:
+            logger.warning("warmup failed for %s: %s", self._model_name, exc)
+            return {
+                "status": "error",
+                "model": self._model_name,
+                "engine": "none",
+                "error": str(exc),
+            }
+
     def format_metrics(self, metrics: dict[str, Any]) -> str:
         """Format metrics as a compact tag for appending to tool output."""
         model = metrics.get("model", self._model_name)
