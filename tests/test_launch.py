@@ -10,9 +10,11 @@ import pytest
 from click.testing import CliRunner
 
 from octomil.agents.launcher import (
+    _PICKER_AGENTS,
     RecommendedModel,
     _auto_select_model,
     _build_serve_cmd,
+    _select_agent_fallback,
     _select_model_fallback,
     is_serve_running,
     launch_agent,
@@ -42,6 +44,8 @@ class TestAgentRegistry:
         names = [a.name for a in agents]
         assert "claude" in names
         assert "codex" in names
+        assert "droid" in names
+        assert "opencode" in names
         assert "openclaw" in names
         assert "aider" in names
 
@@ -61,6 +65,7 @@ class TestAgentRegistry:
         for agent in list_agents():
             assert agent.name
             assert agent.display_name
+            assert agent.description
             assert agent.env_key
             assert agent.install_check
             assert agent.install_cmd
@@ -84,13 +89,11 @@ class TestLaunchCLI:
         result = runner.invoke(main, ["launch", "invalid"])
         assert result.exit_code != 0
 
-    def test_launch_lists_agent_choices(self):
+    def test_launch_help_shows_examples(self):
         runner = CliRunner()
         result = runner.invoke(main, ["launch", "--help"])
-        assert "claude" in result.output
-        assert "codex" in result.output
-        assert "aider" in result.output
-        assert "openclaw" in result.output
+        assert "octomil launch" in result.output
+        assert "octomil launch codex" in result.output
 
     def test_launch_help_shows_select_flag(self):
         runner = CliRunner()
@@ -316,6 +319,47 @@ class TestLaunchAgent:
 
         mock_auto.assert_not_called()
         mock_serve.assert_called_once_with("llama-8b", port=8080)
+
+    @patch("octomil.agents.launcher._select_agent_tui", return_value="codex")
+    @patch("octomil.agents.launcher.subprocess.run")
+    @patch("octomil.agents.launcher.is_serve_running", return_value=True)
+    @patch("octomil.agents.registry.is_agent_installed", return_value=True)
+    def test_launch_no_agent_shows_picker(self, mock_installed, mock_running, mock_run, mock_picker):
+        mock_run.return_value = MagicMock(returncode=0)
+
+        with pytest.raises(SystemExit):
+            launch_agent()  # no agent_name
+
+        mock_picker.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Agent picker
+# ---------------------------------------------------------------------------
+
+
+class TestAgentPicker:
+    def test_picker_agents_exist_in_registry(self):
+        for name in _PICKER_AGENTS:
+            assert get_agent(name) is not None
+
+    @patch("shutil.which", return_value=None)
+    @patch("click.prompt", return_value="1")
+    def test_fallback_returns_first_agent(self, mock_prompt, mock_which):
+        from octomil.agents.registry import list_agents
+
+        agents = list_agents()
+        result = _select_agent_fallback(agents, lambda a: False)
+        assert result == agents[0].name
+
+    @patch("shutil.which", return_value=None)
+    @patch("click.prompt", return_value="codex")
+    def test_fallback_returns_custom_name(self, mock_prompt, mock_which):
+        from octomil.agents.registry import list_agents
+
+        agents = list_agents()
+        result = _select_agent_fallback(agents, lambda a: False)
+        assert result == "codex"
 
 
 # ---------------------------------------------------------------------------

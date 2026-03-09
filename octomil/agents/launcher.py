@@ -53,16 +53,16 @@ _ALL_CANDIDATES: list[_Candidate] = [
 def _get_memory_budget_gb() -> float:
     """Return usable memory in GB for model loading (total RAM - OS reserve)."""
     try:
-        from ..hardware import UnifiedDetector
+        from ..hardware._unified import UnifiedDetector  # type: ignore[attr-defined]
 
         hw = UnifiedDetector().detect()
         is_metal = hw.gpu is not None and hw.gpu.backend == "metal"
         if is_metal:
             # Apple Silicon: unified memory, reserve 4 GB for OS
-            return max(hw.total_ram_gb - 4.0, 0.0)
+            return float(max(hw.total_ram_gb - 4.0, 0.0))
         if hw.gpu is not None and hw.gpu.total_vram_gb > 0:
-            return hw.gpu.total_vram_gb * 0.9
-        return hw.available_ram_gb * 0.85
+            return float(hw.gpu.total_vram_gb * 0.9)
+        return float(hw.available_ram_gb * 0.85)
     except Exception:
         logger.debug("Hardware detection failed, assuming 8 GB budget")
         return 8.0
@@ -175,12 +175,10 @@ def _auto_select_model() -> str:
         # Pick the largest downloaded model (first in the list — sorted
         # largest-to-smallest from _ALL_CANDIDATES order).
         best = downloaded[0]
-        click.echo(f"Using {best.key} (already downloaded, best for {budget:.0f} GB). " "Use --select to choose.")
+        click.echo(f"Using {best.key} (already downloaded, best for {budget:.0f} GB). Use --select to choose.")
     else:
         best = recommendations[0]
-        click.echo(
-            f"Using {best.key} (best for {budget:.0f} GB, " f"will download {best.size}). " "Use --select to choose."
-        )
+        click.echo(f"Using {best.key} (best for {budget:.0f} GB, will download {best.size}). Use --select to choose.")
     return best.key
 
 
@@ -356,7 +354,7 @@ def _select_model_fallback(
     hint_parts = [f"{k}={labels[k]}" for k in sorted(choices)]
     hint = ", ".join(hint_parts)
 
-    selection = click.prompt(
+    selection: str = click.prompt(
         f"Select model [{hint}] or enter a model name",
         default="1",
     )
@@ -437,21 +435,166 @@ def start_serve_background(model: str, port: int = 8080, timeout: int = 600) -> 
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Agent picker
+# ---------------------------------------------------------------------------
+
+# Agents shown in the interactive picker (order matters).
+_PICKER_AGENTS = ["claude", "codex", "droid", "opencode"]
+
+
+def _select_agent_tui() -> str:
+    """Show a TUI agent picker. Falls back to plain numbered list."""
+    from .registry import AgentDef, is_agent_installed, list_agents
+
+    agents = list_agents()
+    # Put picker agents first in order, then any extras
+    ordered: list[AgentDef] = []
+    for name in _PICKER_AGENTS:
+        for a in agents:
+            if a.name == name:
+                ordered.append(a)
+                break
+    for a in agents:
+        if a.name not in _PICKER_AGENTS:
+            ordered.append(a)
+
+    is_tty = sys.stdin.isatty() and sys.stdout.isatty()
+    try:
+        if not is_tty:
+            raise ImportError("not a TTY")
+
+        from prompt_toolkit import Application
+        from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.layout import Layout, Window
+        from prompt_toolkit.layout.controls import FormattedTextControl
+
+        return _run_agent_tui(
+            Application,
+            KeyBindings,
+            Layout,
+            Window,
+            FormattedTextControl,
+            ordered,
+            is_agent_installed,
+        )
+    except ImportError:
+        return _select_agent_fallback(ordered, is_agent_installed)
+
+
+def _run_agent_tui(
+    Application,  # noqa: N803
+    KeyBindings,  # noqa: N803
+    Layout,  # noqa: N803
+    Window,  # noqa: N803
+    FormattedTextControl,  # noqa: N803
+    agents: list,
+    check_installed,  # noqa: ANN001
+) -> str:
+    """Full prompt_toolkit TUI for agent selection."""
+    import shutil as _shutil
+
+    statuses = {a.name: _shutil.which(a.install_check) is not None for a in agents}
+
+    selected = [0]
+    result: list[str | None] = [None]
+
+    def get_display_text():  # type: ignore[no-untyped-def]
+        lines: list[tuple[str, str]] = []
+        lines.append(("bold", "  Select a coding agent\n"))
+        lines.append(("", "  Use \u2191\u2193 to navigate, Enter to select, Esc to cancel\n\n"))
+
+        for i, a in enumerate(agents):
+            installed = "\u2713 installed" if statuses.get(a.name) else "not installed"
+            prefix = " \u25b8 " if i == selected[0] else "   "
+            style = "reverse" if i == selected[0] else ""
+            lines.append((style, f"{prefix}{a.name}\n"))
+            lines.append(("", f"     {a.description}  |  {installed}\n"))
+
+        return lines
+
+    control = FormattedTextControl(get_display_text)
+    bindings = KeyBindings()
+
+    @bindings.add("up")
+    def _up(event):  # type: ignore[no-untyped-def]
+        selected[0] = max(0, selected[0] - 1)
+
+    @bindings.add("down")
+    def _down(event):  # type: ignore[no-untyped-def]
+        selected[0] = min(len(agents) - 1, selected[0] + 1)
+
+    @bindings.add("enter")
+    def _enter(event):  # type: ignore[no-untyped-def]
+        if agents:
+            result[0] = agents[selected[0]].name
+        event.app.exit()
+
+    @bindings.add("escape")
+    def _escape(event):  # type: ignore[no-untyped-def]
+        event.app.exit()
+
+    @bindings.add("c-c")
+    def _ctrl_c(event):  # type: ignore[no-untyped-def]
+        event.app.exit()
+
+    layout = Layout(Window(content=control))
+    app: Application[None] = Application(
+        layout=layout,
+        key_bindings=bindings,
+        full_screen=True,
+    )
+    app.run()
+
+    if result[0] is None:
+        raise SystemExit(0)
+    return result[0]
+
+
+def _select_agent_fallback(agents: list, check_installed) -> str:  # noqa: ANN001
+    """Plain numbered list fallback when TUI is unavailable."""
+    import shutil as _shutil
+
+    click.echo("\nSelect a coding agent\n")
+
+    for i, a in enumerate(agents):
+        installed = _shutil.which(a.install_check) is not None
+        status = "installed" if installed else "not installed"
+        prefix = "  > " if i == 0 else "    "
+        click.echo(f"{prefix}{i + 1}. {a.name}")
+        click.echo(f"      {a.description}  ({status})")
+
+    click.echo()
+
+    choices = {str(i + 1): a.name for i, a in enumerate(agents)}
+    labels = {str(i + 1): a.name for i, a in enumerate(agents)}
+    hint = ", ".join(f"{k}={labels[k]}" for k in sorted(choices))
+
+    selection = click.prompt(f"Select agent [{hint}]", default="1")
+    if selection in choices:
+        return choices[selection]
+    return selection
+
+
 def launch_agent(
-    agent_name: str,
+    agent_name: Optional[str] = None,
     model: Optional[str] = None,
     port: int = 8080,
     select: bool = False,
 ) -> None:
     """Launch a coding agent with a local model backend.
 
-    1. Ensures the agent binary is installed (offers to install if not).
-    2. If ``--select``, shows a TUI picker. Otherwise auto-selects best model.
-    3. Starts ``octomil serve`` in the background if no server is running.
-    4. Sets the appropriate env var so the agent talks to the local server.
-    5. Execs the agent and tears down the server on exit.
+    1. If no agent specified, shows an interactive picker.
+    2. Ensures the agent binary is installed (offers to install if not).
+    3. If ``--select``, shows a TUI picker. Otherwise auto-selects best model.
+    4. Starts ``octomil serve`` in the background if no server is running.
+    5. Sets the appropriate env var so the agent talks to the local server.
+    6. Execs the agent and tears down the server on exit.
     """
     from .registry import get_agent, is_agent_installed
+
+    if agent_name is None:
+        agent_name = _select_agent_tui()
 
     agent = get_agent(agent_name)
     if agent is None:
