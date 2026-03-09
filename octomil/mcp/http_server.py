@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -154,7 +154,7 @@ class HTTPServerConfig:
 
     host: str = "0.0.0.0"
     port: int = 8402
-    model: str | None = None
+    model: Optional[str] = None
     enable_x402: bool = False
     x402_address: str = ""
     x402_price: str = "0.001"
@@ -207,7 +207,7 @@ def _get_tool_definitions() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
+def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
     """Create the FastAPI application for the Octomil agent HTTP server.
 
     Parameters
@@ -403,7 +403,7 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
             return JSONResponse(status_code=500, content={"error": "internal_error", "message": str(exc)})
 
     @app.post("/api/v1/list_models", tags=["models"], dependencies=[Depends(require_auth)])
-    async def api_list_models(req: ListModelsRequest | None = None) -> JSONResponse:
+    async def api_list_models(req: Optional[ListModelsRequest] = None) -> JSONResponse:
         """List all available models."""
         try:
             from octomil.models.catalog import CATALOG
