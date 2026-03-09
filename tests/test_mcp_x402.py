@@ -537,20 +537,22 @@ class TestX402Header:
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
-        with patch.object(
-            mock_backend,
-            "generate",
-            return_value=(
-                "ok",
-                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+        with (
+            patch.object(
+                mock_backend,
+                "generate",
+                return_value=(
+                    "ok",
+                    {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+                ),
             ),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
         ):
             resp = await x402_client.post(
                 "/api/v1/run_inference",
                 json={"prompt": "test"},
                 headers={"x-payment": encoded},
             )
-        # Should pass through (verify_signatures defaults to True but no eth-account -> graceful skip)
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
@@ -599,13 +601,16 @@ class TestX402Header:
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
-        with patch.object(
-            mock_backend,
-            "generate",
-            return_value=(
-                "ok",
-                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+        with (
+            patch.object(
+                mock_backend,
+                "generate",
+                return_value=(
+                    "ok",
+                    {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+                ),
             ),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
         ):
             resp1 = await x402_client.post(
                 "/api/v1/run_inference",
@@ -614,7 +619,7 @@ class TestX402Header:
             )
         assert resp1.status_code == 200
 
-        # Second request with same nonce — should be rejected as replay
+        # Second request with same nonce — should be rejected as replay (before signature check)
         resp2 = await x402_client.post(
             "/api/v1/run_inference",
             json={"prompt": "test"},
@@ -730,13 +735,16 @@ class TestX402SettlementGating:
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         # Mock the backend to return a successful inference result
         mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
-        with patch.object(
-            mock_backend,
-            "generate",
-            return_value=(
-                "hello",
-                {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+        with (
+            patch.object(
+                mock_backend,
+                "generate",
+                return_value=(
+                    "hello",
+                    {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+                ),
             ),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
         ):
             resp = await x402_client.post(
                 "/api/v1/run_inference",
@@ -766,7 +774,12 @@ class TestX402SettlementGating:
         }
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         # Code tool without a loaded model returns 503
-        with patch.dict("os.environ", {}, clear=False):
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(mock_backend, "generate", side_effect=RuntimeError("no model")),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+            patch.dict("os.environ", {}, clear=False),
+        ):
             import os as _os
 
             _os.environ.pop("OCTOMIL_API_KEY", None)

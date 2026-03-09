@@ -387,10 +387,19 @@ class TestPhase2Endpoints:
 
 
 class TestCodeToolEndpoints:
+    def _no_model_ctx(self, client: Any):
+        """Context manager that makes the backend raise (simulating no model) and removes cloud key."""
+        backend = client._transport.app.state.backend
+        return (
+            patch.object(backend, "generate", side_effect=RuntimeError("no model loaded")),
+            patch.dict(os.environ, {}, clear=False),
+        )
+
     @pytest.mark.asyncio
     async def test_generate_code_no_model(self, client: Any) -> None:
         """Without a loaded model or cloud key, code tools return 503."""
-        with patch.dict(os.environ, {}, clear=False):
+        mock_gen, env_ctx = self._no_model_ctx(client)
+        with mock_gen, env_ctx:
             os.environ.pop("OCTOMIL_API_KEY", None)
             resp = await client.post("/api/v1/generate_code", json={"description": "fibonacci function"})
         assert resp.status_code == 503
@@ -409,7 +418,8 @@ class TestCodeToolEndpoints:
 
     @pytest.mark.asyncio
     async def test_review_code_no_model(self, client: Any) -> None:
-        with patch.dict(os.environ, {}, clear=False):
+        mock_gen, env_ctx = self._no_model_ctx(client)
+        with mock_gen, env_ctx:
             os.environ.pop("OCTOMIL_API_KEY", None)
             resp = await client.post("/api/v1/review_code", json={"code": "def f(): pass"})
         assert resp.status_code == 503
@@ -418,21 +428,24 @@ class TestCodeToolEndpoints:
 
     @pytest.mark.asyncio
     async def test_explain_code_no_model(self, client: Any) -> None:
-        with patch.dict(os.environ, {}, clear=False):
+        mock_gen, env_ctx = self._no_model_ctx(client)
+        with mock_gen, env_ctx:
             os.environ.pop("OCTOMIL_API_KEY", None)
             resp = await client.post("/api/v1/explain_code", json={"code": "x = [i**2 for i in range(10)]"})
         assert resp.status_code == 503
 
     @pytest.mark.asyncio
     async def test_write_tests_no_model(self, client: Any) -> None:
-        with patch.dict(os.environ, {}, clear=False):
+        mock_gen, env_ctx = self._no_model_ctx(client)
+        with mock_gen, env_ctx:
             os.environ.pop("OCTOMIL_API_KEY", None)
             resp = await client.post("/api/v1/write_tests", json={"code": "def add(a, b): return a + b"})
         assert resp.status_code == 503
 
     @pytest.mark.asyncio
     async def test_general_task_no_model(self, client: Any) -> None:
-        with patch.dict(os.environ, {}, clear=False):
+        mock_gen, env_ctx = self._no_model_ctx(client)
+        with mock_gen, env_ctx:
             os.environ.pop("OCTOMIL_API_KEY", None)
             resp = await client.post("/api/v1/general_task", json={"prompt": "What is 2+2?"})
         assert resp.status_code == 503
@@ -528,9 +541,11 @@ class TestCloudFallback:
     @pytest.mark.asyncio
     async def test_code_tool_cloud_fallback(self, client: Any) -> None:
         """When local model fails but OCTOMIL_API_KEY is set, falls back to cloud."""
+        backend = client._transport.app.state.backend
         mock_client = MagicMock()
         mock_client.chat.return_value = {"message": {"role": "assistant", "content": "def fib(n): ..."}}
         with (
+            patch.object(backend, "generate", side_effect=RuntimeError("no model")),
             patch.dict(os.environ, {"OCTOMIL_API_KEY": "key"}),
             patch("octomil.client.OctomilClient", return_value=mock_client),
         ):
@@ -543,7 +558,11 @@ class TestCloudFallback:
     @pytest.mark.asyncio
     async def test_code_tool_no_fallback_no_key(self, client: Any) -> None:
         """Without OCTOMIL_API_KEY, returns 503 when local model is unavailable."""
-        with patch.dict(os.environ, {}, clear=False):
+        backend = client._transport.app.state.backend
+        with (
+            patch.object(backend, "generate", side_effect=RuntimeError("no model")),
+            patch.dict(os.environ, {}, clear=False),
+        ):
             os.environ.pop("OCTOMIL_API_KEY", None)
             resp = await client.post("/api/v1/general_task", json={"prompt": "hello"})
         assert resp.status_code == 503
