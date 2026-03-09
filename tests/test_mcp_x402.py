@@ -1177,44 +1177,8 @@ class TestSettlementStatusEndpoint:
 
 class TestX402CloudPricing:
     @pytest.mark.asyncio
-    async def test_low_payment_no_cloud_fallback(self, x402_client: Any) -> None:
-        """Agent paying $0.001 (local price) gets 503 + cloud pricing info, not cloud fallback."""
-        import time as _time
-
-        now = int(_time.time())
-        payload = {
-            "authorization": {
-                "from": "0xPAYER",
-                "to": "0xTEST_ADDRESS",
-                "value": "1000",  # local price only
-                "validAfter": str(now - 60),
-                "validBefore": str(now + 300),
-                "nonce": str(uuid.uuid4()),
-            },
-            "signature": "0xSIG",
-        }
-        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
-        with (
-            patch.object(mock_backend, "generate", side_effect=RuntimeError("no model")),
-            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
-            patch.dict("os.environ", {"OCTOMIL_API_KEY": "test-key"}),
-        ):
-            resp = await x402_client.post(
-                "/api/v1/generate_code",
-                json={"description": "hello"},
-                headers={"x-payment": encoded},
-            )
-        assert resp.status_code == 503
-        data = resp.json()
-        # Should include cloud fallback pricing so agent can resubmit
-        assert "cloud_fallback" in data
-        assert data["cloud_fallback"]["available"] is True
-        assert int(data["cloud_fallback"]["price"]) > 1000
-
-    @pytest.mark.asyncio
-    async def test_high_payment_gets_cloud_fallback(self, x402_client: Any) -> None:
-        """Agent paying >= cloud price ($0.01) gets cloud fallback when local fails."""
+    async def test_standard_payment_gets_cloud_fallback(self, x402_client: Any) -> None:
+        """Agent paying $0.001 (standard price) gets cloud fallback when local fails — same price for both."""
         import time as _time
         from unittest.mock import MagicMock
 
@@ -1223,7 +1187,7 @@ class TestX402CloudPricing:
             "authorization": {
                 "from": "0xPAYER",
                 "to": "0xTEST_ADDRESS",
-                "value": "10000",  # cloud price ($0.01)
+                "value": "1000",  # $0.001 covers both local and cloud
                 "validAfter": str(now - 60),
                 "validBefore": str(now + 300),
                 "nonce": str(uuid.uuid4()),

@@ -64,7 +64,7 @@ class X402Config:
     """Configuration for x402 payment gating."""
 
     price_per_call: str = "1000"  # base units (e.g. 1000 = 0.001 USDC with 6 decimals)
-    cloud_price_per_call: str = "10000"  # base units = $0.01 USDC (10x local for cloud fallback)
+    cloud_price_per_call: str = "1000"  # base units = $0.001 USDC (same as local)
     currency: str = "USDC"
     network: str = "base"
     payment_address: str = "0x7BeEa3e83033e5399FfAAdfb8bf731eBb36126F3"
