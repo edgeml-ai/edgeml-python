@@ -2,6 +2,17 @@
 
 from __future__ import annotations
 
+# Platform tool prompts are not used for inference (they wrap SDK calls),
+# but are defined here for consistency and potential future use.
+PLATFORM_TOOL_DESCRIPTIONS: dict[str, str] = {
+    "resolve_model": "Resolve a model name to engine-specific artifacts (repo, filename, engine, quant).",
+    "list_models": "List all models in the Octomil catalog with metadata.",
+    "detect_engines": "Detect which inference engines are available on this machine.",
+    "run_inference": "Run raw inference through the local on-device model.",
+    "get_metrics": "Get current model/engine status and readiness.",
+    "deploy_model": "Deploy a model to edge devices via the Octomil platform.",
+}
+
 SYSTEM_PROMPTS: dict[str, str] = {
     "generate_code": (
         "You are an expert programmer. Generate clean, idiomatic, "

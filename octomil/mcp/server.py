@@ -127,9 +127,10 @@ def create_mcp_server(model: str | None = None) -> Any:
     from mcp.server.fastmcp import FastMCP  # type: ignore[import-untyped]
 
     from .backend import OctomilMCPBackend
+    from .platform_tools import register_platform_tools
     from .prompts import build_messages
 
-    mcp = FastMCP("octomil", description="Octomil local inference tools for Claude Code")
+    mcp = FastMCP("octomil", description="Octomil on-device ML inference, model resolution, and deployment")
     backend = OctomilMCPBackend(model=model)
 
     @mcp.tool()
@@ -268,5 +269,8 @@ def create_mcp_server(model: str | None = None) -> Any:
         messages = build_messages("analyze_files", "\n".join(parts))
         text, metrics = backend.generate(messages)
         return f"{text}\n\n{backend.format_metrics(metrics)}"
+
+    # Register platform-level tools (model resolution, inference, deployment)
+    register_platform_tools(mcp, backend)
 
     return mcp
