@@ -56,6 +56,66 @@ def _is_ollama_on_path() -> bool:
     return shutil.which("ollama") is not None
 
 
+def _get_local_ollama_models(base_url: str = "http://localhost:11434") -> list[str]:
+    """Return the list of model names available on the local Ollama instance."""
+    try:
+        import httpx
+
+        resp = httpx.get(f"{base_url}/api/tags", timeout=5.0)
+        if resp.status_code == 200:
+            return [m["name"] for m in resp.json().get("models", [])]
+    except Exception:
+        pass
+    return []
+
+
+def _match_local_model(model_name: str, base_url: str = "http://localhost:11434") -> str:
+    """Fuzzy-match an Octomil model name against locally pulled Ollama models.
+
+    Matching strategy (first match wins):
+    1. Exact match (model_name is already a valid Ollama tag)
+    2. Family + size match: "llama-8b" matches "llama3.1:8b-instruct-q4_K_M"
+    3. Family match: "llama" matches the first llama-family model
+    """
+    import re
+
+    local_models = _get_local_ollama_models(base_url)
+    if not local_models:
+        return model_name
+
+    # Exact match
+    if model_name in local_models:
+        return model_name
+
+    # Normalise: "llama-8b" → family="llama", size="8b"
+    # Also handles "llama-8b:q4_k_m" → family="llama", size="8b"
+    base = model_name.split(":")[0]  # strip quant tag if present
+    match = re.match(r"^([a-zA-Z]+)[-_]?(\d+[bB])?", base)
+    if not match:
+        return model_name
+
+    family = match.group(1).lower()
+    size = match.group(2).lower() if match.group(2) else None
+
+    best: str | None = None
+    for tag in local_models:
+        tag_lower = tag.lower()
+        tag_base = tag_lower.split(":")[0]
+        # Check if the family name appears in the tag
+        if family not in tag_base:
+            continue
+        # If we have a size constraint, check it appears in the tag
+        if size and size not in tag_lower:
+            continue
+        # Prefer instruct/chat models over base models
+        if best is None:
+            best = tag
+        elif "instruct" in tag_lower or "chat" in tag_lower:
+            best = tag
+
+    return best or model_name
+
+
 class OllamaEngine(EnginePlugin):
     """Fallback inference engine proxying to a local Ollama server."""
 
@@ -121,9 +181,7 @@ class OllamaEngine(EnginePlugin):
     def benchmark(self, model_name: str, n_tokens: int = 32) -> BenchmarkResult:
         """Quick benchmark via Ollama /api/chat."""
         if not _is_ollama_reachable(self._base_url):
-            return BenchmarkResult(
-                engine_name=self.name, error="Ollama not reachable"
-            )
+            return BenchmarkResult(engine_name=self.name, error="Ollama not reachable")
 
         tag = self._resolve_tag(model_name)
         try:
@@ -180,7 +238,10 @@ class OllamaEngine(EnginePlugin):
         from ..models.catalog import _resolve_alias
 
         canonical = _resolve_alias(model_name)
-        return _OLLAMA_CATALOG.get(canonical, model_name)
+        tag = _OLLAMA_CATALOG.get(canonical)
+        if tag:
+            return tag
+        return _match_local_model(model_name, self._base_url)
 
 
 class OllamaBackend:
@@ -210,7 +271,8 @@ class OllamaBackend:
         from ..ollama import pull_ollama_model
 
         canonical = _resolve_alias(model_name)
-        self._tag = _OLLAMA_CATALOG.get(canonical, model_name)
+        tag = _OLLAMA_CATALOG.get(canonical)
+        self._tag = tag or _match_local_model(model_name, self._base_url)
         self.model_name = model_name
 
         # Check if the model is already pulled

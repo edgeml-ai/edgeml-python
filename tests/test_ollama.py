@@ -152,9 +152,7 @@ class TestListOllamaModels:
     def test_returns_empty_on_http_error(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "error", request=MagicMock(), response=mock_resp
-        )
+        mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError("error", request=MagicMock(), response=mock_resp)
         mock_get.return_value = mock_resp
         assert list_ollama_models() == []
 
@@ -354,10 +352,15 @@ class TestDeployWithOllama:
         )
 
         mock_check = MagicMock(status_code=200, json=MagicMock(return_value={"name": "gemma:2b"}))
-        mock_post_resp = MagicMock(status_code=200, json=MagicMock(return_value={
-            "code": "XYZ789",
-            "expires_at": "2026-02-18T12:00:00Z",
-        }))
+        mock_post_resp = MagicMock(
+            status_code=200,
+            json=MagicMock(
+                return_value={
+                    "code": "XYZ789",
+                    "expires_at": "2026-02-18T12:00:00Z",
+                }
+            ),
+        )
         mock_poll_resp = MagicMock(status_code=200, json=MagicMock(return_value={"status": "done"}))
 
         mock_client = MagicMock()
@@ -384,10 +387,15 @@ class TestDeployWithOllama:
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
         mock_check = MagicMock(status_code=200, json=MagicMock(return_value={"name": "my-custom-model"}))
-        mock_post_resp = MagicMock(status_code=200, json=MagicMock(return_value={
-            "code": "ABC123",
-            "expires_at": "2026-02-18T12:00:00Z",
-        }))
+        mock_post_resp = MagicMock(
+            status_code=200,
+            json=MagicMock(
+                return_value={
+                    "code": "ABC123",
+                    "expires_at": "2026-02-18T12:00:00Z",
+                }
+            ),
+        )
         mock_poll_resp = MagicMock(status_code=200, json=MagicMock(return_value={"status": "done"}))
 
         mock_client = MagicMock()
@@ -405,3 +413,60 @@ class TestDeployWithOllama:
 
         assert result.exit_code == 0
         assert "Detected ollama model" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# OllamaEngine: _match_local_model fuzzy resolution
+# ---------------------------------------------------------------------------
+
+
+class TestMatchLocalModel:
+    """Test fuzzy matching of Octomil model names to Ollama tags."""
+
+    MOCK_MODELS = [
+        "gemma2:2b-instruct-q4_K_M",
+        "llama3.1:8b-instruct-q4_K_M",
+        "llama3.2:3b-instruct-q4_K_M",
+        "qwen2.5:3b-instruct-q4_K_M",
+        "mistral:7b-instruct-q4_K_M",
+    ]
+
+    @patch("octomil.engines.ollama_engine._get_local_ollama_models")
+    def test_exact_match(self, mock_models: MagicMock) -> None:
+        from octomil.engines.ollama_engine import _match_local_model
+
+        mock_models.return_value = self.MOCK_MODELS
+        assert _match_local_model("llama3.1:8b-instruct-q4_K_M") == "llama3.1:8b-instruct-q4_K_M"
+
+    @patch("octomil.engines.ollama_engine._get_local_ollama_models")
+    def test_family_and_size_match(self, mock_models: MagicMock) -> None:
+        from octomil.engines.ollama_engine import _match_local_model
+
+        mock_models.return_value = self.MOCK_MODELS
+        assert _match_local_model("llama-8b") == "llama3.1:8b-instruct-q4_K_M"
+        assert _match_local_model("llama-3b") == "llama3.2:3b-instruct-q4_K_M"
+        assert _match_local_model("gemma-2b") == "gemma2:2b-instruct-q4_K_M"
+        assert _match_local_model("qwen-3b") == "qwen2.5:3b-instruct-q4_K_M"
+        assert _match_local_model("mistral-7b") == "mistral:7b-instruct-q4_K_M"
+
+    @patch("octomil.engines.ollama_engine._get_local_ollama_models")
+    def test_no_match_returns_original(self, mock_models: MagicMock) -> None:
+        from octomil.engines.ollama_engine import _match_local_model
+
+        mock_models.return_value = self.MOCK_MODELS
+        assert _match_local_model("phi-mini") == "phi-mini"
+
+    @patch("octomil.engines.ollama_engine._get_local_ollama_models")
+    def test_empty_models_returns_original(self, mock_models: MagicMock) -> None:
+        from octomil.engines.ollama_engine import _match_local_model
+
+        mock_models.return_value = []
+        assert _match_local_model("llama-8b") == "llama-8b"
+
+    @patch("octomil.engines.ollama_engine._get_local_ollama_models")
+    def test_with_quant_suffix(self, mock_models: MagicMock) -> None:
+        """Model name with quant suffix should still match."""
+        from octomil.engines.ollama_engine import _match_local_model
+
+        mock_models.return_value = self.MOCK_MODELS
+        assert _match_local_model("llama-8b:q4_k_m") == "llama3.1:8b-instruct-q4_K_M"
