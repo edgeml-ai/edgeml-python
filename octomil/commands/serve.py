@@ -522,33 +522,25 @@ def _print_engine_detection(model: str, engine_override: str | None) -> None:
 
     native = [d for d in available if d.engine.name != "ollama"]
 
-    # Frozen binary with only Ollama: prefer native engine via managed venv
+    # Frozen binary with no native engines: try managed venv (mlx-lm) first
     if not native and getattr(sys, "frozen", False):
         reexeced = _try_venv_reexec()
         if reexeced:
             return  # os.execv replaces process; this line is unreachable
 
-    if len(available) > 1:
-        names = ", ".join(d.engine.display_name for d in available)
-        click.echo(f"\n  Engines available: {names}")
-        click.echo("  Benchmarking to select fastest...")
-    elif len(available) == 1:
-        info = f" ({available[0].info})" if available[0].info else ""
-        click.echo(click.style(f"\n  Engine: {available[0].engine.display_name}{info}", fg="green"))
-    else:
+    if not available:
         installed = _prompt_engine_install()
         if installed:
             detections = registry.detect_all(model)
             available = [d for d in detections if d.available and d.engine.name != "echo"]
-            if available:
-                click.echo(f"  Engine: {available[0].engine.display_name}")
-                return
-        click.echo(
-            click.style(
-                "  Engine: echo (mirrors input, no real inference)\n",
-                dim=True,
-            )
-        )
+
+    if available:
+        # _detect_backend will benchmark and pick the fastest
+        best = available[0]
+        info = f" ({best.info})" if best.info else ""
+        click.echo(click.style(f"\n  Engine: {best.engine.display_name}{info}", fg="green"))
+    else:
+        click.echo(click.style("  Engine: echo (mirrors input, no real inference)\n", dim=True))
 
 
 def _try_venv_reexec() -> bool:
