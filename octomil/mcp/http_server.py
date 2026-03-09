@@ -809,6 +809,8 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
 
         1. Try local model (backend.generate)
         2. On failure, try cloud fallback via OctomilClient (if OCTOMIL_API_KEY set)
+           — skipped when x402 is enabled (agent paid for local inference,
+             cloud costs more than the $0.001 per-call price)
         3. If both fail, return 503 with machine-readable next actions
         """
         # 1. Try local model
@@ -818,23 +820,27 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
         except Exception as local_exc:
             logger.warning("%s: local model failed: %s", tool_name, local_exc)
 
-        # 2. Try cloud fallback
-        api_key = os.environ.get("OCTOMIL_API_KEY")
-        if api_key:
-            try:
-                from octomil.client import OctomilClient
+        # 2. Try cloud fallback — only when x402 is NOT active.
+        # When x402 is enabled the agent paid $0.001 for local inference.
+        # Cloud inference costs ~$0.003-0.01 per call — we'd lose money.
+        # Instead return 503 so the payment is refunded and the agent retries.
+        if not config.enable_x402:
+            api_key = os.environ.get("OCTOMIL_API_KEY")
+            if api_key:
+                try:
+                    from octomil.client import OctomilClient
 
-                client = OctomilClient(api_key=api_key)
-                result = client.chat(backend.model_name, messages)
-                text = result.get("message", {}).get("content", str(result))
-                return JSONResponse(
-                    content={
-                        "text": text,
-                        "metrics": {"engine": "cloud", "model": backend.model_name, "fallback": True},
-                    }
-                )
-            except Exception as cloud_exc:
-                logger.warning("%s: cloud fallback also failed: %s", tool_name, cloud_exc)
+                    client = OctomilClient(api_key=api_key)
+                    result = client.chat(backend.model_name, messages)
+                    text = result.get("message", {}).get("content", str(result))
+                    return JSONResponse(
+                        content={
+                            "text": text,
+                            "metrics": {"engine": "cloud", "model": backend.model_name, "fallback": True},
+                        }
+                    )
+                except Exception as cloud_exc:
+                    logger.warning("%s: cloud fallback also failed: %s", tool_name, cloud_exc)
 
         # 3. Return 503 with next actions
         return JSONResponse(

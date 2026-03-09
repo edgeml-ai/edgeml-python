@@ -1168,3 +1168,48 @@ class TestSettlementStatusEndpoint:
         resp = await no_x402_client.get("/api/v1/settlement_status")
         assert resp.status_code == 404
         assert resp.json()["error"] == "settlement_disabled"
+
+
+# ---------------------------------------------------------------------------
+# Cloud fallback disabled with x402
+# ---------------------------------------------------------------------------
+
+
+class TestX402NoCloudFallback:
+    @pytest.mark.asyncio
+    async def test_no_cloud_fallback_with_x402(self, x402_client: Any) -> None:
+        """With x402 enabled, cloud fallback is skipped — returns 503 + refund.
+
+        Cloud inference costs ~$0.003-0.01/call, more than the $0.001 x402 price.
+        We'd lose money on every cloud fallback, so we skip it and refund.
+        """
+        import time as _time
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(mock_backend, "generate", side_effect=RuntimeError("no model")),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+            patch.dict("os.environ", {"OCTOMIL_API_KEY": "test-key"}),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded},
+            )
+        # Should be 503 (not 200 from cloud fallback), payment refunded
+        assert resp.status_code == 503
+        payment_resp = json.loads(resp.headers["x-payment-response"])
+        assert payment_resp["status"] == "refunded"
