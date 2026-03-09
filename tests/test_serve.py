@@ -33,7 +33,7 @@ class TestResolveModelName:
 
     def test_mlx_short_name(self):
         result = resolve_model_name("gemma-1b", "mlx")
-        assert result == "REDACTED"
+        assert result == "mlx-community/REDACTED"
 
     def test_mlx_unknown_name_raises(self):
         with pytest.raises(ValueError, match="Unknown model 'nonexistent'"):

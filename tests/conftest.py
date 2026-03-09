@@ -60,7 +60,7 @@ _MOCK_CATALOG: dict = {
                 "source_repo": "REDACTED",
             },
             "8bit": {
-                "mlx": "mlx-community/REDACTED",
+                "mlx": "mlx-community/REDACTED-8bit",
                 "gguf": {
                     "repo": "REDACTED",
                     "filename": "REDACTED.gguf",
@@ -1050,7 +1050,9 @@ def _mock_model_routing_clients(monkeypatch):
         if _variant.gguf is not None:
             serve_mod._GGUF_MODELS[_name] = (_variant.gguf.repo, _variant.gguf.filename)
 
-    # Recompute _MOE_MODELS in engine plugins (sets computed at import time).
+    # Recompute _MOE_MODELS and _MLX_CATALOG/_GGUF_CATALOG in engine plugins.
+    import octomil.engines.cactus_engine as cactus_mod
+    import octomil.engines.executorch_engine as et_mod
     import octomil.engines.llamacpp_engine as llama_mod
     import octomil.engines.mlx_engine as mlx_mod
 
@@ -1059,10 +1061,34 @@ def _mock_model_routing_clients(monkeypatch):
         name for name, entry in cat_mod.CATALOG.items() if entry.architecture == "moe" and "llama.cpp" in entry.engines
     )
 
+    llama_mod._GGUF_CATALOG.clear()
+    llama_mod._GGUF_CATALOG.update(name for name, entry in cat_mod.CATALOG.items() if "llama.cpp" in entry.engines)
+
     mlx_mod._MOE_MODELS.clear()
     mlx_mod._MOE_MODELS.update(
         name for name, entry in cat_mod.CATALOG.items() if entry.architecture == "moe" and "mlx-lm" in entry.engines
     )
+
+    mlx_mod._MLX_CATALOG.clear()
+    mlx_mod._MLX_CATALOG.update(name for name, entry in cat_mod.CATALOG.items() if "mlx-lm" in entry.engines)
+
+    cactus_mod._CACTUS_CATALOG.clear()
+    cactus_mod._CACTUS_CATALOG.update(name for name, entry in cat_mod.CATALOG.items() if "llama.cpp" in entry.engines)
+
+    et_mod._ET_CATALOG.clear()
+    et_mod._ET_CATALOG.update(name for name, entry in cat_mod.CATALOG.items() if "executorch" in entry.engines)
+
+    # Recompute _MLC_CATALOG (set computed at import time from CATALOG).
+    import octomil.engines.mlc_engine as mlc_mod
+
+    mlc_mod._MLC_CATALOG.clear()
+    mlc_mod._MLC_CATALOG.update(name for name, entry in cat_mod.CATALOG.items() if "mlc-llm" in entry.engines)
+
+    # Recompute _MNN_CATALOG (set computed at import time from CATALOG).
+    import octomil.engines.mnn_engine as mnn_mod
+
+    mnn_mod._MNN_CATALOG.clear()
+    mnn_mod._MNN_CATALOG.update(name for name, entry in cat_mod.CATALOG.items() if "mnn" in entry.engines)
 
     # Patch _ENGINE_PRIORITY in-place (tests import the list reference directly).
     res_mod._ENGINE_PRIORITY[:] = _MOCK_ENGINE_PRIORITY
