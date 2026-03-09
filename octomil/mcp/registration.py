@@ -6,7 +6,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def _write_settings(data: dict[str, Any]) -> None:
     _SETTINGS_PATH.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def register_mcp_server(model: str | None = None) -> str:
+def register_mcp_server(model: Optional[str] = None) -> str:
     """Register the Octomil MCP server in Claude Code settings.
 
     Uses the absolute path to ``sys.executable`` to avoid venv/PATH issues.
@@ -98,7 +98,7 @@ def is_registered() -> bool:
     return isinstance(servers, dict) and _SERVER_NAME in servers
 
 
-def get_registration_info() -> dict[str, Any] | None:
+def get_registration_info() -> Optional[dict[str, Any]]:
     """Return the Octomil MCP server config, or None if not registered."""
     try:
         settings = _read_settings()

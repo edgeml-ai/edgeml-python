@@ -753,7 +753,8 @@ class TestX402SettlementGating:
             )
         assert resp.status_code == 200
         payment_resp = json.loads(resp.headers["x-payment-response"])
-        assert payment_resp["status"] == "settled"
+        # With settlement enabled (default), 2xx responses are pending settlement
+        assert payment_resp["status"] == "pending_settlement"
 
     @pytest.mark.asyncio
     async def test_no_settlement_on_5xx(self, x402_client: Any) -> None:
@@ -838,3 +839,484 @@ class TestX402SettlementGating:
         for path, body in paid_endpoints:
             resp = await x402_client.post(path, json=body)
             assert resp.status_code == 402, f"{path} should require payment but got {resp.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# Settlement store unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestSettlementStore:
+    def test_settlement_store_add_and_stats(self) -> None:
+        """Store tracks count and running total correctly."""
+        from octomil.mcp.x402_settlement import PendingAuthorization, SettlementStore
+
+        store = SettlementStore(threshold=10_000)
+        auth = PendingAuthorization(
+            authorization={"nonce": "n1", "value": "1000"},
+            signature="0xSIG",
+            payer="0xPAYER",
+            amount=1000,
+            request_path="/api/v1/run_inference",
+        )
+        store.add("n1", auth)
+        stats = store.stats()
+        assert stats["pending_count"] == 1
+        assert stats["pending_total"] == 1000
+        assert stats["settled_count"] == 0
+        assert stats["settled_total"] == 0
+        assert stats["threshold"] == 10_000
+
+    def test_settlement_store_threshold_signal(self) -> None:
+        """add() returns True when total >= threshold."""
+        from octomil.mcp.x402_settlement import PendingAuthorization, SettlementStore
+
+        store = SettlementStore(threshold=2000)
+        auth1 = PendingAuthorization(
+            authorization={"nonce": "n1"},
+            signature="0xSIG",
+            payer="0xA",
+            amount=1000,
+            request_path="/test",
+        )
+        auth2 = PendingAuthorization(
+            authorization={"nonce": "n2"},
+            signature="0xSIG",
+            payer="0xA",
+            amount=1000,
+            request_path="/test",
+        )
+        assert store.add("n1", auth1) is False
+        assert store.add("n2", auth2) is True
+
+    def test_settlement_store_pop_batch_drains(self) -> None:
+        """pop_batch drains store, resets total, increments lifetime counters."""
+        from octomil.mcp.x402_settlement import PendingAuthorization, SettlementStore
+
+        store = SettlementStore(threshold=5000)
+        for i in range(3):
+            auth = PendingAuthorization(
+                authorization={"nonce": f"n{i}"},
+                signature="0xSIG",
+                payer="0xA",
+                amount=1000,
+                request_path="/test",
+            )
+            store.add(f"n{i}", auth)
+
+        batch = store.pop_batch()
+        assert len(batch) == 3
+        stats = store.stats()
+        assert stats["pending_count"] == 0
+        assert stats["pending_total"] == 0
+        assert stats["settled_count"] == 3
+        assert stats["settled_total"] == 3000
+
+    def test_settlement_store_discard(self) -> None:
+        """discard removes auth and decrements total."""
+        from octomil.mcp.x402_settlement import PendingAuthorization, SettlementStore
+
+        store = SettlementStore(threshold=10_000)
+        auth = PendingAuthorization(
+            authorization={"nonce": "n1"},
+            signature="0xSIG",
+            payer="0xA",
+            amount=500,
+            request_path="/test",
+        )
+        store.add("n1", auth)
+        assert store.stats()["pending_total"] == 500
+
+        store.discard("n1")
+        stats = store.stats()
+        assert stats["pending_count"] == 0
+        assert stats["pending_total"] == 0
+
+    def test_settlement_store_discard_nonexistent(self) -> None:
+        """Discarding a nonce that doesn't exist is a no-op."""
+        from octomil.mcp.x402_settlement import SettlementStore
+
+        store = SettlementStore()
+        store.discard("nonexistent")  # should not raise
+        assert store.stats()["pending_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Settlement middleware integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestSettlementMiddleware:
+    @pytest.mark.asyncio
+    async def test_middleware_stores_on_2xx(self, x402_client: Any) -> None:
+        """Successful response keeps auth in settlement store."""
+        import time as _time
+
+        now = int(_time.time())
+        nonce = str(uuid.uuid4())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": nonce,
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(
+                mock_backend,
+                "generate",
+                return_value=(
+                    "ok",
+                    {"engine": "test", "model": "test", "tokens_per_second": 1, "total_tokens": 1, "ttfc_ms": 1},
+                ),
+            ),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/run_inference",
+                json={"prompt": "test"},
+                headers={"x-payment": encoded},
+            )
+        assert resp.status_code == 200
+        # The settlement store should have the auth
+        store = x402_client._transport.app.state.settlement_store  # type: ignore[union-attr]
+        if store is not None:
+            stats = store.stats()
+            assert stats["pending_count"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_middleware_discards_on_5xx(self, x402_client: Any) -> None:
+        """Failed response discards auth from settlement store."""
+        import time as _time
+
+        now = int(_time.time())
+        nonce = str(uuid.uuid4())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": nonce,
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(mock_backend, "generate", side_effect=RuntimeError("no model")),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+            patch.dict("os.environ", {}, clear=False),
+        ):
+            import os as _os
+
+            _os.environ.pop("OCTOMIL_API_KEY", None)
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded},
+            )
+        assert resp.status_code == 503
+        # Auth should have been discarded from the store
+        store = x402_client._transport.app.state.settlement_store  # type: ignore[union-attr]
+        if store is not None:
+            # The nonce we just used should not be in the store
+            assert nonce not in store._pending
+
+
+# ---------------------------------------------------------------------------
+# Batch settlement trigger + facilitator
+# ---------------------------------------------------------------------------
+
+
+class TestBatchSettlement:
+    @pytest.mark.asyncio
+    async def test_batch_triggers_at_threshold(self) -> None:
+        """After enough payments, settle_batch fires."""
+        from octomil.mcp.x402_settlement import PendingAuthorization, SettlementStore, settle_batch
+
+        store = SettlementStore(threshold=3000)
+        for i in range(3):
+            auth = PendingAuthorization(
+                authorization={"nonce": f"n{i}", "value": "1000"},
+                signature="0xSIG",
+                payer="0xA",
+                amount=1000,
+                request_path="/test",
+            )
+            ready = store.add(f"n{i}", auth)
+
+        assert ready is True  # threshold of 3000 reached
+        await settle_batch(store, "", None)
+        # After settle without facilitator, store should be drained
+        assert store.stats()["pending_count"] == 0
+        assert store.stats()["settled_count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_settle_batch_posts_to_facilitator(self) -> None:
+        """Mock httpx — verifies POST payload structure."""
+        from unittest.mock import AsyncMock
+
+        import httpx as _real_httpx
+
+        from octomil.mcp.x402 import X402Config
+        from octomil.mcp.x402_settlement import PendingAuthorization, SettlementStore, settle_batch
+
+        store = SettlementStore(threshold=1000)
+        auth = PendingAuthorization(
+            authorization={"nonce": "n1", "from": "0xPAYER", "value": "1000"},
+            signature="0xSIG",
+            payer="0xPAYER",
+            amount=1000,
+            request_path="/test",
+        )
+        store.add("n1", auth)
+
+        config = X402Config()
+
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = AsyncMock()
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.object(_real_httpx, "AsyncClient", return_value=mock_client):
+            await settle_batch(store, "https://facilitator.example.com", config)
+
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        assert call_args[0][0] == "https://facilitator.example.com/settle"
+        payload = call_args[1]["json"]
+        assert payload["network"] == "base"
+        assert payload["chainId"] == 8453
+        assert len(payload["authorizations"]) == 1
+        assert payload["authorizations"][0]["payer"] == "0xPAYER"
+        assert store.stats()["pending_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_settle_batch_requeues_on_error(self) -> None:
+        """Failed facilitator POST re-queues all auths."""
+        from unittest.mock import AsyncMock
+
+        import httpx as _real_httpx
+
+        from octomil.mcp.x402 import X402Config
+        from octomil.mcp.x402_settlement import PendingAuthorization, SettlementStore, settle_batch
+
+        store = SettlementStore(threshold=1000)
+        auth = PendingAuthorization(
+            authorization={"nonce": "n1", "from": "0xPAYER", "value": "1000"},
+            signature="0xSIG",
+            payer="0xPAYER",
+            amount=1000,
+            request_path="/test",
+        )
+        store.add("n1", auth)
+
+        config = X402Config()
+
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = Exception("connection refused")
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.object(_real_httpx, "AsyncClient", return_value=mock_client):
+            await settle_batch(store, "https://bad-facilitator.example.com", config)
+
+        # Auths should be re-queued
+        stats = store.stats()
+        assert stats["pending_count"] == 1
+        assert stats["pending_total"] == 1000
+
+
+# ---------------------------------------------------------------------------
+# Settlement status endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestSettlementStatusEndpoint:
+    @pytest.mark.asyncio
+    async def test_settlement_status_endpoint(self, x402_client: Any) -> None:
+        """GET /api/v1/settlement_status returns stats."""
+        resp = await x402_client.get("/api/v1/settlement_status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "pending_count" in data
+        assert "pending_total" in data
+        assert "settled_count" in data
+        assert "settled_total" in data
+        assert "threshold" in data
+
+    @pytest.mark.asyncio
+    async def test_settlement_status_exempt_from_x402(self, x402_client: Any) -> None:
+        """Settlement status endpoint should not require payment."""
+        resp = await x402_client.get("/api/v1/settlement_status")
+        assert resp.status_code != 402
+
+    @pytest.mark.asyncio
+    async def test_settlement_status_disabled(self, no_x402_client: Any) -> None:
+        """When x402 is disabled, settlement_status returns 404."""
+        resp = await no_x402_client.get("/api/v1/settlement_status")
+        assert resp.status_code == 404
+        assert resp.json()["error"] == "settlement_disabled"
+
+
+# ---------------------------------------------------------------------------
+# Cloud fallback disabled with x402
+# ---------------------------------------------------------------------------
+
+
+class TestX402CloudPricing:
+    @pytest.mark.asyncio
+    async def test_standard_payment_gets_cloud_fallback(self, x402_client: Any) -> None:
+        """Agent paying $0.001 (standard price) gets cloud fallback when local fails — same price for both."""
+        import time as _time
+        from unittest.mock import MagicMock
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",  # $0.001 covers both local and cloud
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        mock_cloud_client = MagicMock()
+        mock_cloud_client.chat.return_value = {"message": {"role": "assistant", "content": "def hello(): pass"}}
+        with (
+            patch.object(mock_backend, "generate", side_effect=RuntimeError("no model")),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+            patch.dict("os.environ", {"OCTOMIL_API_KEY": "test-key"}),
+            patch("octomil.client.OctomilClient", return_value=mock_cloud_client),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["metrics"]["engine"] == "cloud"
+        assert data["metrics"]["fallback"] is True
+
+
+# ---------------------------------------------------------------------------
+# X-Inference-Preference header
+# ---------------------------------------------------------------------------
+
+
+class TestInferencePreference:
+    @pytest.mark.asyncio
+    async def test_local_only_returns_503_when_local_fails(self, x402_client: Any) -> None:
+        """local-only preference skips cloud fallback entirely."""
+        import time as _time
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(mock_backend, "generate", side_effect=RuntimeError("no model")),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded, "x-inference-preference": "local-only"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "local_only"
+
+    @pytest.mark.asyncio
+    async def test_cloud_only_skips_local(self, x402_client: Any) -> None:
+        """cloud-only preference skips local model and goes straight to cloud."""
+        import time as _time
+        from unittest.mock import MagicMock
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        mock_cloud_client = MagicMock()
+        mock_cloud_client.chat.return_value = {"message": {"role": "assistant", "content": "cloud result"}}
+        with (
+            patch.object(mock_backend, "generate", return_value=("local result", {})) as local_mock,
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+            patch.dict("os.environ", {"OCTOMIL_API_KEY": "test-key"}),
+            patch("octomil.client.OctomilClient", return_value=mock_cloud_client),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded, "x-inference-preference": "cloud-only"},
+            )
+            # Local model should NOT have been called
+            local_mock.assert_not_called()
+        assert resp.status_code == 200
+        assert resp.json()["metrics"]["engine"] == "cloud"
+
+    @pytest.mark.asyncio
+    async def test_invalid_preference_defaults_to_auto(self, x402_client: Any) -> None:
+        """Invalid preference values fall back to auto behavior."""
+        import time as _time
+
+        now = int(_time.time())
+        payload = {
+            "authorization": {
+                "from": "0xPAYER",
+                "to": "0xTEST_ADDRESS",
+                "value": "1000",
+                "validAfter": str(now - 60),
+                "validBefore": str(now + 300),
+                "nonce": str(uuid.uuid4()),
+            },
+            "signature": "0xSIG",
+        }
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        mock_backend = x402_client._transport.app.state.backend  # type: ignore[union-attr]
+        with (
+            patch.object(mock_backend, "generate", return_value=("local result", {"engine": "test"})),
+            patch("octomil.mcp.x402.verify_eip712_signature", return_value=(True, "")),
+        ):
+            resp = await x402_client.post(
+                "/api/v1/generate_code",
+                json={"description": "hello"},
+                headers={"x-payment": encoded, "x-inference-preference": "garbage-value"},
+            )
+        # Should behave like auto — local model works, returns 200
+        assert resp.status_code == 200

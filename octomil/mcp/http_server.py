@@ -12,9 +12,9 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -154,12 +154,13 @@ class HTTPServerConfig:
 
     host: str = "0.0.0.0"
     port: int = 8402
-    model: str | None = None
+    model: Optional[str] = None
     enable_x402: bool = False
     x402_address: str = ""
     x402_price: str = "0.001"
     x402_currency: str = "USDC"
     x402_network: str = "base"
+    x402_threshold: int = 1_000_000  # base units = $1 USDC
     base_url: str = ""  # auto-detected if empty
 
 
@@ -206,7 +207,7 @@ def _get_tool_definitions() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
+def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
     """Create the FastAPI application for the Octomil agent HTTP server.
 
     Parameters
@@ -240,16 +241,21 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
     )
 
     # x402 middleware (opt-in)
+    settlement_store = None
     if config.enable_x402:
         from .x402 import X402Config, X402Middleware
+        from .x402_settlement import SettlementStore
 
         x402_config = X402Config(
             price_per_call=config.x402_price or os.environ.get("OCTOMIL_X402_PRICE", "0.001"),
             currency=config.x402_currency or os.environ.get("OCTOMIL_X402_CURRENCY", "USDC"),
             network=config.x402_network or os.environ.get("OCTOMIL_X402_NETWORK", "base"),
             payment_address=config.x402_address or os.environ.get("OCTOMIL_X402_ADDRESS", ""),
+            settlement_threshold=config.x402_threshold,
         )
-        app.add_middleware(X402Middleware, config=x402_config)
+        if x402_config.enable_settlement:
+            settlement_store = SettlementStore(threshold=x402_config.settlement_threshold)
+        app.add_middleware(X402Middleware, config=x402_config, settlement_store=settlement_store)
         logger.info("x402 payment gating enabled (address=%s)", x402_config.payment_address)
 
     # Shared backend instance
@@ -262,6 +268,7 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
 
     # Store on app state for testing access
     app.state.backend = backend
+    app.state.settlement_store = settlement_store
 
     # ------------------------------------------------------------------
     # Discovery, readiness & health endpoints (no auth)
@@ -284,6 +291,16 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
             "model": backend.model_name,
             "loaded": backend.is_loaded,
         }
+
+    @app.get("/api/v1/settlement_status", tags=["x402"])
+    async def api_settlement_status() -> JSONResponse:
+        """Return x402 batch settlement statistics."""
+        if settlement_store is None:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "settlement_disabled", "message": "x402 settlement is not enabled."},
+            )
+        return JSONResponse(content=settlement_store.stats())
 
     @app.get("/api/v1/ready", tags=["readiness"])
     async def api_ready() -> JSONResponse:
@@ -386,7 +403,7 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
             return JSONResponse(status_code=500, content={"error": "internal_error", "message": str(exc)})
 
     @app.post("/api/v1/list_models", tags=["models"], dependencies=[Depends(require_auth)])
-    async def api_list_models(req: ListModelsRequest | None = None) -> JSONResponse:
+    async def api_list_models(req: Optional[ListModelsRequest] = None) -> JSONResponse:
         """List all available models."""
         try:
             from octomil.models.catalog import CATALOG
@@ -440,11 +457,27 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
             logger.exception("detect_engines failed")
             return JSONResponse(status_code=500, content={"error": "internal_error", "message": str(exc)})
 
+    def _x402_pricing(request: Request) -> tuple[int, int]:
+        """Extract x402 pricing from request state (set by middleware)."""
+        return (
+            getattr(request.state, "x402_paid_amount", 0),
+            getattr(request.state, "x402_cloud_price", 0),
+        )
+
+    _VALID_PREFERENCES = {"auto", "local-only", "cloud-only"}
+
+    def _inference_preference(request: Request) -> str:
+        """Read X-Inference-Preference header (auto | local-only | cloud-only)."""
+        pref = request.headers.get("x-inference-preference", "auto").lower().strip()
+        return pref if pref in _VALID_PREFERENCES else "auto"
+
     @app.post("/api/v1/run_inference", tags=["inference"], dependencies=[Depends(require_auth)])
-    async def api_run_inference(req: RunInferenceRequest) -> JSONResponse:
+    async def api_run_inference(req: RunInferenceRequest, request: Request) -> JSONResponse:
         """Run inference through the local on-device model."""
         messages = [{"role": "user", "content": req.prompt}]
-        return _code_tool_response("run_inference", messages)
+        paid, cloud = _x402_pricing(request)
+        pref = _inference_preference(request)
+        return _code_tool_response("run_inference", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.get("/api/v1/metrics", tags=["monitoring"], dependencies=[Depends(require_auth)])
     async def api_metrics() -> JSONResponse:
@@ -787,23 +820,48 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
     # Code tool endpoints — with cloud fallback and 503 next actions
     # ------------------------------------------------------------------
 
-    def _code_tool_response(tool_name: str, messages: list[dict[str, str]]) -> JSONResponse:
+    def _code_tool_response(
+        tool_name: str,
+        messages: list[dict[str, str]],
+        paid_amount: int = 0,
+        cloud_price: int = 0,
+        preference: str = "auto",
+    ) -> JSONResponse:
         """Run a code tool through local model with cloud fallback.
 
-        1. Try local model (backend.generate)
-        2. On failure, try cloud fallback via OctomilClient (if OCTOMIL_API_KEY set)
+        1. Try local model (unless preference is ``cloud-only``)
+        2. On failure, try cloud fallback if the agent paid enough (unless ``local-only``)
         3. If both fail, return 503 with machine-readable next actions
+
+        The ``preference`` parameter is read from the ``X-Inference-Preference``
+        header and can be ``auto`` (default), ``local-only``, or ``cloud-only``.
         """
         # 1. Try local model
-        try:
-            text, metrics = backend.generate(messages)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as local_exc:
-            logger.warning("%s: local model failed: %s", tool_name, local_exc)
+        if preference != "cloud-only":
+            try:
+                text, metrics = backend.generate(messages)
+                return JSONResponse(content={"text": text, "metrics": metrics})
+            except Exception as local_exc:
+                logger.warning("%s: local model failed: %s", tool_name, local_exc)
 
         # 2. Try cloud fallback
+        if preference == "local-only":
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "local_only",
+                    "message": f"Local model unavailable for {tool_name} and preference is local-only.",
+                    "retryable": True,
+                    "retryAfterSeconds": 30,
+                },
+            )
+
+        allow_cloud = True
+        if config.enable_x402 and cloud_price > 0 and paid_amount < cloud_price:
+            allow_cloud = False
+
         api_key = os.environ.get("OCTOMIL_API_KEY")
-        if api_key:
+        if allow_cloud and api_key:
             try:
                 from octomil.client import OctomilClient
 
@@ -820,49 +878,61 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
                 logger.warning("%s: cloud fallback also failed: %s", tool_name, cloud_exc)
 
         # 3. Return 503 with next actions
-        return JSONResponse(
-            status_code=503,
-            content={
-                "error": "model_not_ready",
-                "message": f"No local model loaded and no cloud fallback available for {tool_name}.",
-                "retryable": True,
-                "retryAfterSeconds": 30,
-                "actions": {
-                    "warmup": f"{base_url}/api/v1/warmup",
-                    "ready": f"{base_url}/api/v1/ready",
-                },
+        error_content: dict[str, Any] = {
+            "error": "model_not_ready",
+            "message": f"No local model loaded for {tool_name}.",
+            "retryable": True,
+            "retryAfterSeconds": 30,
+            "actions": {
+                "warmup": f"{base_url}/api/v1/warmup",
+                "ready": f"{base_url}/api/v1/ready",
             },
-        )
+        }
+        # Tell the agent the cloud fallback price so they can resubmit
+        if config.enable_x402 and cloud_price > 0 and paid_amount < cloud_price:
+            error_content["cloud_fallback"] = {
+                "available": True,
+                "price": str(cloud_price),
+                "currency": "USDC",
+                "message": f"Resubmit with payment >= {cloud_price} base units for cloud inference.",
+            }
+        return JSONResponse(status_code=503, content=error_content)
 
     @app.post("/api/v1/generate_code", tags=["code"], dependencies=[Depends(require_auth)])
-    async def api_generate_code(req: GenerateCodeRequest) -> JSONResponse:
+    async def api_generate_code(req: GenerateCodeRequest, request: Request) -> JSONResponse:
         """Generate code from a natural language description."""
         parts = [f"Generate {req.language + ' ' if req.language else ''}code: {req.description}"]
         if req.context:
             parts.append(f"\nContext:\n{req.context}")
         messages = build_messages("generate_code", "\n".join(parts))
-        return _code_tool_response("generate_code", messages)
+        paid, cloud = _x402_pricing(request)
+        pref = _inference_preference(request)
+        return _code_tool_response("generate_code", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/review_code", tags=["code"], dependencies=[Depends(require_auth)])
-    async def api_review_code(req: ReviewCodeRequest) -> JSONResponse:
+    async def api_review_code(req: ReviewCodeRequest, request: Request) -> JSONResponse:
         """Review code for bugs, security issues, and improvements."""
         parts = [f"Review this {req.language + ' ' if req.language else ''}code:"]
         if req.focus:
             parts.append(f"Focus on: {req.focus}")
         parts.append(f"\n```{req.language}\n{req.code}\n```")
         messages = build_messages("review_code", "\n".join(parts))
-        return _code_tool_response("review_code", messages)
+        paid, cloud = _x402_pricing(request)
+        pref = _inference_preference(request)
+        return _code_tool_response("review_code", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/explain_code", tags=["code"], dependencies=[Depends(require_auth)])
-    async def api_explain_code(req: ExplainCodeRequest) -> JSONResponse:
+    async def api_explain_code(req: ExplainCodeRequest, request: Request) -> JSONResponse:
         """Explain code in plain English."""
         parts = [f"Explain this {req.language + ' ' if req.language else ''}code ({req.detail_level} detail):"]
         parts.append(f"\n```{req.language}\n{req.code}\n```")
         messages = build_messages("explain_code", "\n".join(parts))
-        return _code_tool_response("explain_code", messages)
+        paid, cloud = _x402_pricing(request)
+        pref = _inference_preference(request)
+        return _code_tool_response("explain_code", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/write_tests", tags=["code"], dependencies=[Depends(require_auth)])
-    async def api_write_tests(req: WriteTestsRequest) -> JSONResponse:
+    async def api_write_tests(req: WriteTestsRequest, request: Request) -> JSONResponse:
         """Generate unit tests for code."""
         parts = [
             f"Write {req.framework + ' ' if req.framework else ''}tests for this {req.language + ' ' if req.language else ''}code:"
@@ -871,15 +941,19 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
             parts.append(f"Focus on: {req.focus}")
         parts.append(f"\n```{req.language}\n{req.code}\n```")
         messages = build_messages("write_tests", "\n".join(parts))
-        return _code_tool_response("write_tests", messages)
+        paid, cloud = _x402_pricing(request)
+        pref = _inference_preference(request)
+        return _code_tool_response("write_tests", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     @app.post("/api/v1/general_task", tags=["code"], dependencies=[Depends(require_auth)])
-    async def api_general_task(req: GeneralTaskRequest) -> JSONResponse:
+    async def api_general_task(req: GeneralTaskRequest, request: Request) -> JSONResponse:
         """Run a free-form prompt through the local model."""
         content = req.prompt
         if req.context:
             content = f"{req.prompt}\n\nContext:\n{req.context}"
         messages = build_messages("general_task", content)
-        return _code_tool_response("general_task", messages)
+        paid, cloud = _x402_pricing(request)
+        pref = _inference_preference(request)
+        return _code_tool_response("general_task", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
 
     return app

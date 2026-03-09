@@ -13,7 +13,7 @@ import os
 import sys
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class OctomilMCPBackend:
     startup.  This avoids the 5-15s load time blocking MCP handshake.
     """
 
-    def __init__(self, model: str | None = None) -> None:
+    def __init__(self, model: Optional[str] = None) -> None:
         self._model_name: str = model or os.environ.get("OCTOMIL_MCP_MODEL") or "qwen-coder-7b"
         self._backend: object = _NOT_LOADED
         self._engine_name: str = "unknown"

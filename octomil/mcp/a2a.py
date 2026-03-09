@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class AgentCardConfig:
 def _tool_to_skill(
     name: str,
     description: str,
-    schema: dict[str, Any] | None = None,
-    ready: bool | None = None,
+    schema: Optional[dict[str, Any]] = None,
+    ready: Optional[bool] = None,
 ) -> dict[str, Any]:
     """Convert a tool definition to an A2A skill entry."""
     skill: dict[str, Any] = {
@@ -50,7 +50,7 @@ def _tool_to_skill(
 
 def build_agent_card(
     tools: list[dict[str, Any]],
-    config: AgentCardConfig | None = None,
+    config: Optional[AgentCardConfig] = None,
     model_ready: bool = False,
 ) -> dict[str, Any]:
     """Build an A2A agent card from tool definitions.
