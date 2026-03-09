@@ -520,6 +520,14 @@ def _print_engine_detection(model: str, engine_override: str | None) -> None:
     detections = registry.detect_all(model)
     available = [d for d in detections if d.available and d.engine.name != "echo"]
 
+    native = [d for d in available if d.engine.name != "ollama"]
+
+    # Frozen binary with only Ollama: prefer native engine via managed venv
+    if not native and getattr(sys, "frozen", False):
+        reexeced = _try_venv_reexec()
+        if reexeced:
+            return  # os.execv replaces process; this line is unreachable
+
     if len(available) > 1:
         names = ", ".join(d.engine.display_name for d in available)
         click.echo(f"\n  Engines available: {names}")
@@ -528,12 +536,6 @@ def _print_engine_detection(model: str, engine_override: str | None) -> None:
         info = f" ({available[0].info})" if available[0].info else ""
         click.echo(click.style(f"\n  Engine: {available[0].engine.display_name}{info}", fg="green"))
     else:
-        # Frozen binary: try re-exec into managed venv before prompting
-        if getattr(sys, "frozen", False):
-            reexeced = _try_venv_reexec()
-            if reexeced:
-                return  # os.execv replaces process; this line is unreachable
-
         installed = _prompt_engine_install()
         if installed:
             detections = registry.detect_all(model)
