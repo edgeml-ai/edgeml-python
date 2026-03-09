@@ -72,11 +72,17 @@ class MLXEngine(EnginePlugin):
             return "Apple Silicon"
 
     def supports_model(self, model_name: str) -> bool:
-        # Supports catalog names (with alias resolution) and any HuggingFace repo ID
+        # mlx-lm can load any HuggingFace model on Apple Silicon.
+        # If the catalog has engine metadata, use it; otherwise assume support.
+        if "/" in model_name:
+            return True
         from ..models.catalog import _resolve_alias
 
         canonical = _resolve_alias(model_name)
-        return canonical in _MLX_CATALOG or "/" in model_name
+        if _MLX_CATALOG:
+            return canonical in _MLX_CATALOG
+        # Catalog has no engine metadata — trust that mlx-lm can handle it
+        return True
 
     def benchmark(self, model_name: str, n_tokens: int = 32) -> BenchmarkResult:
         try:
@@ -198,7 +204,7 @@ class MLXEngine(EnginePlugin):
 
         if self.is_moe_model(model_name):
             logger.info(
-                "MoE model '%s' detected — MLX handles expert " "routing natively in unified memory",
+                "MoE model '%s' detected — MLX handles expert routing natively in unified memory",
                 model_name,
             )
 
