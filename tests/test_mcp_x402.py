@@ -736,7 +736,7 @@ class TestX402SettlementGating:
     async def test_warmup_exempt_from_x402(self, x402_client: Any) -> None:
         """Warmup and ready endpoints should not require payment."""
         resp = await x402_client.post("/api/v1/warmup")
-        assert resp.status_code in (200, 503)
+        assert resp.status_code in (200, 202, 503)
         # Should NOT be 402
         assert resp.status_code != 402
 

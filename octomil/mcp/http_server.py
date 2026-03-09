@@ -177,9 +177,13 @@ def _get_tool_definitions() -> list[dict[str, Any]]:
 
     tools: list[dict[str, Any]] = []
 
-    # Platform tools
+    # Platform tools — run_inference requires a model, others don't
+    model_required_platform = {"run_inference"}
     for name, desc in PLATFORM_TOOL_DESCRIPTIONS.items():
-        tools.append({"name": name, "description": desc})
+        tool_def: dict[str, Any] = {"name": name, "description": desc}
+        if name in model_required_platform:
+            tool_def["requires_model"] = True
+        tools.append(tool_def)
 
     # Code tools (existing 7) — require a loaded model
     code_tools = {
@@ -298,12 +302,41 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
     async def api_warmup() -> JSONResponse:
         """Trigger model loading (with auto-download if needed).
 
-        Call this before invoking code tools. Returns immediately if the
-        model is already loaded. No authentication required.
+        Call this before invoking code tools. If the model is already loaded,
+        returns immediately. Otherwise kicks off background loading and returns
+        202 with a loading status — poll GET /api/v1/ready to check progress.
+        No authentication required.
         """
-        result = backend.warmup()
-        status_code = 200 if result["status"] == "ready" else 503
-        return JSONResponse(status_code=status_code, content=result)
+        import asyncio
+
+        if backend.is_loaded:
+            return JSONResponse(content=backend.warmup())
+
+        if backend._loading:
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "loading",
+                    "model": backend.model_name,
+                    "message": "Model is loading. Poll GET /api/v1/ready to check.",
+                },
+            )
+
+        # Run model loading in background thread so we don't block the server
+        async def _load_in_background() -> None:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, backend.warmup)
+
+        asyncio.ensure_future(_load_in_background())
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "loading",
+                "model": backend.model_name,
+                "message": "Model download and loading started. Poll GET /api/v1/ready to check.",
+            },
+        )
 
     # ------------------------------------------------------------------
     # REST API endpoints (auth required)
@@ -397,13 +430,8 @@ def create_http_app(config: HTTPServerConfig | None = None) -> FastAPI:
     @app.post("/api/v1/run_inference", tags=["inference"], dependencies=[Depends(require_auth)])
     async def api_run_inference(req: RunInferenceRequest) -> JSONResponse:
         """Run inference through the local on-device model."""
-        try:
-            messages = [{"role": "user", "content": req.prompt}]
-            text, metrics = backend.generate(messages, max_tokens=req.max_tokens, temperature=req.temperature)
-            return JSONResponse(content={"text": text, "metrics": metrics})
-        except Exception as exc:
-            logger.exception("run_inference failed")
-            return JSONResponse(status_code=500, content={"error": "inference_error", "message": str(exc)})
+        messages = [{"role": "user", "content": req.prompt}]
+        return _code_tool_response("run_inference", messages)
 
     @app.get("/api/v1/metrics", tags=["monitoring"], dependencies=[Depends(require_auth)])
     async def api_metrics() -> JSONResponse:

@@ -226,8 +226,8 @@ class TestRESTEndpoints:
         # Since backend is captured in closure, we test via the app's actual backend
         # For this test, just verify the endpoint accepts the request format
         resp = await client.post("/api/v1/run_inference", json={"prompt": "hello"})
-        # Will fail with inference error since no real model loaded — that's expected
-        assert resp.status_code in (200, 500)
+        # Will return 503 since no model loaded and no cloud fallback — that's expected
+        assert resp.status_code in (200, 503)
 
     @pytest.mark.asyncio
     async def test_deploy_no_api_key(self, client: Any) -> None:
@@ -476,8 +476,8 @@ class TestReadinessEndpoints:
     async def test_warmup_returns_status(self, client: Any) -> None:
         """Warmup endpoint returns model loading status."""
         resp = await client.post("/api/v1/warmup")
-        # Without a real model, warmup will fail — but it should not 422
-        assert resp.status_code in (200, 503)
+        # Without a real model, warmup kicks off async loading — returns 202
+        assert resp.status_code in (200, 202, 503)
         data = resp.json()
         assert "status" in data
         assert "model" in data
