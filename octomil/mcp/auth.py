@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Optional
 
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -19,14 +20,14 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 _DEV_MODE_WARNED = False
 
 
-def _get_api_key() -> str | None:
+def _get_api_key() -> Optional[str]:
     """Read the configured API key from environment."""
     return os.environ.get("OCTOMIL_MCP_API_KEY")
 
 
 async def require_auth(
-    credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
-) -> str | None:
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(_bearer_scheme),
+) -> Optional[str]:
     """FastAPI dependency that validates Bearer token authentication.
 
     Behaviour:
