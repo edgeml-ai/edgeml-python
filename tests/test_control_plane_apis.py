@@ -433,9 +433,7 @@ class ExperimentsResolveAndEnrollTests(unittest.TestCase):
         exp_no_id = {"name": "broken", "model_id": "model_1"}
         exp_good = {"id": "exp_good", "name": "good_test", "model_id": "model_1"}
         variant_data = {"name": "control", "model_version": "1.0.0"}
-        api = _ExperimentStubApi(
-            experiments=[exp_no_id, exp_good], variant=variant_data
-        )
+        api = _ExperimentStubApi(experiments=[exp_no_id, exp_good], variant=variant_data)
         experiments = ExperimentsAPI(api, org_id="org_1")
 
         result = experiments.resolve_model_experiment("model_1", "device_abc")

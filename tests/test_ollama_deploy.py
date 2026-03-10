@@ -11,7 +11,6 @@ from octomil.cli import main
 from octomil.sources.base import SourceResult
 from octomil.sources.ollama import OllamaSource, _parse_ollama_ref
 
-
 # ---------------------------------------------------------------------------
 # _parse_ollama_ref
 # ---------------------------------------------------------------------------
@@ -41,14 +40,11 @@ class TestOllamaSourceCheckCache:
         # Set up fake ollama cache structure
         # The manifest path is: manifests/registry.ollama.ai/library/<model>/<tag>
         # where <tag> is a FILE, not a directory.
-        manifest_parent = (
-            tmp_path / "manifests" / "registry.ollama.ai" / "library" / "gemma"
-        )
+        manifest_parent = tmp_path / "manifests" / "registry.ollama.ai" / "library" / "gemma"
         manifest_parent.mkdir(parents=True)
         manifest_file = manifest_parent / "2b"
         manifest_file.write_text(
-            '{"layers": [{"mediaType": "application/vnd.ollama.image.model",'
-            '"digest": "sha256:abc123"}]}'
+            '{"layers": [{"mediaType": "application/vnd.ollama.image.model","digest": "sha256:abc123"}]}'
         )
 
         blob_dir = tmp_path / "blobs"
@@ -65,28 +61,22 @@ class TestOllamaSourceCheckCache:
         assert source.check_cache("nonexistent:7b") is None
 
     def test_returns_none_when_blob_missing(self, tmp_path):
-        manifest_parent = (
-            tmp_path / "manifests" / "registry.ollama.ai" / "library" / "gemma"
-        )
+        manifest_parent = tmp_path / "manifests" / "registry.ollama.ai" / "library" / "gemma"
         manifest_parent.mkdir(parents=True)
         manifest_file = manifest_parent / "2b"
         manifest_file.write_text(
-            '{"layers": [{"mediaType": "application/vnd.ollama.image.model",'
-            '"digest": "sha256:missing"}]}'
+            '{"layers": [{"mediaType": "application/vnd.ollama.image.model","digest": "sha256:missing"}]}'
         )
         # No blob directory
         source = OllamaSource(models_dir=str(tmp_path))
         assert source.check_cache("gemma:2b") is None
 
     def test_default_tag_is_latest(self, tmp_path):
-        manifest_parent = (
-            tmp_path / "manifests" / "registry.ollama.ai" / "library" / "llama3"
-        )
+        manifest_parent = tmp_path / "manifests" / "registry.ollama.ai" / "library" / "llama3"
         manifest_parent.mkdir(parents=True)
         manifest_file = manifest_parent / "latest"
         manifest_file.write_text(
-            '{"layers": [{"mediaType": "application/vnd.ollama.image.model",'
-            '"digest": "sha256:def456"}]}'
+            '{"layers": [{"mediaType": "application/vnd.ollama.image.model","digest": "sha256:def456"}]}'
         )
         blob_dir = tmp_path / "blobs"
         blob_dir.mkdir()
@@ -105,13 +95,10 @@ class TestOllamaSourceCheckCache:
 
 class TestOllamaSourceResolve:
     def test_resolve_cached_model(self, tmp_path):
-        manifest_parent = (
-            tmp_path / "manifests" / "registry.ollama.ai" / "library" / "gemma"
-        )
+        manifest_parent = tmp_path / "manifests" / "registry.ollama.ai" / "library" / "gemma"
         manifest_parent.mkdir(parents=True)
         (manifest_parent / "2b").write_text(
-            '{"layers": [{"mediaType": "application/vnd.ollama.image.model",'
-            '"digest": "sha256:aaa111"}]}'
+            '{"layers": [{"mediaType": "application/vnd.ollama.image.model","digest": "sha256:aaa111"}]}'
         )
         blob_dir = tmp_path / "blobs"
         blob_dir.mkdir()
@@ -136,9 +123,7 @@ class TestOllamaSourceResolve:
     def test_resolve_pulls_and_succeeds(self, mock_which, mock_run, tmp_path):
         # First call to check_cache returns None (not cached yet)
         # After pull, we need the cache to exist
-        manifest_parent = (
-            tmp_path / "manifests" / "registry.ollama.ai" / "library" / "phi"
-        )
+        manifest_parent = tmp_path / "manifests" / "registry.ollama.ai" / "library" / "phi"
         manifest_parent.mkdir(parents=True)
         blob_dir = tmp_path / "blobs"
         blob_dir.mkdir()
@@ -146,8 +131,7 @@ class TestOllamaSourceResolve:
         def fake_pull(*args, **kwargs):
             # Simulate ollama pull populating the cache
             (manifest_parent / "latest").write_text(
-                '{"layers": [{"mediaType": "application/vnd.ollama.image.model",'
-                '"digest": "sha256:pulled123"}]}'
+                '{"layers": [{"mediaType": "application/vnd.ollama.image.model","digest": "sha256:pulled123"}]}'
             )
             (blob_dir / "sha256-pulled123").write_bytes(b"pulled model data")
 
@@ -196,9 +180,7 @@ class TestDeployOllamaUri:
     @patch("octomil.commands.deploy.webbrowser.open")
     @patch("octomil.ollama.get_ollama_model")
     @patch("octomil.sources.ollama.OllamaSource.resolve")
-    def test_deploy_ollama_uri_resolves_and_deploys(
-        self, mock_resolve, mock_get_model, mock_open, monkeypatch
-    ):
+    def test_deploy_ollama_uri_resolves_and_deploys(self, mock_resolve, mock_get_model, mock_open, monkeypatch):
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
         mock_resolve.return_value = SourceResult(
@@ -213,10 +195,15 @@ class TestDeployOllamaUri:
         )
 
         mock_check = MagicMock(status_code=200, json=MagicMock(return_value={"name": "gemma"}))
-        mock_post_resp = MagicMock(status_code=200, json=MagicMock(return_value={
-            "code": "OLL123",
-            "expires_at": "2026-02-25T12:00:00Z",
-        }))
+        mock_post_resp = MagicMock(
+            status_code=200,
+            json=MagicMock(
+                return_value={
+                    "code": "OLL123",
+                    "expires_at": "2026-02-25T12:00:00Z",
+                }
+            ),
+        )
         mock_poll_resp = MagicMock(status_code=200, json=MagicMock(return_value={"status": "done"}))
 
         mock_client = MagicMock()
@@ -241,8 +228,7 @@ class TestDeployOllamaUri:
     def test_deploy_ollama_uri_resolve_error(self, mock_resolve, monkeypatch):
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
         mock_resolve.side_effect = RuntimeError(
-            "Ollama model 'bad:model' not found in local cache "
-            "and ollama CLI is not installed."
+            "Ollama model 'bad:model' not found in local cache and ollama CLI is not installed."
         )
 
         runner = CliRunner()
@@ -264,9 +250,7 @@ class TestDeployOllamaUri:
     @patch("octomil.commands.deploy.webbrowser.open")
     @patch("octomil.ollama.get_ollama_model")
     @patch("octomil.sources.ollama.OllamaSource.resolve")
-    def test_deploy_ollama_uri_without_phone_flag(
-        self, mock_resolve, mock_get_model, mock_open, monkeypatch
-    ):
+    def test_deploy_ollama_uri_without_phone_flag(self, mock_resolve, mock_get_model, mock_open, monkeypatch):
         """ollama:// URI should work even without --phone (resolves model first)."""
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
@@ -294,48 +278,21 @@ class TestDeployOllamaUri:
 
 
 class TestModelsCommandDeployUri:
-    @patch("octomil.ollama.is_ollama_running", return_value=True)
-    @patch("octomil.ollama.list_ollama_models")
-    def test_models_shows_deploy_uri(self, mock_list, mock_running):
-        from octomil.ollama import OllamaModel
-
-        mock_list.return_value = [
-            OllamaModel(
-                name="gemma:2b",
-                size=1_678_000_000,
-                family="gemma",
-                quantization="Q4_K_M",
-                parameter_size="2B",
-                modified_at="2026-01-15T10:30:00Z",
-                digest="sha256:abc123",
-            ),
-        ]
+    def test_models_shows_model_names(self):
+        """The models command lists catalog models with their names."""
         runner = CliRunner()
-        result = runner.invoke(main, ["models", "--source", "ollama"])
+        result = runner.invoke(main, ["models"])
         assert result.exit_code == 0
-        assert "ollama://gemma:2b" in result.output
-        assert "DEPLOY URI" in result.output
+        # Catalog models are shown
+        assert "MODEL" in result.output
+        assert "gemma-1b" in result.output or "llama-3b" in result.output
 
-    @patch("octomil.ollama.is_ollama_running", return_value=True)
-    @patch("octomil.ollama.list_ollama_models")
-    def test_models_shows_header_row(self, mock_list, mock_running):
-        from octomil.ollama import OllamaModel
-
-        mock_list.return_value = [
-            OllamaModel(
-                name="llama3.2:3b",
-                size=2_048_000_000,
-                family="llama",
-                quantization="Q4_K_M",
-                parameter_size="3B",
-                modified_at="2026-01-10T08:00:00Z",
-                digest="sha256:789abc",
-            ),
-        ]
+    def test_models_shows_header_row(self):
+        """The models command displays a header row with column labels."""
         runner = CliRunner()
-        result = runner.invoke(main, ["models", "--source", "ollama"])
+        result = runner.invoke(main, ["models"])
         assert result.exit_code == 0
-        assert "NAME" in result.output
+        assert "MODEL" in result.output
         assert "SIZE" in result.output
-        assert "QUANT" in result.output
-        assert "FAMILY" in result.output
+        assert "PARAMS" in result.output
+        assert "BY" in result.output

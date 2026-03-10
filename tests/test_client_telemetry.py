@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-
 # Standard decorator stack for OctomilClient construction — suppresses real
 # _ApiClient / ModelRegistry / RolloutsAPI creation.
 _PATCH_ROLLOUTS = patch("octomil.client.RolloutsAPI")
@@ -18,26 +17,20 @@ class TestClientTelemetryInit:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_creates_reporter_when_api_key_set(
-        self, mock_api, mock_registry, mock_rollouts
-    ):
+    def test_creates_reporter_when_api_key_set(self, mock_api, mock_registry, mock_rollouts):
         with patch("octomil.telemetry.TelemetryReporter") as mock_tr_cls:
             mock_reporter = MagicMock()
             mock_tr_cls.return_value = mock_reporter
 
             from octomil.client import OctomilClient
 
-            c = OctomilClient(
-                api_key="test-key", org_id="org1", api_base="https://api.test"
-            )
+            c = OctomilClient(api_key="test-key", org_id="org1", api_base="https://api.test")
             assert c._reporter is not None
 
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_skips_reporter_when_api_key_empty(
-        self, mock_api, mock_registry, mock_rollouts, monkeypatch
-    ):
+    def test_skips_reporter_when_api_key_empty(self, mock_api, mock_registry, mock_rollouts, monkeypatch):
         monkeypatch.delenv("OCTOMIL_API_KEY", raising=False)
 
         from octomil.client import OctomilClient
@@ -48,9 +41,7 @@ class TestClientTelemetryInit:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_skips_reporter_when_no_api_key(
-        self, mock_api, mock_registry, mock_rollouts, monkeypatch
-    ):
+    def test_skips_reporter_when_no_api_key(self, mock_api, mock_registry, mock_rollouts, monkeypatch):
         monkeypatch.delenv("OCTOMIL_API_KEY", raising=False)
 
         from octomil.client import OctomilClient
@@ -61,9 +52,7 @@ class TestClientTelemetryInit:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_reporter_creation_failure_silently_ignored(
-        self, mock_api, mock_registry, mock_rollouts
-    ):
+    def test_reporter_creation_failure_silently_ignored(self, mock_api, mock_registry, mock_rollouts):
         from octomil.client import OctomilClient
 
         with patch(
@@ -80,9 +69,7 @@ class TestClientPullTelemetry:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_pull_reports_success_event(
-        self, mock_api, mock_registry_cls, mock_rollouts
-    ):
+    def test_pull_reports_success_event(self, mock_api, mock_registry_cls, mock_rollouts):
         from octomil.client import OctomilClient
 
         mock_registry = mock_registry_cls.return_value
@@ -108,9 +95,7 @@ class TestClientPullTelemetry:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_pull_reports_failure_event(
-        self, mock_api, mock_registry_cls, mock_rollouts
-    ):
+    def test_pull_reports_failure_event(self, mock_api, mock_registry_cls, mock_rollouts):
         import pytest
 
         from octomil.client import OctomilClient
@@ -140,9 +125,7 @@ class TestClientPullTelemetry:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_pull_works_without_reporter(
-        self, mock_api, mock_registry_cls, mock_rollouts
-    ):
+    def test_pull_works_without_reporter(self, mock_api, mock_registry_cls, mock_rollouts):
         from octomil.client import OctomilClient
 
         mock_registry = mock_registry_cls.return_value
@@ -163,9 +146,7 @@ class TestClientLoadModelTelemetry:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_load_model_passes_reporter_to_model(
-        self, mock_api, mock_registry_cls, mock_rollouts
-    ):
+    def test_load_model_passes_reporter_to_model(self, mock_api, mock_registry_cls, mock_rollouts):
         from octomil.client import OctomilClient
 
         mock_registry = mock_registry_cls.return_value
@@ -182,9 +163,7 @@ class TestClientLoadModelTelemetry:
 
         with (
             patch("octomil.engines.get_registry", return_value=mock_engine_registry),
-            patch(
-                "octomil.model.Model", return_value=mock_model_instance
-            ) as mock_model_cls,
+            patch("octomil.model.Model", return_value=mock_model_instance) as mock_model_cls,
         ):
             c = OctomilClient(api_key="key")
             c._reporter = mock_reporter
@@ -199,9 +178,7 @@ class TestClientLoadModelTelemetry:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_load_model_reports_funnel_event(
-        self, mock_api, mock_registry_cls, mock_rollouts
-    ):
+    def test_load_model_reports_funnel_event(self, mock_api, mock_registry_cls, mock_rollouts):
         from octomil.client import OctomilClient
 
         mock_registry = mock_registry_cls.return_value
@@ -302,9 +279,7 @@ class TestClientCloseTelemetry:
     @_PATCH_ROLLOUTS
     @_PATCH_REGISTRY
     @_PATCH_API
-    def test_close_reporter_close_failure_silently_ignored(
-        self, mock_api, mock_registry, mock_rollouts
-    ):
+    def test_close_reporter_close_failure_silently_ignored(self, mock_api, mock_registry, mock_rollouts):
         from octomil.client import OctomilClient
 
         mock_reporter = MagicMock()

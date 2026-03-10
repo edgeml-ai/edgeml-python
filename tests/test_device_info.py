@@ -27,7 +27,7 @@ class TestGetStableDeviceId(unittest.TestCase):
     @patch("octomil.device_info.platform.system", return_value="Darwin")
     @patch("octomil.device_info.subprocess.check_output")
     def test_macos_returns_hardware_uuid(self, mock_subprocess, mock_system):
-        mock_subprocess.return_value = "Hardware Overview:\n" "  Hardware UUID: ABCD1234-5678-EFGH-IJKL-MNOPQRSTUVWX\n"
+        mock_subprocess.return_value = "Hardware Overview:\n  Hardware UUID: ABCD1234-5678-EFGH-IJKL-MNOPQRSTUVWX\n"
         result = get_stable_device_id()
         self.assertEqual(result, "MacBook-ABCD1234")
         mock_subprocess.assert_called_once_with(["system_profiler", "SPHardwareDataType"], text=True)
@@ -36,9 +36,7 @@ class TestGetStableDeviceId(unittest.TestCase):
     @patch("octomil.device_info.subprocess.check_output")
     def test_macos_uuid_line_generic(self, mock_subprocess, mock_system):
         """A line containing 'UUID' but not 'Hardware UUID' should still match."""
-        mock_subprocess.return_value = (
-            "Hardware Overview:\n" "  Provisioning UUID: 11112222-3333-4444-5555-666677778888\n"
-        )
+        mock_subprocess.return_value = "Hardware Overview:\n  Provisioning UUID: 11112222-3333-4444-5555-666677778888\n"
         result = get_stable_device_id()
         self.assertEqual(result, "MacBook-11112222")
 

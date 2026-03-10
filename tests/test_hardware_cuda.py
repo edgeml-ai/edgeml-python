@@ -13,7 +13,6 @@ from octomil.hardware._cuda import (
     _lookup_speed_coefficient,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -51,18 +50,12 @@ class TestCheckAvailability:
             mock_run.return_value = _smi_result("NVIDIA-SMI 550.54.14", returncode=0)
             assert backend.check_availability() is True
 
-    def test_not_available_when_nvidia_smi_not_found(
-        self, backend: CUDABackend
-    ) -> None:
-        with patch(
-            "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-        ):
+    def test_not_available_when_nvidia_smi_not_found(self, backend: CUDABackend) -> None:
+        with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
             with patch.object(backend, "_is_jetson_platform", return_value=False):
                 assert backend.check_availability() is False
 
-    def test_not_available_when_nvidia_smi_times_out(
-        self, backend: CUDABackend
-    ) -> None:
+    def test_not_available_when_nvidia_smi_times_out(self, backend: CUDABackend) -> None:
         with patch(
             "octomil.hardware._cuda.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd="nvidia-smi", timeout=5),
@@ -71,9 +64,7 @@ class TestCheckAvailability:
                 assert backend.check_availability() is False
 
     def test_falls_back_to_jetson_when_smi_missing(self, backend: CUDABackend) -> None:
-        with patch(
-            "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
             with patch.object(backend, "_is_jetson_platform", return_value=True):
                 assert backend.check_availability() is True
 
@@ -133,9 +124,7 @@ _MULTI_GPU = (
 class TestFullQueryDetection:
     """Test _detect_via_nvidia_smi with 6-field CSV."""
 
-    def _run_detect(
-        self, backend: CUDABackend, full_csv: str, cuda_version: str = "12.4"
-    ):
+    def _run_detect(self, backend: CUDABackend, full_csv: str, cuda_version: str = "12.4"):
         """Helper: mock subprocess.run to return full CSV, then nvidia-smi header with CUDA version."""
         call_count = 0
 
@@ -223,9 +212,7 @@ class TestFullQueryDetection:
         # The full query parses 0 gpus, then simple query fires.
 
     def test_nvidia_smi_not_found(self, backend: CUDABackend) -> None:
-        with patch(
-            "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
             diagnostics: list[str] = []
             result = backend._detect_via_nvidia_smi(diagnostics)
             assert result is None
@@ -316,9 +303,7 @@ class TestJetsonDetection:
             raise FileNotFoundError(path)
 
         with patch("builtins.open", side_effect=open_side_effect):
-            with patch(
-                "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-            ):
+            with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
                 diagnostics: list[str] = []
                 result = backend._detect_jetson(diagnostics)
                 # tegra_release content doesn't match known Jetson models,
@@ -344,9 +329,7 @@ class TestJetsonDetection:
             raise FileNotFoundError(path)
 
         with patch("builtins.open", side_effect=open_side_effect):
-            with patch(
-                "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-            ):
+            with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
                 diagnostics: list[str] = []
                 result = backend._detect_jetson(diagnostics)
                 assert result is not None
@@ -359,9 +342,7 @@ class TestJetsonDetection:
     def test_jetson_detection_no_match(self, backend: CUDABackend) -> None:
         """When no Jetson identification methods succeed, returns None."""
         with patch("builtins.open", side_effect=FileNotFoundError):
-            with patch(
-                "octomil.hardware._cuda.platform.release", return_value="5.15.0-generic"
-            ):
+            with patch("octomil.hardware._cuda.platform.release", return_value="5.15.0-generic"):
                 with patch("octomil.hardware._cuda.os.path.isfile", return_value=False):
                     with patch(
                         "octomil.hardware._cuda.subprocess.run",
@@ -522,8 +503,7 @@ class TestGetCudaVersion:
                 raise FileNotFoundError
             if cmd == ["nvcc", "--version"]:
                 return _smi_result(
-                    "nvcc: NVIDIA (R) Cuda compiler driver\n"
-                    "Cuda compilation tools, release 12.2, V12.2.140\n"
+                    "nvcc: NVIDIA (R) Cuda compiler driver\nCuda compilation tools, release 12.2, V12.2.140\n"
                 )
             raise FileNotFoundError
 
@@ -532,9 +512,7 @@ class TestGetCudaVersion:
             assert version == "12.2"
 
     def test_cuda_version_none_when_all_fail(self, backend: CUDABackend) -> None:
-        with patch(
-            "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
             version = backend._get_cuda_version()
             assert version is None
 
@@ -577,9 +555,7 @@ class TestDetectIntegration:
                 return m()
             raise FileNotFoundError(path)
 
-        with patch(
-            "octomil.hardware._cuda.subprocess.run", side_effect=subprocess_side_effect
-        ):
+        with patch("octomil.hardware._cuda.subprocess.run", side_effect=subprocess_side_effect):
             with patch("builtins.open", side_effect=open_side_effect):
                 result = backend.detect()
                 assert result is not None
@@ -587,9 +563,7 @@ class TestDetectIntegration:
                 assert result.detection_method == "jetson"
 
     def test_detect_returns_none_when_nothing_found(self, backend: CUDABackend) -> None:
-        with patch(
-            "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
             with patch("builtins.open", side_effect=FileNotFoundError):
                 with patch("octomil.hardware._cuda.os.path.isfile", return_value=False):
                     result = backend.detect()
@@ -609,9 +583,7 @@ class TestGetFingerprint:
             assert fp == "cuda:NVIDIA GeForce RTX 4090, 24564"
 
     def test_fingerprint_none_on_failure(self, backend: CUDABackend) -> None:
-        with patch(
-            "octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._cuda.subprocess.run", side_effect=FileNotFoundError):
             fp = backend.get_fingerprint()
             assert fp is None
 

@@ -123,39 +123,29 @@ async def _collect_stream(gen):
 class TestDetectBackend:
     def test_falls_back_to_echo_when_no_backends(self):
         """With no real engines installed, _detect_backend returns echo."""
-        from octomil.engines import reset_registry
-        from octomil.engines.ollama_engine import OllamaEngine
+        from octomil.engines.registry import EngineRegistry
 
-        reset_registry()
-        with (
-            patch.dict("sys.modules", {"mlx_lm": None, "llama_cpp": None}),
-            patch.object(OllamaEngine, "detect", return_value=False),
-        ):
-            backend = _detect_backend("some-model")
+        with patch.object(EngineRegistry, "detect_all", return_value=[]):
+            backend = _detect_backend("gemma-1b")
         assert backend.name == "echo"
-        reset_registry()
 
     def test_echo_for_unknown_model_name(self):
         """Unknown model name still gets a backend (echo fallback)."""
-        from octomil.engines import reset_registry
-        from octomil.engines.ollama_engine import OllamaEngine
+        from octomil.engines.registry import EngineRegistry
 
-        reset_registry()
-        with patch.object(OllamaEngine, "detect", return_value=False):
+        with patch.object(EngineRegistry, "detect_all", return_value=[]):
             backend = _detect_backend("totally-unknown-model")
-        # Should return echo since no real engine supports unknown models
         assert backend.name == "echo"
-        reset_registry()
 
     def test_detect_backend_returns_backend(self):
-        """_detect_backend returns an InferenceBackend directly."""
-        result = _detect_backend("test-model")
+        """_detect_backend with echo override returns an InferenceBackend."""
+        result = _detect_backend("gemma-1b", engine_override="echo")
         assert hasattr(result, "name")
         assert hasattr(result, "generate")
 
     def test_detect_backend_with_engine_override(self):
         """_detect_backend with engine_override='echo' returns echo."""
-        backend = _detect_backend("test-model", engine_override="echo")
+        backend = _detect_backend("gemma-1b", engine_override="echo")
         assert backend.name == "echo"
 
 

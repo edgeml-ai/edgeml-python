@@ -8,14 +8,13 @@ from unittest.mock import mock_open, patch
 import pytest
 
 from octomil.hardware._rocm import (
-    ROCmBackend,
     _AMD_PCI_DEVICES,
+    ROCmBackend,
     _build_rocm_result,
     _list_drm_cards,
     _lookup_amd_speed,
 )
 from octomil.hardware._types import GPUInfo, GPUMemory
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -33,9 +32,7 @@ def backend() -> ROCmBackend:
 
 
 def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(
-        args=["cmd"], returncode=returncode, stdout=stdout, stderr=""
-    )
+    return subprocess.CompletedProcess(args=["cmd"], returncode=returncode, stdout=stdout, stderr="")
 
 
 # ---------------------------------------------------------------------------
@@ -71,9 +68,7 @@ class TestCheckAvailability:
         def run_side_effect(*args, **kwargs):
             raise FileNotFoundError
 
-        with patch(
-            "octomil.hardware._rocm.subprocess.run", side_effect=run_side_effect
-        ):
+        with patch("octomil.hardware._rocm.subprocess.run", side_effect=run_side_effect):
             with patch(
                 "octomil.hardware._rocm._list_drm_cards",
                 return_value=["/sys/class/drm/card0"],
@@ -83,9 +78,7 @@ class TestCheckAvailability:
                         assert backend.check_availability() is True
 
     def test_not_available_nothing_present(self, backend: ROCmBackend) -> None:
-        with patch(
-            "octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError):
             with patch("octomil.hardware._rocm._list_drm_cards", return_value=[]):
                 assert backend.check_availability() is False
 
@@ -95,9 +88,7 @@ class TestCheckAvailability:
         def run_side_effect(*args, **kwargs):
             raise FileNotFoundError
 
-        with patch(
-            "octomil.hardware._rocm.subprocess.run", side_effect=run_side_effect
-        ):
+        with patch("octomil.hardware._rocm.subprocess.run", side_effect=run_side_effect):
             with patch(
                 "octomil.hardware._rocm._list_drm_cards",
                 return_value=["/sys/class/drm/card0"],
@@ -162,20 +153,14 @@ class TestDetectViaRocmSmi:
             assert result.detection_method == "rocm-smi"
             # GPU 0
             assert "7900 XTX" in result.gpus[0].name
-            assert result.gpus[0].memory.total_gb == pytest.approx(
-                24576 / 1024, rel=0.01
-            )
+            assert result.gpus[0].memory.total_gb == pytest.approx(24576 / 1024, rel=0.01)
             assert result.gpus[0].memory.used_gb == pytest.approx(512 / 1024, rel=0.01)
             # GPU 1
             assert "7900 XT" in result.gpus[1].name
-            assert result.gpus[1].memory.total_gb == pytest.approx(
-                20480 / 1024, rel=0.01
-            )
+            assert result.gpus[1].memory.total_gb == pytest.approx(20480 / 1024, rel=0.01)
 
     def test_rocm_smi_not_found(self, backend: ROCmBackend) -> None:
-        with patch(
-            "octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError):
             diagnostics: list[str] = []
             result = backend._detect_via_rocm_smi(diagnostics)
             assert result is None
@@ -275,9 +260,7 @@ Name: AMD Ryzen 9 7950X
             assert result is None
 
     def test_rocminfo_not_found(self, backend: ROCmBackend) -> None:
-        with patch(
-            "octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError):
             diagnostics: list[str] = []
             result = backend._detect_via_rocminfo(diagnostics)
             assert result is None
@@ -334,10 +317,7 @@ class TestDetectViaLspci:
             # Unknown device: VRAM estimated as 0.0
             assert result.gpus[0].memory.total_gb == 0.0
             # Name from lspci description line
-            assert (
-                "Advanced Micro Devices" in result.gpus[0].name
-                or "AMD" in result.gpus[0].name
-            )
+            assert "Advanced Micro Devices" in result.gpus[0].name or "AMD" in result.gpus[0].name
 
     def test_ignores_non_vga_lines(self, backend: ROCmBackend) -> None:
         """Lines without VGA/3D/Display are skipped even if they have AMD IDs."""
@@ -349,9 +329,7 @@ class TestDetectViaLspci:
             assert result is None
 
     def test_lspci_not_found(self, backend: ROCmBackend) -> None:
-        with patch(
-            "octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError):
             diagnostics: list[str] = []
             result = backend._detect_via_lspci(diagnostics)
             assert result is None
@@ -368,9 +346,7 @@ class TestDetectViaLspci:
             assert any("timed out" in d for d in diagnostics)
 
     def test_intel_only_lines_ignored(self, backend: ROCmBackend) -> None:
-        intel_only = (
-            "00:02.0 VGA compatible controller [0300]: Intel Corporation [8086:a780]\n"
-        )
+        intel_only = "00:02.0 VGA compatible controller [0300]: Intel Corporation [8086:a780]\n"
         with patch("octomil.hardware._rocm.subprocess.run") as mock_run:
             mock_run.return_value = _completed(intel_only)
             diagnostics: list[str] = []
@@ -407,9 +383,7 @@ class TestDetectViaSysfs:
                     return mock_open(read_data=data_map[path])()
                 raise FileNotFoundError(path)
 
-            with patch(
-                "octomil.hardware._rocm.os.path.isfile", side_effect=isfile_side
-            ):
+            with patch("octomil.hardware._rocm.os.path.isfile", side_effect=isfile_side):
                 with patch("builtins.open", side_effect=open_side):
                     diagnostics: list[str] = []
                     result = backend._detect_via_sysfs(diagnostics)
@@ -417,9 +391,7 @@ class TestDetectViaSysfs:
                     assert len(result.gpus) == 1
                     assert result.gpus[0].name == "Radeon RX 7900 XTX"
                     expected_vram = 25769803776 / (1024**3)
-                    assert result.gpus[0].memory.total_gb == pytest.approx(
-                        expected_vram, rel=0.01
-                    )
+                    assert result.gpus[0].memory.total_gb == pytest.approx(expected_vram, rel=0.01)
                     assert result.detection_method == "sysfs"
 
     def test_non_amd_vendor_skipped(self, backend: ROCmBackend) -> None:
@@ -461,9 +433,7 @@ class TestDetectViaSysfs:
                     return mock_open(read_data=data_map[path])()
                 raise FileNotFoundError(path)
 
-            with patch(
-                "octomil.hardware._rocm.os.path.isfile", side_effect=isfile_side
-            ):
+            with patch("octomil.hardware._rocm.os.path.isfile", side_effect=isfile_side):
                 with patch("builtins.open", side_effect=open_side):
                     diagnostics: list[str] = []
                     result = backend._detect_via_sysfs(diagnostics)
@@ -492,9 +462,7 @@ class TestDetectViaSysfs:
                     return mock_open(read_data=data_map[path])()
                 raise FileNotFoundError(path)
 
-            with patch(
-                "octomil.hardware._rocm.os.path.isfile", side_effect=isfile_side
-            ):
+            with patch("octomil.hardware._rocm.os.path.isfile", side_effect=isfile_side):
                 with patch("builtins.open", side_effect=open_side):
                     diagnostics: list[str] = []
                     result = backend._detect_via_sysfs(diagnostics)
@@ -525,9 +493,7 @@ class TestPCIDeviceIDTable:
             ("73ff", "Radeon RX 6600 XT", 8.0),
         ],
     )
-    def test_pci_device_lookup(
-        self, device_id: str, expected_name: str, expected_vram: float
-    ) -> None:
+    def test_pci_device_lookup(self, device_id: str, expected_name: str, expected_vram: float) -> None:
         assert device_id in _AMD_PCI_DEVICES
         name, vram = _AMD_PCI_DEVICES[device_id]
         assert name == expected_name
@@ -796,9 +762,7 @@ class TestGetFingerprint:
             assert "7900 XTX" in fp
 
     def test_fingerprint_none_on_failure(self, backend: ROCmBackend) -> None:
-        with patch(
-            "octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("octomil.hardware._rocm.subprocess.run", side_effect=FileNotFoundError):
             assert backend.get_fingerprint() is None
 
     def test_fingerprint_none_on_empty(self, backend: ROCmBackend) -> None:

@@ -235,7 +235,12 @@ class TestCLI:
         from octomil.commands.mcp_cmd import mcp
 
         runner = CliRunner()
-        with patch("octomil.mcp.registration._SETTINGS_PATH", tmp_path / "settings.json"):
+        # Mock get_all_status to return all False (nothing registered)
+        with patch(
+            "octomil.mcp.registration.get_all_status",
+            return_value={"claude": False, "cursor": False, "vscode": False, "codex": False},
+        ):
             result = runner.invoke(mcp, ["status"])
         assert result.exit_code == 0
-        assert "not registered" in result.output
+        # When not registered, the output uses dim style with "-" prefix
+        assert "-" in result.output

@@ -75,9 +75,10 @@ class TestNetworkCheck(unittest.TestCase):
     @patch("octomil.resilience.httpx")
     def test_network_check_timeout(self, mock_httpx):
         """Timeout should result in unreachable."""
+        import httpx
+
         from octomil.resilience import check_network_quality
 
-        import httpx
         mock_httpx.TimeoutException = httpx.TimeoutException
         mock_httpx.get.side_effect = httpx.TimeoutException("timed out")
 
@@ -207,18 +208,14 @@ class TestTrainIfEligible(unittest.TestCase):
     @patch("octomil.federated_client.get_battery_level", return_value=50)
     @patch("octomil.federated_client.is_charging", return_value=False)
     @patch("octomil.federated_client.check_network_quality")
-    def test_train_if_eligible_caches_on_upload_failure(
-        self, mock_network, mock_charging, mock_battery
-    ):
+    def test_train_if_eligible_caches_on_upload_failure(self, mock_network, mock_charging, mock_battery):
         """When upload fails, train_if_eligible should cache the gradient locally."""
         from octomil.gradient_cache import GradientCache
 
         client = self._make_client()
 
         # Make join_round raise to simulate upload failure
-        client.join_round = MagicMock(
-            side_effect=Exception("upload failed")
-        )
+        client.join_round = MagicMock(side_effect=Exception("upload failed"))
 
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = GradientCache(os.path.join(tmpdir, "cache.db"))

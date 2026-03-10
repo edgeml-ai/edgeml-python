@@ -18,7 +18,6 @@ from octomil.compression import (
     estimate_tokens,
 )
 
-
 # ---------------------------------------------------------------------------
 # estimate_tokens
 # ---------------------------------------------------------------------------
@@ -226,9 +225,7 @@ class TestApplySlidingWindow:
             {"role": "assistant", "content": "A2"},
             {"role": "user", "content": "Q3"},
         ]
-        result = _apply_sliding_window(
-            msgs, max_turns_verbatim=2, preserve_system=False
-        )
+        result = _apply_sliding_window(msgs, max_turns_verbatim=2, preserve_system=False)
         # System message is NOT preserved -- it becomes part of older turns
         # which get summarised
         assert result[0]["role"] == "system"  # summary is injected as system
@@ -468,6 +465,7 @@ class TestCompressionTelemetry:
     def test_report_prompt_compressed_payload(self):
         """Verify TelemetryReporter.report_prompt_compressed enqueues correct payload."""
         from unittest.mock import patch
+
         from octomil.telemetry import TelemetryReporter
 
         sent = []
@@ -560,6 +558,7 @@ class TestCompressionTelemetry:
 class TestCompressionCLI:
     def test_serve_help_shows_compress_context(self):
         from click.testing import CliRunner
+
         from octomil.cli import main
 
         runner = CliRunner()
@@ -569,6 +568,7 @@ class TestCompressionCLI:
 
     def test_serve_help_shows_compression_strategy(self):
         from click.testing import CliRunner
+
         from octomil.cli import main
 
         runner = CliRunner()
@@ -579,6 +579,7 @@ class TestCompressionCLI:
 
     def test_serve_help_shows_compression_ratio(self):
         from click.testing import CliRunner
+
         from octomil.cli import main
 
         runner = CliRunner()
@@ -587,6 +588,7 @@ class TestCompressionCLI:
 
     def test_serve_help_shows_compression_max_turns(self):
         from click.testing import CliRunner
+
         from octomil.cli import main
 
         runner = CliRunner()
@@ -595,6 +597,7 @@ class TestCompressionCLI:
 
     def test_serve_help_shows_compression_threshold(self):
         from click.testing import CliRunner
+
         from octomil.cli import main
 
         runner = CliRunner()
@@ -604,6 +607,7 @@ class TestCompressionCLI:
     def test_serve_with_compress_context_passes_through(self):
         """Verify --compress-context is accepted by the CLI and passed to run_server."""
         from click.testing import CliRunner
+
         from octomil.cli import main
 
         runner = CliRunner()
@@ -639,10 +643,7 @@ class TestCompressionCLI:
                 if mock_run.called:
                     call_kwargs = mock_run.call_args
                     assert call_kwargs.kwargs.get("compress_context") is True
-                    assert (
-                        call_kwargs.kwargs.get("compression_strategy")
-                        == "sliding_window"
-                    )
+                    assert call_kwargs.kwargs.get("compression_strategy") == "sliding_window"
                     assert call_kwargs.kwargs.get("compression_ratio") == 0.3
 
 
@@ -654,6 +655,7 @@ class TestCompressionCLI:
 async def _make_echo_app_async(**create_kwargs):
     """Create a FastAPI app with EchoBackend for testing, triggering lifespan."""
     from unittest.mock import patch as _patch
+
     from octomil.serve import EchoBackend, create_app
 
     with _patch("octomil.serve._detect_backend") as mock_detect:

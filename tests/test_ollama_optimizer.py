@@ -22,7 +22,6 @@ from octomil.model_optimizer import (
     _total_memory_gb,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper to build test profiles
 # ---------------------------------------------------------------------------
@@ -145,9 +144,7 @@ class TestQuantSelection:
         ram_gb,
         expected_strategy,
     ):
-        profile = _make_profile(
-            vram_gb=vram_gb, ram_gb=ram_gb, available_ram_gb=ram_gb * 0.75
-        )
+        profile = _make_profile(vram_gb=vram_gb, ram_gb=ram_gb, available_ram_gb=ram_gb * 0.75)
         opt = ModelOptimizer(profile)
         result = opt.pick_quant_and_offload(model_size_b)
         assert result.strategy == expected_strategy
@@ -287,9 +284,7 @@ class TestSpeedPrediction:
 class TestRecommendations:
     def test_priority_speed_sorted_by_tps_descending(self):
         """priority='speed' → sorted by tok/s descending."""
-        profile = _make_profile(
-            vram_gb=24.0, ram_gb=32.0, available_ram_gb=24.0, speed_coeff=100
-        )
+        profile = _make_profile(vram_gb=24.0, ram_gb=32.0, available_ram_gb=24.0, speed_coeff=100)
         opt = ModelOptimizer(profile)
         recs = opt.recommend(priority="speed")
 
@@ -299,9 +294,7 @@ class TestRecommendations:
 
     def test_priority_quality_sorted_by_model_size_descending(self):
         """priority='quality' → larger models first."""
-        profile = _make_profile(
-            vram_gb=24.0, ram_gb=64.0, available_ram_gb=48.0, speed_coeff=100
-        )
+        profile = _make_profile(vram_gb=24.0, ram_gb=64.0, available_ram_gb=48.0, speed_coeff=100)
         opt = ModelOptimizer(profile)
         recs = opt.recommend(priority="quality")
 
@@ -313,9 +306,7 @@ class TestRecommendations:
 
     def test_priority_balanced_fast_enough_first(self):
         """priority='balanced' → models >= 10 tok/s come first."""
-        profile = _make_profile(
-            vram_gb=24.0, ram_gb=32.0, available_ram_gb=24.0, speed_coeff=100
-        )
+        profile = _make_profile(vram_gb=24.0, ram_gb=32.0, available_ram_gb=24.0, speed_coeff=100)
         opt = ModelOptimizer(profile)
         recs = opt.recommend(priority="balanced")
 
@@ -347,9 +338,7 @@ class TestRecommendations:
         """Every recommendation includes a valid serve_command."""
         from unittest.mock import patch
 
-        with patch(
-            "octomil.model_optimizer.shutil.which", return_value="/usr/bin/octomil"
-        ):
+        with patch("octomil.model_optimizer.shutil.which", return_value="/usr/bin/octomil"):
             profile = _make_profile(vram_gb=24.0, ram_gb=32.0, available_ram_gb=24.0)
             opt = ModelOptimizer(profile)
         recs = opt.recommend()
@@ -663,9 +652,7 @@ class TestModelMemory:
 class TestMetalUnifiedMemory:
     def test_metal_uses_total_ram_as_vram(self):
         """Metal backend treats total_ram - 4 GB as usable VRAM."""
-        profile = _make_profile(
-            vram_gb=16.0, backend="metal", ram_gb=32.0, available_ram_gb=24.0
-        )
+        profile = _make_profile(vram_gb=16.0, backend="metal", ram_gb=32.0, available_ram_gb=24.0)
         opt = ModelOptimizer(profile)
         # usable_vram = total_ram_gb - 4 = 32 - 4 = 28 GB
         assert opt.usable_vram == 28.0

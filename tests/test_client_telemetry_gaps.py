@@ -145,9 +145,7 @@ class TestPushTelemetry:
         client._registry = mock_registry
 
         broken_reporter = MagicMock()
-        broken_reporter.report_funnel_event.side_effect = RuntimeError(
-            "reporter broken"
-        )
+        broken_reporter.report_funnel_event.side_effect = RuntimeError("reporter broken")
 
         with patch("octomil.get_reporter", return_value=broken_reporter):
             result = client.push(
@@ -314,9 +312,7 @@ class TestRollbackTelemetry:
         mock_registry = MagicMock()
         mock_registry.resolve_model_id.return_value = "model-123"
         mock_registry.get_latest_version.return_value = "2.0.0"
-        mock_registry.list_versions.return_value = {
-            "versions": [{"version": "2.0.0"}, {"version": "1.0.0"}]
-        }
+        mock_registry.list_versions.return_value = {"versions": [{"version": "2.0.0"}, {"version": "1.0.0"}]}
         mock_registry.deploy_version.return_value = {"id": "r1", "status": "ok"}
         client._registry = mock_registry
 

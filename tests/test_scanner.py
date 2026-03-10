@@ -10,7 +10,6 @@ from click.testing import CliRunner
 
 from octomil.scanner import InferencePoint, format_json, format_text, scan_directory
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: sample source files
 # ---------------------------------------------------------------------------

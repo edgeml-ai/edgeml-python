@@ -6,10 +6,8 @@ import asyncio
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-
 from octomil.model import Model, ModelMetadata, Prediction
 from octomil.serve import GenerationChunk, GenerationRequest, InferenceMetrics
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -109,9 +107,7 @@ class TestBackendCreation:
             engine_kwargs={"cache_size_mb": 4096, "cache_enabled": True},
         )
 
-        engine.create_backend.assert_called_once_with(
-            "test-model", cache_size_mb=4096, cache_enabled=True
-        )
+        engine.create_backend.assert_called_once_with("test-model", cache_size_mb=4096, cache_enabled=True)
 
 
 # ---------------------------------------------------------------------------
@@ -313,9 +309,7 @@ class TestClientLoadModel:
 
         assert model.metadata.version == "3.0.0"
 
-        mock_reg_instance.auto_select.assert_called_once_with(
-            "my-model", engine_override="llama.cpp"
-        )
+        mock_reg_instance.auto_select.assert_called_once_with("my-model", engine_override="llama.cpp")
 
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")

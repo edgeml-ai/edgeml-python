@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
-
 from octomil.serve import (
     EchoBackend,
     InferenceBackend,
@@ -15,7 +14,6 @@ from octomil.serve import (
     MLXBackend,
 )
 from octomil.telemetry import TelemetryReporter
-
 
 # ---------------------------------------------------------------------------
 # InferenceMetrics — attention_backend field
@@ -141,9 +139,7 @@ class TestLlamaCppFlashAttn:
                     "octomil.models.resolver", fromlist=["ModelResolutionError"]
                 ).ModelResolutionError("not found"),
             ),
-            patch(
-                "octomil.serve._GGUF_MODELS", {"test-model": ("org/repo", "file.gguf")}
-            ),
+            patch("octomil.serve._GGUF_MODELS", {"test-model": ("org/repo", "file.gguf")}),
         ):
             backend = LlamaCppBackend(cache_enabled=False)
             backend.load_model("test-model")

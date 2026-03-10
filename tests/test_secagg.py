@@ -16,7 +16,6 @@ from octomil.secagg import (
     reconstruct_secret,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shamir secret sharing
 # ---------------------------------------------------------------------------
@@ -148,10 +147,7 @@ class ShareSerializationTests(unittest.TestCase):
         self.assertEqual(restored.value, share.value)
 
     def test_roundtrip_batch(self):
-        shares = [
-            ShamirShare(index=i, value=i * 1000, modulus=DEFAULT_FIELD_SIZE)
-            for i in range(1, 6)
-        ]
+        shares = [ShamirShare(index=i, value=i * 1000, modulus=DEFAULT_FIELD_SIZE) for i in range(1, 6)]
         data = SecAggClient.serialize_shares(shares)
         restored = SecAggClient.deserialize_shares(data)
         self.assertEqual(len(restored), 5)
@@ -268,9 +264,7 @@ class EndToEndSecAggTests(unittest.TestCase):
 
         # Server: sum masked elements.
         n_elements = 4
-        masked_elements = [
-            model_bytes_to_field_elements(m, field_size) for m in masked_updates
-        ]
+        masked_elements = [model_bytes_to_field_elements(m, field_size) for m in masked_updates]
         agg_masked = [0] * n_elements
         for elems in masked_elements:
             for j in range(n_elements):
@@ -290,9 +284,7 @@ class EndToEndSecAggTests(unittest.TestCase):
                 agg_masked[j] = (agg_masked[j] - mask[j]) % field_size
 
         # The result should equal the element-wise sum of raw updates (mod 2^32).
-        raw_elements = [
-            model_bytes_to_field_elements(r, field_size) for r in raw_updates
-        ]
+        raw_elements = [model_bytes_to_field_elements(r, field_size) for r in raw_updates]
         expected = [0] * n_elements
         for elems in raw_elements:
             for j in range(n_elements):

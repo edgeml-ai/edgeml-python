@@ -27,7 +27,6 @@ from octomil.filters import (
     apply_filters,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -634,9 +633,7 @@ class BackwardCompatibilityTests(unittest.TestCase):
         from octomil.federated_client import apply_filters as compat_apply_filters
 
         delta = {"w": torch.tensor([3.0, 4.0])}
-        result = compat_apply_filters(
-            delta, [{"type": "gradient_clip", "max_norm": 1.0}]
-        )
+        result = compat_apply_filters(delta, [{"type": "gradient_clip", "max_norm": 1.0}])
 
         # Should return a plain dict, not FilterResult
         self.assertIsInstance(result, dict)
@@ -652,9 +649,7 @@ class BackwardCompatibilityTests(unittest.TestCase):
         from octomil.federated_client import apply_filters as compat_apply_filters
 
         delta = {"w": torch.tensor([3.0, 4.0])}
-        result = compat_apply_filters(
-            delta, [{"type": "gradient_clip", "max_norm": 1.0}]
-        )
+        result = compat_apply_filters(delta, [{"type": "gradient_clip", "max_norm": 1.0}])
 
         clipped_norm = torch.norm(result["w"].float().flatten(), dim=0)
         self.assertAlmostEqual(clipped_norm.item(), 1.0, places=4)
@@ -668,9 +663,7 @@ class BackwardCompatibilityTests(unittest.TestCase):
         from octomil.federated_client import apply_filters as compat_apply_filters
 
         delta = {"w": torch.tensor([3.0, 4.0]), "metadata": "some_string"}
-        result = compat_apply_filters(
-            delta, [{"type": "gradient_clip", "max_norm": 1.0}]
-        )
+        result = compat_apply_filters(delta, [{"type": "gradient_clip", "max_norm": 1.0}])
 
         self.assertEqual(result["metadata"], "some_string")
 

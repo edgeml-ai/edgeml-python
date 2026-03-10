@@ -1,13 +1,13 @@
-import unittest
 import io
+import unittest
 from unittest.mock import patch
 
 from octomil.api_client import OctomilClientError
 from octomil.federated_client import (
     FederatedClient,
-    compute_state_dict_delta,
-    apply_filters,
     _apply_fedprox_correction,
+    apply_filters,
+    compute_state_dict_delta,
 )
 
 
@@ -117,9 +117,7 @@ class FederatedClientTests(unittest.TestCase):
 
     def test_get_model_info_caches_result(self):
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_456"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_456"}]})
         stub.set_response(
             "/models/model_456",
             {"id": "model_456", "name": "my_model", "framework": "pytorch"},
@@ -155,12 +153,8 @@ class FederatedClientTests(unittest.TestCase):
 
     def test_get_model_architecture(self):
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_456"}]}
-        )
-        stub.set_response(
-            "/models/model_456", {"id": "model_456", "architecture": {"layers": 3}}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_456"}]})
+        stub.set_response("/models/model_456", {"id": "model_456", "architecture": {"layers": 3}})
 
         client = FederatedClient(auth_token_provider=lambda: "token123", org_id="org_1")
         client.api = stub
@@ -170,9 +164,7 @@ class FederatedClientTests(unittest.TestCase):
 
     def test_get_model_architecture_empty_if_not_found(self):
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_456"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_456"}]})
         stub.set_response("/models/model_456", {"id": "model_456"})
 
         client = FederatedClient(auth_token_provider=lambda: "token123", org_id="org_1")
@@ -183,9 +175,7 @@ class FederatedClientTests(unittest.TestCase):
 
     def test_resolve_model_id_by_name(self):
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_789"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_789"}]})
 
         client = FederatedClient(auth_token_provider=lambda: "token123", org_id="org_1")
         client.api = stub
@@ -290,9 +280,7 @@ class FederatedClientTests(unittest.TestCase):
 
     def test_pull_model(self):
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_456"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_456"}]})
         stub.set_response("/models/model_456/versions/latest", {"version": "1.0.0"})
 
         client = FederatedClient(auth_token_provider=lambda: "token123", org_id="org_1")
@@ -307,9 +295,7 @@ class FederatedClientTests(unittest.TestCase):
 
     def test_pull_model_resolves_latest_version(self):
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_456"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_456"}]})
         stub.set_response("/models/model_456/versions/latest", {"version": "2.5.0"})
 
         client = FederatedClient(auth_token_provider=lambda: "token123", org_id="org_1")
@@ -421,9 +407,7 @@ class FederatedClientTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
 
         # Verify the posted payload has the correct sample_count and metrics
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"]
         self.assertEqual(len(post_calls), 1)
         payload = post_calls[0][2]
         self.assertEqual(payload["sample_count"], 100)
@@ -441,9 +425,7 @@ class FederatedClientTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
 
         # Verify post was made
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"]
         self.assertEqual(len(post_calls), 1)
         payload = post_calls[0][2]
         self.assertEqual(payload["model_id"], "model_456")
@@ -452,9 +434,7 @@ class FederatedClientTests(unittest.TestCase):
 
     def test_get_model_architecture_public_method(self):
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_456"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_456"}]})
         stub.set_response(
             "/models/model_456",
             {"id": "model_456", "architecture": {"layers": 5, "type": "cnn"}},
@@ -503,9 +483,7 @@ class FederatedClientTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
 
         # Verify the posted payload
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"]
         self.assertEqual(len(post_calls), 1)
         payload = post_calls[0][2]
         self.assertEqual(payload["model_id"], "model_456")
@@ -540,9 +518,7 @@ class FederatedClientTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
 
         # Verify delta format was used in the payload
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"]
         self.assertEqual(len(post_calls), 1)
         payload = post_calls[0][2]
         self.assertEqual(payload["update_format"], "delta")
@@ -556,9 +532,7 @@ class FederatedClientTests(unittest.TestCase):
             self.skipTest("pandas not installed")
 
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "my_model", "id": "model_456"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "my_model", "id": "model_456"}]})
         stub.set_response(
             "/models/model_456",
             {
@@ -590,9 +564,7 @@ class PrepareTrainingDataTests(unittest.TestCase):
     def _make_client(self, architecture=None):
         """Create a FederatedClient with a stubbed API that returns the given architecture."""
         stub = _StubApi()
-        stub.set_response(
-            "/models", {"models": [{"name": "test_model", "id": "model_1"}]}
-        )
+        stub.set_response("/models", {"models": [{"name": "test_model", "id": "model_1"}]})
         model_info = {"id": "model_1"}
         if architecture is not None:
             model_info["architecture"] = architecture
@@ -752,18 +724,15 @@ class PrepareTrainingDataTests(unittest.TestCase):
             call_kwargs = mock_validate.call_args
             # validate_target(df, target_col=..., output_type=..., output_dim=...)
             self.assertEqual(
-                call_kwargs.kwargs.get("target_col")
-                or call_kwargs[1].get("target_col"),
+                call_kwargs.kwargs.get("target_col") or call_kwargs[1].get("target_col"),
                 "target",
             )
             self.assertEqual(
-                call_kwargs.kwargs.get("output_type")
-                or call_kwargs[1].get("output_type"),
+                call_kwargs.kwargs.get("output_type") or call_kwargs[1].get("output_type"),
                 "multiclass",
             )
             self.assertEqual(
-                call_kwargs.kwargs.get("output_dim")
-                or call_kwargs[1].get("output_dim"),
+                call_kwargs.kwargs.get("output_dim") or call_kwargs[1].get("output_dim"),
                 3,
             )
 
@@ -882,9 +851,7 @@ class RoundManagementTests(unittest.TestCase):
         self.assertEqual(result["status"], "accepted")
 
         # Verify round_id was included in the upload
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"]
         self.assertEqual(len(post_calls), 1)
         payload = post_calls[0][2]
         self.assertEqual(payload["round_id"], "r1")
@@ -1000,9 +967,7 @@ class PersonalizationTests(unittest.TestCase):
         self.assertEqual(result["version"], "personal-v1")
 
         # Verify the correct endpoint was called
-        get_calls = [
-            c for c in stub.calls if c[0] == "get" and "/personalized/" in c[1]
-        ]
+        get_calls = [c for c in stub.calls if c[0] == "get" and "/personalized/" in c[1]]
         self.assertEqual(len(get_calls), 1)
         self.assertIn("device_123", get_calls[0][1])
 
@@ -1018,9 +983,7 @@ class PersonalizationTests(unittest.TestCase):
             metrics={"accuracy": 0.92},
         )
 
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and "/personalized/" in c[1]
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and "/personalized/" in c[1]]
         self.assertEqual(len(post_calls), 1)
         payload = post_calls[0][2]
         self.assertEqual(payload["metrics"], {"accuracy": 0.92})
@@ -1035,9 +998,7 @@ class PersonalizationTests(unittest.TestCase):
 
         client.upload_personalized_update(weights=b"personal_weights")
 
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and "/personalized/" in c[1]
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and "/personalized/" in c[1]]
         payload = post_calls[0][2]
         self.assertEqual(payload["metrics"], {})
 
@@ -1259,9 +1220,7 @@ class ApplyFiltersTests(unittest.TestCase):
             self.skipTest("torch not installed")
 
         delta = {"w": torch.tensor([0.01, 0.5, 0.02, 0.9, 0.01])}
-        result = apply_filters(
-            delta, [{"type": "sparsification", "top_k_percent": 40.0}]
-        )
+        result = apply_filters(delta, [{"type": "sparsification", "top_k_percent": 40.0}])
 
         # 40% of 5 elements = 2 elements kept
         non_zero = (result["w"] != 0).sum().item()
@@ -1450,9 +1409,7 @@ class FedProxCorrectionTests(unittest.TestCase):
         # With proximal_mu=1.0, the corrected delta = 2.0 / (1+1) = 1.0
         # We can't directly inspect the uploaded bytes easily, but we can
         # verify the call went through successfully.
-        post_calls = [
-            c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"
-        ]
+        post_calls = [c for c in stub.calls if c[0] == "post" and c[1] == "/training/weights"]
         self.assertEqual(len(post_calls), 1)
         payload = post_calls[0][2]
         self.assertEqual(payload["round_id"], "r1")

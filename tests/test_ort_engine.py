@@ -11,12 +11,11 @@ import pytest
 from octomil.engines.base import BenchmarkResult
 from octomil.engines.ort_engine import (
     ONNXRuntimeEngine,
-    _ORTBackend,
     _get_execution_providers,
     _has_onnxruntime,
     _has_onnxruntime_genai,
+    _ORTBackend,
 )
-
 
 # ---------------------------------------------------------------------------
 # Detection helpers
@@ -28,9 +27,7 @@ class TestHasOnnxruntime:
         mock_ort = MagicMock()
         with patch(
             "builtins.__import__",
-            side_effect=lambda name, *a, **kw: (
-                mock_ort if name == "onnxruntime" else __import__(name, *a, **kw)
-            ),
+            side_effect=lambda name, *a, **kw: mock_ort if name == "onnxruntime" else __import__(name, *a, **kw),
         ):
             assert _has_onnxruntime() is True
 
@@ -38,9 +35,7 @@ class TestHasOnnxruntime:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "onnxruntime"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "onnxruntime" else __import__(name, *a, **kw)
             ),
         ):
             assert _has_onnxruntime() is False
@@ -51,9 +46,7 @@ class TestHasOnnxruntimeGenai:
         mock_og = MagicMock()
         with patch(
             "builtins.__import__",
-            side_effect=lambda name, *a, **kw: (
-                mock_og if name == "onnxruntime_genai" else __import__(name, *a, **kw)
-            ),
+            side_effect=lambda name, *a, **kw: mock_og if name == "onnxruntime_genai" else __import__(name, *a, **kw),
         ):
             assert _has_onnxruntime_genai() is True
 
@@ -61,9 +54,7 @@ class TestHasOnnxruntimeGenai:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "onnxruntime_genai"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "onnxruntime_genai" else __import__(name, *a, **kw)
             ),
         ):
             assert _has_onnxruntime_genai() is False
@@ -85,9 +76,7 @@ class TestGetExecutionProviders:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "onnxruntime"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "onnxruntime" else __import__(name, *a, **kw)
             ),
         ):
             # Clear any cached module
@@ -653,9 +642,7 @@ class TestORTCatalog:
         from octomil.models.catalog import CATALOG
 
         # Check that at least some models have onnxruntime
-        ort_models = [
-            name for name, entry in CATALOG.items() if "onnxruntime" in entry.engines
-        ]
+        ort_models = [name for name, entry in CATALOG.items() if "onnxruntime" in entry.engines]
         assert len(ort_models) > 0
         assert "gemma-1b" in ort_models
         assert "llama-1b" in ort_models

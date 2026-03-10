@@ -51,9 +51,7 @@ class FederationTests(unittest.TestCase):
 
     def test_init_creates_new_federation(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "new_fed"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "new_fed"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -72,9 +70,7 @@ class FederationTests(unittest.TestCase):
 
     def test_invite(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -92,9 +88,7 @@ class FederationTests(unittest.TestCase):
             ("/models", (("org_id", "org_1"),)),
             {"models": [{"name": "my_model", "id": "model_456"}]},
         )
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -118,9 +112,7 @@ class FederationTests(unittest.TestCase):
 
     def test_train_unsupported_algorithm_raises(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -136,9 +128,7 @@ class FederationTests(unittest.TestCase):
             ("/models", (("org_id", "org_1"),)),
             {"models": [{"name": "my_model", "id": "model_456"}]},
         )
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -146,16 +136,12 @@ class FederationTests(unittest.TestCase):
 
         federation.train(model="my_model", rounds=3)
 
-        aggregate_calls = [
-            call for call in stub.calls if call[1] == "/training/aggregate"
-        ]
+        aggregate_calls = [call for call in stub.calls if call[1] == "/training/aggregate"]
         self.assertEqual(len(aggregate_calls), 3)
 
     def test_deploy_with_explicit_params(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -181,9 +167,7 @@ class FederationTests(unittest.TestCase):
 
     def test_deploy_uses_last_model_and_version(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -199,12 +183,8 @@ class FederationTests(unittest.TestCase):
 
     def test_deploy_fetches_latest_version_if_not_set(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
-        stub.set_response(
-            ("/models/model_1/versions/latest", None), {"version": "4.0.0"}
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
+        stub.set_response(("/models/model_1/versions/latest", None), {"version": "4.0.0"})
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -218,9 +198,7 @@ class FederationTests(unittest.TestCase):
 
     def test_deploy_raises_if_no_model_id(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -232,9 +210,7 @@ class FederationTests(unittest.TestCase):
 
     def test_deploy_raises_if_no_version(self):
         stub = _StubApi()
-        stub.set_response(
-            ("/federations", (("name", "default"), ("org_id", "org_1"))), []
-        )
+        stub.set_response(("/federations", (("name", "default"), ("org_id", "org_1"))), [])
         stub.set_response(("/models/model_1/versions/latest", None), {})
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:

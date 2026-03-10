@@ -8,7 +8,6 @@ from click.testing import CliRunner
 
 from octomil.cli import main
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -162,9 +161,7 @@ class TestFederationInvite:
         assert result.exit_code != 0
 
     @patch("octomil.commands.federation._get_client")
-    def test_invite_resolves_federation_by_id_fallback(
-        self, mock_get_client, monkeypatch
-    ):
+    def test_invite_resolves_federation_by_id_fallback(self, mock_get_client, monkeypatch):
         """When name lookup returns empty, the raw value is used as ID."""
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
         client = _mock_client()
