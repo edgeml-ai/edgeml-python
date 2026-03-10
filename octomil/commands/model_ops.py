@@ -565,6 +565,27 @@ def list_models_cmd(model_family: Optional[str]) -> None:
             click.echo()
 
 
+def _estimate_download_size(params_str: str, quant: str) -> str:
+    """Estimate download size from param count and default quant."""
+    # Parse param count: "3B" -> 3e9, "360M" -> 360e6, "3.8B" -> 3.8e9
+    s = params_str.upper().strip()
+    try:
+        if s.endswith("B"):
+            n = float(s[:-1]) * 1e9
+        elif s.endswith("M"):
+            n = float(s[:-1]) * 1e6
+        else:
+            return "?"
+    except ValueError:
+        return "?"
+    # Bits per param by quant level
+    bpp = {"4bit": 4.5, "8bit": 8.5, "fp16": 16.0}.get(quant, 4.5)
+    size_bytes = n * bpp / 8
+    if size_bytes >= 1e9:
+        return f"~{size_bytes / 1e9:.1f} GB"
+    return f"~{size_bytes / 1e6:.0f} MB"
+
+
 @click.command()
 def models() -> None:
     """List models available for local inference.
@@ -582,15 +603,22 @@ def models() -> None:
         cli_warn("No models available")
         return
 
-    rows: list[tuple[str, str]] = []
+    rows: list[tuple[str, str, str, str]] = []
     for name, entry in sorted(CATALOG.items()):
-        rows.append((name, entry.params))
+        size = _estimate_download_size(entry.params, entry.default_quant)
+        rows.append((name, entry.publisher, entry.params, size))
 
     name_w = max(len(r[0]) for r in rows) + 2
     name_w = max(name_w, 14)
-    cli_table_header(("MODEL", name_w), ("PARAMS", 8))
-    for model_name, params in rows:
-        click.echo("    " + click.style(model_name.ljust(name_w), fg="white", bold=True) + params)
+    cli_table_header(("MODEL", name_w), ("BY", 12), ("PARAMS", 8), ("SIZE", 8))
+    for model_name, publisher, params, size in rows:
+        click.echo(
+            "    "
+            + click.style(model_name.ljust(name_w), fg="white", bold=True)
+            + click.style(publisher.ljust(12), dim=True)
+            + params.ljust(8)
+            + size
+        )
     click.echo()
     click.echo(
         click.style("    Tip: ", dim=True)
