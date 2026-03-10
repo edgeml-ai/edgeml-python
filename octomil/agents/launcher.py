@@ -735,7 +735,7 @@ def launch_agent(
         if not is_serve_running(port=port):
             _ensure_engine_ready()
             if model is None:
-                model = _select_model_tui() if select else _auto_select_model()
+                model = _select_model_tui() if (select or agent.needs_local_model) else _auto_select_model()
             click.echo(f"Starting octomil serve {model}...")
             serve_proc = start_serve_background(model, port=port)
             click.echo(f"Model ready at {base_url}")
