@@ -126,8 +126,14 @@ def _get_api_key() -> str:
 def _require_api_key() -> str:
     key = _get_api_key()
     if not key:
-        click.echo("No API key found. Run `octomil login` first.", err=True)
-        sys.exit(1)
+        click.echo(click.style("  No API key found. Launching login...", fg="yellow"))
+        from octomil.commands.enterprise import _browser_login
+
+        _browser_login()
+        key = _get_api_key()
+        if not key:
+            click.echo("Login failed. Run `octomil login` manually.", err=True)
+            sys.exit(1)
     return key
 
 
