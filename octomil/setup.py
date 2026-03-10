@@ -486,6 +486,23 @@ def run_setup(*, force: bool = False, foreground: bool = False) -> SetupState:
         logger.warning("Model download failed (non-fatal): %s", e)
         _log(f"  Model download failed (will download on first use): {e}")
 
+    # Step 6: Register MCP server across AI coding tools
+    _log("Registering MCP server...")
+    try:
+        from octomil.mcp.registration import register_mcp_server
+
+        results = register_mcp_server(model=model_key)
+        registered = [r for r in results if r.success]
+        if registered:
+            names = ", ".join(r.display for r in registered)
+            _log(f"  MCP registered: {names}")
+        else:
+            _log("  MCP registration: no tools detected")
+    except Exception as e:
+        # MCP registration failure is non-fatal
+        logger.debug("MCP registration failed (non-fatal): %s", e)
+        _log(f"  MCP registration skipped: {e}")
+
     # Done
     state.phase = PHASE_COMPLETE
     state.finished_at = time.time()
