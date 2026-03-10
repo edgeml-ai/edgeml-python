@@ -712,9 +712,18 @@ def launch_agent(
                 env["OPENAI_API_KEY"] = "octomil-local"
 
     try:
+        cmd = shlex.split(agent.exec_cmd)
+        if model is not None and agent.model_flag:
+            cmd += shlex.split(agent.model_flag.format(model=model))
         click.echo(f"Launching {agent.display_name}...\n")
-        result = subprocess.run(shlex.split(agent.exec_cmd), env=env)
-    finally:
+        result = subprocess.run(cmd, env=env)
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        if serve_proc is not None:
+            serve_proc.terminate()
+        raise click.ClickException(str(exc))
+    else:
         if serve_proc is not None:
             serve_proc.terminate()
 
