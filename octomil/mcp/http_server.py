@@ -222,8 +222,28 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
     FastAPI
         Configured app with all routes, middleware, and agent card.
     """
+    import contextlib
+    from collections.abc import AsyncIterator
+
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+
+    from .server import create_mcp_server
+
     if config is None:
         config = HTTPServerConfig()
+
+    # Create MCP server + session manager before FastAPI so lifespan can manage it
+    mcp_server = create_mcp_server(model=config.model)
+    mcp_session_manager = StreamableHTTPSessionManager(
+        app=mcp_server._mcp_server,
+        json_response=False,
+        stateless=True,
+    )
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        async with mcp_session_manager.run():
+            yield
 
     app = FastAPI(
         title="Octomil Agent",
@@ -231,6 +251,7 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
     # CORS — permissive for agent-to-agent communication
@@ -959,5 +980,24 @@ def create_http_app(config: Optional[HTTPServerConfig] = None) -> FastAPI:
         paid, cloud = _x402_pricing(request)
         pref = _inference_preference(request)
         return _code_tool_response("general_task", messages, paid_amount=paid, cloud_price=cloud, preference=pref)
+
+    # ------------------------------------------------------------------
+    # MCP Streamable HTTP transport at /mcp
+    # ------------------------------------------------------------------
+
+    from starlette.routing import Route
+
+    class _MCPTransport:
+        """Thin ASGI wrapper so Starlette treats this as an app, not a request handler."""
+
+        def __init__(self, session_manager: StreamableHTTPSessionManager) -> None:
+            self._sm = session_manager
+
+        async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+            await self._sm.handle_request(scope, receive, send)
+
+    app.router.routes.append(
+        Route("/mcp", endpoint=_MCPTransport(mcp_session_manager), methods=["GET", "POST", "DELETE"])
+    )
 
     return app
