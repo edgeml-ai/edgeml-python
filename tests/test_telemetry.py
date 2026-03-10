@@ -13,7 +13,6 @@ from httpx import ASGITransport, AsyncClient
 
 from octomil.telemetry import TelemetryReporter, _generate_device_id, _v2_url
 
-
 # ---------------------------------------------------------------------------
 # _generate_device_id
 # ---------------------------------------------------------------------------
@@ -39,22 +38,13 @@ class TestGenerateDeviceId:
 
 class TestV2Url:
     def test_standard_api_base(self):
-        assert (
-            _v2_url("https://api.octomil.com/api/v1")
-            == "https://api.octomil.com/api/v2/telemetry/events"
-        )
+        assert _v2_url("https://api.octomil.com/api/v1") == "https://api.octomil.com/api/v2/telemetry/events"
 
     def test_trailing_slash(self):
-        assert (
-            _v2_url("https://api.octomil.com/api/v1/")
-            == "https://api.octomil.com/api/v2/telemetry/events"
-        )
+        assert _v2_url("https://api.octomil.com/api/v1/") == "https://api.octomil.com/api/v2/telemetry/events"
 
     def test_custom_host(self):
-        assert (
-            _v2_url("https://custom.host.com/api/v1")
-            == "https://custom.host.com/api/v2/telemetry/events"
-        )
+        assert _v2_url("https://custom.host.com/api/v1") == "https://custom.host.com/api/v2/telemetry/events"
 
     def test_no_v1_suffix_fallback(self):
         url = _v2_url("https://example.com/custom")
@@ -738,9 +728,7 @@ class TestTelemetryBestEffort:
 
         # Fill the queue (maxsize=1024)
         for i in range(1100):
-            reporter.report_inference_started(
-                model_id="m", version="v", session_id=f"s{i}"
-            )
+            reporter.report_inference_started(model_id="m", version="v", session_id=f"s{i}")
         # Should not raise
 
 
@@ -776,9 +764,7 @@ class TestOctomilInit:
         with patch.dict(os.environ, env, clear=False):
             with patch("httpx.Client") as MockClient:
                 mock_client_instance = MagicMock()
-                mock_client_instance.__enter__ = MagicMock(
-                    return_value=mock_client_instance
-                )
+                mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
                 mock_client_instance.__exit__ = MagicMock(return_value=False)
                 mock_client_instance.get.return_value = mock_response
                 MockClient.return_value = mock_client_instance
@@ -804,9 +790,7 @@ class TestOctomilInit:
 
         with patch("httpx.Client") as MockClient:
             mock_client_instance = MagicMock()
-            mock_client_instance.__enter__ = MagicMock(
-                return_value=mock_client_instance
-            )
+            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
             mock_client_instance.__exit__ = MagicMock(return_value=False)
             mock_client_instance.get.return_value = mock_response
             MockClient.return_value = mock_client_instance
@@ -835,9 +819,7 @@ class TestOctomilInit:
 
         with patch("httpx.Client") as MockClient:
             mock_client_instance = MagicMock()
-            mock_client_instance.__enter__ = MagicMock(
-                return_value=mock_client_instance
-            )
+            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
             mock_client_instance.__exit__ = MagicMock(return_value=False)
             mock_client_instance.get.return_value = mock_response
             MockClient.return_value = mock_client_instance
@@ -847,14 +829,13 @@ class TestOctomilInit:
 
     def test_init_unreachable_api_still_creates_reporter(self):
         """If the API is unreachable, init() should warn but still create a reporter."""
-        import octomil
         import httpx
+
+        import octomil
 
         with patch("httpx.Client") as MockClient:
             mock_client_instance = MagicMock()
-            mock_client_instance.__enter__ = MagicMock(
-                return_value=mock_client_instance
-            )
+            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
             mock_client_instance.__exit__ = MagicMock(return_value=False)
             mock_client_instance.get.side_effect = httpx.ConnectError("unreachable")
             MockClient.return_value = mock_client_instance
@@ -888,9 +869,7 @@ class TestGetReporter:
 
         with patch("httpx.Client") as MockClient:
             mock_client_instance = MagicMock()
-            mock_client_instance.__enter__ = MagicMock(
-                return_value=mock_client_instance
-            )
+            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
             mock_client_instance.__exit__ = MagicMock(return_value=False)
             mock_client_instance.get.return_value = mock_response
             MockClient.return_value = mock_client_instance

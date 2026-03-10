@@ -25,9 +25,7 @@ class TestMNNEngine:
             assert "Vulkan" in self.engine.display_name
 
     def test_display_name_windows(self) -> None:
-        with patch(
-            "octomil.engines.mnn_engine.platform.system", return_value="Windows"
-        ):
+        with patch("octomil.engines.mnn_engine.platform.system", return_value="Windows"):
             assert "CPU" in self.engine.display_name
 
     def test_priority(self) -> None:
@@ -89,13 +87,9 @@ class TestMNNEngine:
 
         with (
             patch("octomil.engines.mnn_engine._has_pymnn", return_value=True),
-            patch(
-                "octomil.engines.mnn_engine.MNNEngine._benchmark_python"
-            ) as mock_bench,
+            patch("octomil.engines.mnn_engine.MNNEngine._benchmark_python") as mock_bench,
         ):
-            mock_bench.return_value = MagicMock(
-                engine_name="mnn", tokens_per_second=50.0, ok=True
-            )
+            mock_bench.return_value = MagicMock(engine_name="mnn", tokens_per_second=50.0, ok=True)
             result = self.engine.benchmark("gemma-4b")
             assert result.ok
 
@@ -108,9 +102,7 @@ class TestMNNEngine:
             ),
             patch("octomil.engines.mnn_engine.MNNEngine._benchmark_cli") as mock_bench,
         ):
-            mock_bench.return_value = MagicMock(
-                engine_name="mnn", tokens_per_second=45.0, ok=True
-            )
+            mock_bench.return_value = MagicMock(engine_name="mnn", tokens_per_second=45.0, ok=True)
             result = self.engine.benchmark("gemma-4b")
             assert result.ok
 
@@ -153,9 +145,8 @@ class TestParseTpsFromOutput:
 
 class TestMNNRegistry:
     def test_engine_registered(self) -> None:
-        from octomil.engines.registry import EngineRegistry
-
         from octomil.engines.mnn_engine import MNNEngine
+        from octomil.engines.registry import EngineRegistry
 
         registry = EngineRegistry()
         engine = MNNEngine()

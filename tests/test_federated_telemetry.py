@@ -294,8 +294,8 @@ class TestTrainIfEligibleTelemetry:
         # Should have weight_upload failure from join_round AND
         # the cached fallback event from train_if_eligible
         cached_events = [
-            e for e in funnel_events
-            if e["name"] == "funnel.weight_upload"
-            and e["attributes"].get("error.type") == "upload_failed_cached"
+            e
+            for e in funnel_events
+            if e["name"] == "funnel.weight_upload" and e["attributes"].get("error.type") == "upload_failed_cached"
         ]
         assert len(cached_events) == 1

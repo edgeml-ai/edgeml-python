@@ -38,7 +38,6 @@ from octomil.secagg import (
     reconstruct_secret,
 )
 
-
 # ---------------------------------------------------------------------------
 # Stochastic quantization pipeline
 # ---------------------------------------------------------------------------
@@ -180,12 +179,8 @@ class ECKeyPairTests(unittest.TestCase):
         pk_21 = generate_pairwise_key(kp2.private_key_bytes, kp1.public_key_bytes)
         self.assertEqual(pk_12, pk_21)
 
-        ek_12 = generate_share_encryption_key(
-            kp1.private_key_bytes, kp2.public_key_bytes
-        )
-        ek_21 = generate_share_encryption_key(
-            kp2.private_key_bytes, kp1.public_key_bytes
-        )
+        ek_12 = generate_share_encryption_key(kp1.private_key_bytes, kp2.public_key_bytes)
+        ek_21 = generate_share_encryption_key(kp2.private_key_bytes, kp1.public_key_bytes)
         self.assertEqual(ek_12, ek_21)
 
         # Pairwise key != encryption key (different info strings).
@@ -264,9 +259,7 @@ class EncryptedShareTests(unittest.TestCase):
     def test_roundtrip(self):
         kp1 = ECKeyPair.generate()
         kp2 = ECKeyPair.generate()
-        shared_key = generate_share_encryption_key(
-            kp1.private_key_bytes, kp2.public_key_bytes
-        )
+        shared_key = generate_share_encryption_key(kp1.private_key_bytes, kp2.public_key_bytes)
 
         plaintext = b"hello world Shamir share data"
         encrypted = encrypt_share(plaintext, shared_key)
@@ -278,9 +271,7 @@ class EncryptedShareTests(unittest.TestCase):
         """Verify wire format: 12-byte nonce || ciphertext || 16-byte GCM tag."""
         kp1 = ECKeyPair.generate()
         kp2 = ECKeyPair.generate()
-        shared_key = generate_share_encryption_key(
-            kp1.private_key_bytes, kp2.public_key_bytes
-        )
+        shared_key = generate_share_encryption_key(kp1.private_key_bytes, kp2.public_key_bytes)
         plaintext = b"test data"
         encrypted = encrypt_share(plaintext, shared_key)
         # 12 (nonce) + len(plaintext) + 16 (GCM tag)
@@ -289,9 +280,7 @@ class EncryptedShareTests(unittest.TestCase):
     def test_encrypted_differs_from_plaintext(self):
         kp1 = ECKeyPair.generate()
         kp2 = ECKeyPair.generate()
-        shared_key = generate_share_encryption_key(
-            kp1.private_key_bytes, kp2.public_key_bytes
-        )
+        shared_key = generate_share_encryption_key(kp1.private_key_bytes, kp2.public_key_bytes)
         plaintext = b"test data"
         encrypted = encrypt_share(plaintext, shared_key)
         self.assertNotEqual(encrypted, plaintext)
@@ -302,12 +291,8 @@ class EncryptedShareTests(unittest.TestCase):
         kp1 = ECKeyPair.generate()
         kp2 = ECKeyPair.generate()
         kp3 = ECKeyPair.generate()
-        key_12 = generate_share_encryption_key(
-            kp1.private_key_bytes, kp2.public_key_bytes
-        )
-        key_13 = generate_share_encryption_key(
-            kp1.private_key_bytes, kp3.public_key_bytes
-        )
+        key_12 = generate_share_encryption_key(kp1.private_key_bytes, kp2.public_key_bytes)
+        key_13 = generate_share_encryption_key(kp1.private_key_bytes, kp3.public_key_bytes)
 
         encrypted = encrypt_share(b"secret", key_12)
         with self.assertRaises(InvalidTag):
@@ -317,12 +302,8 @@ class EncryptedShareTests(unittest.TestCase):
         """Key derived from either direction decrypts the same ciphertext."""
         kp1 = ECKeyPair.generate()
         kp2 = ECKeyPair.generate()
-        key_12 = generate_share_encryption_key(
-            kp1.private_key_bytes, kp2.public_key_bytes
-        )
-        key_21 = generate_share_encryption_key(
-            kp2.private_key_bytes, kp1.public_key_bytes
-        )
+        key_12 = generate_share_encryption_key(kp1.private_key_bytes, kp2.public_key_bytes)
+        key_21 = generate_share_encryption_key(kp2.private_key_bytes, kp1.public_key_bytes)
 
         encrypted = encrypt_share(b"symmetric test", key_12)
         decrypted = decrypt_share(encrypted, key_21)
@@ -378,10 +359,7 @@ class SecAggPlusShareKeysTests(unittest.TestCase):
 
     def test_encrypted_shares_generated(self):
         n = 3
-        clients = [
-            SecAggPlusClient(_make_config(n_clients=n, my_index=i + 1))
-            for i in range(n)
-        ]
+        clients = [SecAggPlusClient(_make_config(n_clients=n, my_index=i + 1)) for i in range(n)]
 
         # Exchange public keys.
         all_pks = {i + 1: clients[i].get_public_keys() for i in range(n)}
@@ -586,9 +564,7 @@ class EndToEndSecAggPlusTests(unittest.TestCase):
         ]
 
         # All three mask and upload.
-        masked_updates = [
-            c.mask_model_update(vals) for c, vals in zip(clients, updates)
-        ]
+        masked_updates = [c.mask_model_update(vals) for c, vals in zip(clients, updates)]
 
         # Sum all masked updates.
         n_elements = 2
@@ -669,9 +645,7 @@ class EndToEndSecAggPlusTests(unittest.TestCase):
 
         updates = [[float(i * 0.1)] * 3 for i in range(1, n + 1)]
 
-        masked_updates = [
-            c.mask_model_update(vals) for c, vals in zip(clients, updates)
-        ]
+        masked_updates = [c.mask_model_update(vals) for c, vals in zip(clients, updates)]
 
         n_elements = 3
         agg = [0] * n_elements
@@ -755,9 +729,7 @@ class UnmaskAPITests(unittest.TestCase):
         share_1_for_3, _ = ShamirShare.from_bytes(shares_1[2])
 
         reconstructed = reconstruct_secret([share_0_for_3, share_1_for_3])
-        expected = (
-            int.from_bytes(clients[2]._rd_seed, "big") % clients[2].config.field_size
-        )
+        expected = int.from_bytes(clients[2]._rd_seed, "big") % clients[2].config.field_size
         self.assertEqual(reconstructed, expected)
 
 
@@ -886,13 +858,13 @@ class BackwardCompatibilityTests(unittest.TestCase):
 
     def test_new_types_exported_from_package(self):
         from octomil import (
+            HKDF_INFO_PAIRWISE_MASK,
+            HKDF_INFO_SELF_MASK,
+            HKDF_INFO_SHARE_ENCRYPTION,
+            SECAGG_PLUS_MOD_RANGE,
             ECKeyPair,
             SecAggPlusClient,
             SecAggPlusConfig,
-            SECAGG_PLUS_MOD_RANGE,
-            HKDF_INFO_PAIRWISE_MASK,
-            HKDF_INFO_SHARE_ENCRYPTION,
-            HKDF_INFO_SELF_MASK,
         )
 
         self.assertIsNotNone(ECKeyPair)
@@ -921,10 +893,7 @@ class BackwardCompatibilityTests(unittest.TestCase):
 
 def _setup_clients(n: int, threshold: int = 2) -> list:
     """Create N SecAggPlusClients and run them through stages 1-2."""
-    clients = [
-        SecAggPlusClient(_make_config(n_clients=n, threshold=threshold, my_index=i + 1))
-        for i in range(n)
-    ]
+    clients = [SecAggPlusClient(_make_config(n_clients=n, threshold=threshold, my_index=i + 1)) for i in range(n)]
 
     # Stage 1: Collect all public keys.
     all_pks = {i + 1: clients[i].get_public_keys() for i in range(n)}

@@ -76,9 +76,7 @@ class TestCactusEngineModelSupport(unittest.TestCase):
         self.assertTrue(self.engine.supports_model("LiquidAI/LFM2-1.2B"))
 
     def test_supports_local_cactus_dir(self):
-        with patch("os.path.isdir", return_value=True), patch(
-            "os.path.isfile", return_value=True
-        ):
+        with patch("os.path.isdir", return_value=True), patch("os.path.isfile", return_value=True):
             self.assertTrue(self.engine.supports_model("/path/to/model"))
 
     def test_rejects_unknown_model(self):

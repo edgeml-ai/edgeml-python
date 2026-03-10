@@ -17,7 +17,6 @@ from click.testing import CliRunner
 from octomil.cli import main
 from octomil.cli_helpers import _save_credentials
 
-
 # ---------------------------------------------------------------------------
 # State token generation
 # ---------------------------------------------------------------------------
@@ -134,9 +133,7 @@ class TestCredentialLoading:
         monkeypatch.delenv("OCTOMIL_API_KEY", raising=False)
         cred_dir = tmp_path / ".octomil"
         cred_dir.mkdir()
-        (cred_dir / "credentials").write_text(
-            json.dumps({"api_key": "edg_json_key", "org": "TestOrg"})
-        )
+        (cred_dir / "credentials").write_text(json.dumps({"api_key": "edg_json_key", "org": "TestOrg"}))
         monkeypatch.setattr(
             "octomil.cli_helpers.os.path.expanduser",
             lambda x: str(cred_dir / "credentials"),
@@ -280,10 +277,7 @@ class TestStateMismatch:
 
         try:
             # Send callback with wrong state
-            url = (
-                f"http://127.0.0.1:{port}"
-                f"?key=edg_test&state={wrong_state}&org=TestOrg"
-            )
+            url = f"http://127.0.0.1:{port}?key=edg_test&state={wrong_state}&org=TestOrg"
             req = urllib.request.Request(url)
             try:
                 urllib.request.urlopen(req)
@@ -329,9 +323,7 @@ class TestCallbackServer:
             state = params["state"][0]
 
             # Simulate dashboard redirecting back to the callback URL
-            redirect_url = (
-                f"{callback}?key=edg_browser_key&state={state}&org=BrowserOrg"
-            )
+            redirect_url = f"{callback}?key=edg_browser_key&state={state}&org=BrowserOrg"
 
             def do_callback():
                 # Small delay to let the server start

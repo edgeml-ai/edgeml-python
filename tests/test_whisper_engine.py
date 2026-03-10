@@ -10,15 +10,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from octomil.engines.whisper_engine import (
-    WhisperCppEngine,
-    _WhisperBackend,
     _WHISPER_MODELS,
+    WhisperCppEngine,
     _generate_silent_wav,
     _get_whisper_version,
     _has_pywhispercpp,
+    _WhisperBackend,
     is_whisper_model,
 )
-
 
 # ---------------------------------------------------------------------------
 # Detection helpers
@@ -30,9 +29,7 @@ class TestHasPywhispercpp:
         mock_pw = MagicMock()
         with patch(
             "builtins.__import__",
-            side_effect=lambda name, *a, **kw: (
-                mock_pw if name == "pywhispercpp" else __import__(name, *a, **kw)
-            ),
+            side_effect=lambda name, *a, **kw: mock_pw if name == "pywhispercpp" else __import__(name, *a, **kw),
         ):
             assert _has_pywhispercpp() is True
 
@@ -40,9 +37,7 @@ class TestHasPywhispercpp:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "pywhispercpp"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "pywhispercpp" else __import__(name, *a, **kw)
             ),
         ):
             assert _has_pywhispercpp() is False
@@ -66,9 +61,7 @@ class TestGetWhisperVersion:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "pywhispercpp"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "pywhispercpp" else __import__(name, *a, **kw)
             ),
         ):
             saved = sys.modules.pop("pywhispercpp", None)
@@ -128,15 +121,11 @@ class TestWhisperCppEngine:
         assert self.engine.priority == 35
 
     def test_detect_with_pywhispercpp(self) -> None:
-        with patch(
-            "octomil.engines.whisper_engine._has_pywhispercpp", return_value=True
-        ):
+        with patch("octomil.engines.whisper_engine._has_pywhispercpp", return_value=True):
             assert self.engine.detect() is True
 
     def test_detect_without_pywhispercpp(self) -> None:
-        with patch(
-            "octomil.engines.whisper_engine._has_pywhispercpp", return_value=False
-        ):
+        with patch("octomil.engines.whisper_engine._has_pywhispercpp", return_value=False):
             assert self.engine.detect() is False
 
     def test_detect_info_with_version(self) -> None:
@@ -166,17 +155,13 @@ class TestWhisperCppEngine:
         assert self.engine.supports_model("phi-mini") is False
 
     def test_benchmark_unavailable(self) -> None:
-        with patch(
-            "octomil.engines.whisper_engine._has_pywhispercpp", return_value=False
-        ):
+        with patch("octomil.engines.whisper_engine._has_pywhispercpp", return_value=False):
             result = self.engine.benchmark("whisper-base")
             assert result.ok is False
             assert "not available" in result.error
 
     def test_benchmark_unsupported_model(self) -> None:
-        with patch(
-            "octomil.engines.whisper_engine._has_pywhispercpp", return_value=True
-        ):
+        with patch("octomil.engines.whisper_engine._has_pywhispercpp", return_value=True):
             result = self.engine.benchmark("gemma-1b")
             assert result.ok is False
             assert "Unsupported" in result.error
@@ -525,9 +510,7 @@ class TestWhisperCatalog:
     def test_whisper_models_in_catalog(self) -> None:
         from octomil.models.catalog import CATALOG
 
-        whisper_models = [
-            name for name, entry in CATALOG.items() if "whisper.cpp" in entry.engines
-        ]
+        whisper_models = [name for name, entry in CATALOG.items() if "whisper.cpp" in entry.engines]
         assert len(whisper_models) == 5
         assert "whisper-tiny" in whisper_models
         assert "whisper-base" in whisper_models

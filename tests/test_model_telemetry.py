@@ -11,7 +11,6 @@ import pytest
 from octomil.model import Model, ModelMetadata, Prediction
 from octomil.serve import GenerationChunk, GenerationRequest, InferenceMetrics
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -146,9 +145,7 @@ class TestPredictStreamTelemetry:
             GenerationChunk(text=" world", token_count=1),
             GenerationChunk(text="", finish_reason="stop"),
         ]
-        backend.generate_stream = MagicMock(
-            return_value=_async_chunks(*chunks)
-        )
+        backend.generate_stream = MagicMock(return_value=_async_chunks(*chunks))
 
         meta = _make_metadata()
         model = Model(meta, _make_engine(backend), _reporter=reporter)
@@ -186,9 +183,7 @@ class TestPredictStreamTelemetry:
         reporter = MagicMock()
         backend = MagicMock()
         chunks = [GenerationChunk(text="partial")]
-        backend.generate_stream = MagicMock(
-            return_value=_async_chunks_with_error(*chunks)
-        )
+        backend.generate_stream = MagicMock(return_value=_async_chunks_with_error(*chunks))
 
         model = Model(_make_metadata(), _make_engine(backend), _reporter=reporter)
 
@@ -224,9 +219,7 @@ class TestNoReporter:
     def test_predict_stream_works_without_reporter(self, _mock_get):
         backend = MagicMock()
         chunks = [GenerationChunk(text="ok", finish_reason="stop")]
-        backend.generate_stream = MagicMock(
-            return_value=_async_chunks(*chunks)
-        )
+        backend.generate_stream = MagicMock(return_value=_async_chunks(*chunks))
 
         model = Model(_make_metadata(), _make_engine(backend))
 
@@ -267,9 +260,7 @@ class TestReporterExceptionSwallowed:
 
         backend = MagicMock()
         chunks = [GenerationChunk(text="ok", finish_reason="stop")]
-        backend.generate_stream = MagicMock(
-            return_value=_async_chunks(*chunks)
-        )
+        backend.generate_stream = MagicMock(return_value=_async_chunks(*chunks))
 
         model = Model(_make_metadata(), _make_engine(backend), _reporter=reporter)
 
@@ -308,9 +299,7 @@ class TestGlobalReporterFallback:
         backend = MagicMock()
         backend.generate.return_value = ("ok", _make_metrics())
 
-        model = Model(
-            _make_metadata(), _make_engine(backend), _reporter=override_reporter
-        )
+        model = Model(_make_metadata(), _make_engine(backend), _reporter=override_reporter)
 
         with patch("octomil.get_reporter", return_value=global_reporter):
             model.predict(_make_request())

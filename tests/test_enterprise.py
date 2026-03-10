@@ -17,7 +17,6 @@ from octomil.enterprise import (
     save_config,
 )
 
-
 # ---------------------------------------------------------------------------
 # Compliance presets
 # ---------------------------------------------------------------------------
@@ -155,7 +154,7 @@ class TestEnterpriseClient:
         resp.json.return_value = {"hipaa_mode": True}
         mock_http.put.return_value = resp
 
-        result = client.set_compliance("org-1", "hipaa")
+        client.set_compliance("org-1", "hipaa")
         # Should have called put twice: once for policy profile, once for settings
         assert mock_http.put.call_count == 2
 
@@ -201,9 +200,7 @@ class TestEnterpriseClient:
         }
         mock_http.post.return_value = resp
 
-        result = client.create_api_key(
-            "org-1", "deploy-key", scopes={"devices": "write"}
-        )
+        result = client.create_api_key("org-1", "deploy-key", scopes={"devices": "write"})
         assert "api_key" in result
         assert result["name"] == "deploy-key"
 
@@ -327,9 +324,7 @@ class TestInitCommand:
 
         assert result.exit_code == 0
         assert "acme-corp" in result.output
-        mock_instance.create_org.assert_called_once_with(
-            "Acme Corp", region="us", workspace_type="enterprise"
-        )
+        mock_instance.create_org.assert_called_once_with("Acme Corp", region="us", workspace_type="enterprise")
         mock_save.assert_called_once()
         saved_config = mock_save.call_args[0][0]
         assert saved_config["org_id"] == "acme-corp"
@@ -345,9 +340,7 @@ class TestInitCommand:
         mock_instance.set_compliance.return_value = {}
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["init", "Acme Corp", "--compliance", "hipaa", "--region", "eu"]
-        )
+        result = runner.invoke(main, ["init", "Acme Corp", "--compliance", "hipaa", "--region", "eu"])
 
         assert result.exit_code == 0
         assert "HIPAA" in result.output
@@ -396,15 +389,11 @@ class TestTeamCommands:
         mock_get_client.return_value = mock_client
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["team", "add", "alice@acme.com", "--role", "admin"]
-        )
+        result = runner.invoke(main, ["team", "add", "alice@acme.com", "--role", "admin"])
         assert result.exit_code == 0
         assert "alice@acme.com" in result.output
         assert "admin" in result.output
-        mock_client.invite_member.assert_called_once_with(
-            "org-123", "alice@acme.com", role="admin", name=None
-        )
+        mock_client.invite_member.assert_called_once_with("org-123", "alice@acme.com", role="admin", name=None)
 
     @patch("octomil.commands.enterprise._require_org_id", return_value="org-123")
     @patch("octomil.commands.enterprise._get_enterprise_client")
@@ -445,9 +434,7 @@ class TestTeamCommands:
         mock_get_client.return_value = mock_client
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["team", "set-policy", "--require-mfa", "--session-hours", "8"]
-        )
+        result = runner.invoke(main, ["team", "set-policy", "--require-mfa", "--session-hours", "8"])
         assert result.exit_code == 0
         mock_client.update_settings.assert_called_once_with(
             "org-123",

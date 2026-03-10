@@ -44,33 +44,25 @@ class TestExecuTorchEngine:
         assert engine.delegate == "coreml"
 
     def test_detect_with_executorch(self) -> None:
-        with patch(
-            "octomil.engines.executorch_engine._has_executorch", return_value=True
-        ):
+        with patch("octomil.engines.executorch_engine._has_executorch", return_value=True):
             assert self.engine.detect() is True
 
     def test_detect_without_executorch(self) -> None:
-        with patch(
-            "octomil.engines.executorch_engine._has_executorch", return_value=False
-        ):
+        with patch("octomil.engines.executorch_engine._has_executorch", return_value=False):
             assert self.engine.detect() is False
 
     def test_detect_info_available(self) -> None:
         mock_et = MagicMock()
         mock_et.__version__ = "0.4.0"
         with (
-            patch(
-                "octomil.engines.executorch_engine._has_executorch", return_value=True
-            ),
+            patch("octomil.engines.executorch_engine._has_executorch", return_value=True),
             patch.dict("sys.modules", {"executorch": mock_et}),
         ):
             info = self.engine.detect_info()
             assert "delegate: xnnpack" in info
 
     def test_detect_info_unavailable(self) -> None:
-        with patch(
-            "octomil.engines.executorch_engine._has_executorch", return_value=False
-        ):
+        with patch("octomil.engines.executorch_engine._has_executorch", return_value=False):
             assert self.engine.detect_info() == ""
 
     def test_supports_catalog_model(self) -> None:
@@ -87,9 +79,7 @@ class TestExecuTorchEngine:
         assert self.engine.supports_model("unknown-model") is False
 
     def test_benchmark_error_when_unavailable(self) -> None:
-        with patch(
-            "octomil.engines.executorch_engine._has_executorch", return_value=False
-        ):
+        with patch("octomil.engines.executorch_engine._has_executorch", return_value=False):
             # benchmark will try to import and fail
             result = self.engine.benchmark("llama-3b")
             assert result.ok is False
@@ -103,9 +93,7 @@ class TestExecuTorchEngine:
         mock_runtime.load_program.return_value = mock_program
 
         with (
-            patch(
-                "octomil.engines.executorch_engine._has_executorch", return_value=True
-            ),
+            patch("octomil.engines.executorch_engine._has_executorch", return_value=True),
             patch(
                 "octomil.engines.executorch_engine.ExecuTorchEngine._resolve_model_path",
                 return_value="/tmp/model.pte",
@@ -134,9 +122,7 @@ class TestExecuTorchEngine:
 
 class TestGetBestDelegate:
     def test_macos_prefers_coreml(self) -> None:
-        with patch(
-            "octomil.engines.executorch_engine.platform.system", return_value="Darwin"
-        ):
+        with patch("octomil.engines.executorch_engine.platform.system", return_value="Darwin"):
             assert _get_best_delegate() == "coreml"
 
     def test_linux_default_xnnpack(self) -> None:
@@ -160,9 +146,7 @@ class TestGetBestDelegate:
             assert _get_best_delegate() == "qnn"
 
     def test_windows_defaults_xnnpack(self) -> None:
-        with patch(
-            "octomil.engines.executorch_engine.platform.system", return_value="Windows"
-        ):
+        with patch("octomil.engines.executorch_engine.platform.system", return_value="Windows"):
             assert _get_best_delegate() == "xnnpack"
 
 
@@ -172,9 +156,7 @@ class TestHasExecutorch:
             # _has_executorch does a real import, so we need to patch differently
             with patch(
                 "builtins.__import__",
-                side_effect=lambda name, *a, **kw: (
-                    MagicMock() if name == "executorch" else __import__(name, *a, **kw)
-                ),
+                side_effect=lambda name, *a, **kw: MagicMock() if name == "executorch" else __import__(name, *a, **kw),
             ):
                 assert _has_executorch() is True
 
@@ -183,9 +165,7 @@ class TestHasExecutorch:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "executorch"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "executorch" else __import__(name, *a, **kw)
             ),
         ):
             assert _has_executorch() is False

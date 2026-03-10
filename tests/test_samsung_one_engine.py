@@ -8,8 +8,8 @@ import pytest
 
 from octomil.engines.samsung_one_engine import (
     SamsungOneEngine,
-    _has_onert,
     _get_onert_version,
+    _has_onert,
     _select_backend,
 )
 
@@ -86,9 +86,7 @@ class TestSamsungOneEngine:
         assert self.engine.supports_model("model.tflite") is True
 
     def test_supports_nnpackage_directory(self) -> None:
-        with patch("os.path.isdir", return_value=True), patch(
-            "os.path.isfile", return_value=True
-        ):
+        with patch("os.path.isdir", return_value=True), patch("os.path.isfile", return_value=True):
             assert self.engine.supports_model("/path/to/my_model") is True
 
     def test_does_not_support_unknown(self) -> None:
@@ -175,10 +173,7 @@ class TestSamsungOneEngine:
 
     def test_resolve_model_path_exists(self) -> None:
         with patch("os.path.exists", return_value=True):
-            assert (
-                self.engine._resolve_model_path("/tmp/m.nnpackage")
-                == "/tmp/m.nnpackage"
-            )
+            assert self.engine._resolve_model_path("/tmp/m.nnpackage") == "/tmp/m.nnpackage"
 
     def test_resolve_model_path_not_found(self) -> None:
         with patch("os.path.exists", return_value=False):
@@ -208,9 +203,7 @@ class TestHasOnert:
     def test_available(self) -> None:
         with patch(
             "builtins.__import__",
-            side_effect=lambda name, *a, **kw: (
-                MagicMock() if name == "onert" else __import__(name, *a, **kw)
-            ),
+            side_effect=lambda name, *a, **kw: MagicMock() if name == "onert" else __import__(name, *a, **kw),
         ):
             assert _has_onert() is True
 
@@ -218,9 +211,7 @@ class TestHasOnert:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "onert"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "onert" else __import__(name, *a, **kw)
             ),
         ):
             assert _has_onert() is False
@@ -232,9 +223,7 @@ class TestGetOnertVersion:
         mock_onert.__version__ = "1.31.0"
         with patch(
             "builtins.__import__",
-            side_effect=lambda name, *a, **kw: (
-                mock_onert if name == "onert" else __import__(name, *a, **kw)
-            ),
+            side_effect=lambda name, *a, **kw: mock_onert if name == "onert" else __import__(name, *a, **kw),
         ):
             assert _get_onert_version() == "1.31.0"
 
@@ -242,9 +231,7 @@ class TestGetOnertVersion:
         with patch(
             "builtins.__import__",
             side_effect=lambda name, *a, **kw: (
-                (_ for _ in ()).throw(ImportError())
-                if name == "onert"
-                else __import__(name, *a, **kw)
+                (_ for _ in ()).throw(ImportError()) if name == "onert" else __import__(name, *a, **kw)
             ),
         ):
             assert _get_onert_version() is None

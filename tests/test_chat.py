@@ -13,7 +13,6 @@ from click.testing import CliRunner
 from octomil.chat import run_chat_repl, stream_chat
 from octomil.cli import main
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -134,11 +133,7 @@ class TestStreamChat:
 
         mock_client_cls.return_value = mock_client
 
-        result = list(
-            stream_chat(
-                "http://localhost:8080", "m", [{"role": "user", "content": "x"}]
-            )
-        )
+        result = list(stream_chat("http://localhost:8080", "m", [{"role": "user", "content": "x"}]))
         assert len(result) == 1
 
     @patch("octomil.chat.httpx.Client")
@@ -164,11 +159,7 @@ class TestStreamChat:
 
         mock_client_cls.return_value = mock_client
 
-        result = list(
-            stream_chat(
-                "http://localhost:8080", "m", [{"role": "user", "content": "x"}]
-            )
-        )
+        result = list(stream_chat("http://localhost:8080", "m", [{"role": "user", "content": "x"}]))
         assert len(result) == 1
 
 

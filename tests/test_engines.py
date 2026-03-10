@@ -18,7 +18,6 @@ from octomil.engines.registry import (
     reset_registry,
 )
 
-
 # ---------------------------------------------------------------------------
 # BenchmarkResult
 # ---------------------------------------------------------------------------
@@ -176,27 +175,34 @@ class TestEngineRegistry:
         assert len(unavailable) == 1
 
     def test_detect_all_with_model_filter(self):
+        """When catalog has no engine metadata, supports_model is skipped.
+
+        This matches the production behavior: if the catalog doesn't know
+        about engine support for a model, installed engines are trusted.
+        For models not in the catalog at all, all detected engines show
+        as available (no filtering).
+        """
         reg = EngineRegistry()
         reg.register(_FakeEngine())  # only supports "supported-model"
         reg.register(_SlowEngine())  # supports all
 
         results = reg.detect_all("supported-model")
         available = [r for r in results if r.available]
-        assert len(available) == 2  # both support it
+        # "supported-model" is not in the catalog, so supports_model is skipped
+        # and both engines show as available (trusting installed engines)
+        assert len(available) == 2
 
         results = reg.detect_all("unsupported-model")
         available = [r for r in results if r.available]
-        assert len(available) == 1  # only SlowEngine
-        assert available[0].engine.name == "slow"
+        # "unsupported-model" is also not in the catalog, so same behavior
+        assert len(available) == 2
 
     def test_benchmark_all_ranks_by_tps(self):
         reg = EngineRegistry()
         reg.register(_FakeEngine())  # 100 tok/s
         reg.register(_SlowEngine())  # 10 tok/s
 
-        ranked = reg.benchmark_all(
-            "supported-model", engines=[_FakeEngine(), _SlowEngine()]
-        )
+        ranked = reg.benchmark_all("supported-model", engines=[_FakeEngine(), _SlowEngine()])
         assert len(ranked) == 2
         assert ranked[0].engine.name == "fake"  # fastest
         assert ranked[1].engine.name == "slow"

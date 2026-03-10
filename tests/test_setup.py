@@ -759,8 +759,11 @@ class TestOpenClawConfigureLocal:
         result = _configure_openclaw("http://localhost:8080/v1", "qwen-coder-7b")
 
         assert result == {}
-        assert mock_run.call_count == 4
+        # _configure_openclaw now runs 2 commands:
+        # 1. openclaw config set models.providers.octomil <json>
+        # 2. openclaw config set agents.defaults.model.primary octomil/<model>
+        assert mock_run.call_count == 2
         # Check that openclaw config set was called with correct provider
-        calls = [c[0][0] for c in mock_run.call_args_list]
-        assert any("models.providers.octomil.baseUrl" in cmd for cmd in calls)
+        calls = [str(c) for c in mock_run.call_args_list]
+        assert any("models.providers.octomil" in cmd for cmd in calls)
         assert any("octomil/qwen-coder-7b" in cmd for cmd in calls)

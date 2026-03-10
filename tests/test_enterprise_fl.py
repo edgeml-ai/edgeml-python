@@ -16,19 +16,18 @@ import unittest
 from octomil.api_client import OctomilClientError
 from octomil.federated_client import (
     FederatedClient,
-    apply_filters,
     _apply_fedprox_correction,
+    apply_filters,
 )
 from octomil.secagg import (
+    DEFAULT_FIELD_SIZE,
     SecAggClient,
     SecAggConfig,
-    reconstruct_secret,
-    model_bytes_to_field_elements,
-    field_elements_to_model_bytes,
     _derive_mask_elements,
-    DEFAULT_FIELD_SIZE,
+    field_elements_to_model_bytes,
+    model_bytes_to_field_elements,
+    reconstruct_secret,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -248,9 +247,7 @@ class SecAggRoundIntegrationTests(unittest.TestCase):
         client_secagg = _make_client(stub=stub2, secure_aggregation=True)
 
         client_secagg.join_round("r1", local_train_fn)
-        secagg_post = [c for c in stub2.calls if c[0] == "post" and "weights" in c[1]][
-            -1
-        ]
+        secagg_post = [c for c in stub2.calls if c[0] == "post" and "weights" in c[1]][-1]
         secagg_weights = secagg_post[2]["weights_data"]
 
         # Masked data should differ from plain data
@@ -336,15 +333,11 @@ class SecAggSessionTests(unittest.TestCase):
 
         # Client 2 (index 1) drops out.
         dropped_idx = 1
-        dropped_seed_int = (
-            int.from_bytes(clients[dropped_idx]._seed, "big") % field_size
-        )
+        dropped_seed_int = int.from_bytes(clients[dropped_idx]._seed, "big") % field_size
 
         # Remaining clients contribute their share for the dropped client.
         contributing = [i for i in range(n_clients) if i != dropped_idx]
-        shares_for_dropped = [
-            all_shares[dropped_idx][i] for i in contributing[:threshold]
-        ]
+        shares_for_dropped = [all_shares[dropped_idx][i] for i in contributing[:threshold]]
 
         reconstructed = reconstruct_secret(shares_for_dropped)
         self.assertEqual(reconstructed, dropped_seed_int)
@@ -612,10 +605,7 @@ class DittoIntegrationTests(unittest.TestCase):
 
         # personal = p - 0.99 * (p - g) = p * 0.01 + g * 0.99
         for i in range(3):
-            expected = (
-                personal_model["w"][i].item() * 0.01
-                + global_model["w"][i].item() * 0.99
-            )
+            expected = personal_model["w"][i].item() * 0.01 + global_model["w"][i].item() * 0.99
             self.assertAlmostEqual(personal_updated["w"][i].item(), expected, places=4)
 
     def test_ditto_mismatched_keys(self):
@@ -666,10 +656,7 @@ class DittoIntegrationTests(unittest.TestCase):
 
         def local_train_fn(base_state):
             return (
-                {
-                    k: v + 0.5 if torch.is_tensor(v) else v
-                    for k, v in base_state.items()
-                },
+                {k: v + 0.5 if torch.is_tensor(v) else v for k, v in base_state.items()},
                 10,
                 {},
             )
@@ -800,9 +787,7 @@ class FederationAlgorithmTests(unittest.TestCase):
             return {}
 
         stub.post = stub_post
-        stub._responses[("/models", (("org_id", "org_1"),))] = {
-            "models": [{"name": "m", "id": "m1"}]
-        }
+        stub._responses[("/models", (("org_id", "org_1"),))] = {"models": [{"name": "m", "id": "m1"}]}
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -853,9 +838,7 @@ class FederationAlgorithmTests(unittest.TestCase):
             return {}
 
         stub.post = stub_post
-        stub._responses[("/models", (("org_id", "org_1"),))] = {
-            "models": [{"name": "m", "id": "m1"}]
-        }
+        stub._responses[("/models", (("org_id", "org_1"),))] = {"models": [{"name": "m", "id": "m1"}]}
 
         with unittest.mock.patch("octomil.federation._ApiClient") as mock_api:
             mock_api.return_value = stub
@@ -992,9 +975,7 @@ class FilterPipelineAdversarialTests(unittest.TestCase):
             self.skipTest("torch not installed")
 
         delta = {"w": torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0])}
-        result = apply_filters(
-            delta, [{"type": "sparsification", "top_k_percent": 100.0}]
-        )
+        result = apply_filters(delta, [{"type": "sparsification", "top_k_percent": 100.0}])
 
         non_zero = (result["w"] != 0).sum().item()
         self.assertEqual(non_zero, 5)
@@ -1243,9 +1224,7 @@ class EndToEndEnterpriseTests(unittest.TestCase):
         all_shares = [c.generate_key_shares() for c in clients]
 
         # Phase 2: mask updates
-        masked_updates = [
-            c.mask_model_update(raw) for c, raw in zip(clients, raw_updates)
-        ]
+        masked_updates = [c.mask_model_update(raw) for c, raw in zip(clients, raw_updates)]
 
         # Client 4 (index 3) drops out after masking
         dropped_idx = 3
@@ -1271,9 +1250,7 @@ class EndToEndEnterpriseTests(unittest.TestCase):
                 agg_masked[j] = (agg_masked[j] - mask[j]) % field_size
 
         # Server: reconstruct dropped client's mask and subtract
-        shares_for_dropped = [
-            all_shares[dropped_idx][i] for i in active_indices[:threshold]
-        ]
+        shares_for_dropped = [all_shares[dropped_idx][i] for i in active_indices[:threshold]]
         dropped_seed_int = reconstruct_secret(shares_for_dropped)
         dropped_seed = clients[dropped_idx]._seed
         expected_seed_int = int.from_bytes(dropped_seed, "big") % field_size

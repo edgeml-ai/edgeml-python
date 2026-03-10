@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from octomil.cache import (
@@ -12,7 +11,6 @@ from octomil.cache import (
     _estimate_size_bytes,
     _hash_token_prefix,
 )
-
 
 # ---------------------------------------------------------------------------
 # Token hashing

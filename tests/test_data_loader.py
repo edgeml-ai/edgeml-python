@@ -1,17 +1,17 @@
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 from unittest.mock import patch
 
 from octomil.data_loader import (
     DataLoadError,
-    load_data,
-    validate_target,
     _detect_format,
-    _get_s3_options,
     _get_azure_options,
+    _get_s3_options,
     _get_storage_options,
+    load_data,
     prepare_data,
+    validate_target,
 )
 
 
@@ -150,9 +150,7 @@ class DataLoaderTests(unittest.TestCase):
         except ImportError:
             self.skipTest("pandas not installed")
 
-        df = pd.DataFrame(
-            {"feature1": [1, 2, 3, 4, 5, 6], "target": [0, 1, 2, 0, 1, 2]}
-        )
+        df = pd.DataFrame({"feature1": [1, 2, 3, 4, 5, 6], "target": [0, 1, 2, 0, 1, 2]})
         result = validate_target(df, "target", output_type="multiclass", output_dim=3)
         self.assertIn("target", result.columns)
         self.assertEqual(len(result["target"].unique()), 3)
@@ -179,9 +177,7 @@ class DataLoaderTests(unittest.TestCase):
         except ImportError:
             self.skipTest("pandas not installed")
 
-        df = pd.DataFrame(
-            {"feature1": [1, 2, 3, 4], "target": ["cat", "dog", "cat", "dog"]}
-        )
+        df = pd.DataFrame({"feature1": [1, 2, 3, 4], "target": ["cat", "dog", "cat", "dog"]})
         result = validate_target(df, "target", output_type="binary")
         # Should be encoded to numeric
         self.assertIn(result["target"].dtype, [int, float, "int64", "float64"])
@@ -274,9 +270,7 @@ class DataLoaderTests(unittest.TestCase):
         result = _get_azure_options()
         self.assertIsNone(result)
 
-    @patch(
-        "octomil.data_loader._get_s3_options", return_value={"key": "k", "secret": "s"}
-    )
+    @patch("octomil.data_loader._get_s3_options", return_value={"key": "k", "secret": "s"})
     def test_get_storage_options_s3_path(self, mock_s3):
         result = _get_storage_options("s3://my-bucket/data.csv")
         mock_s3.assert_called_once()
@@ -286,9 +280,7 @@ class DataLoaderTests(unittest.TestCase):
         result = _get_storage_options("gs://my-bucket/data.csv")
         self.assertIsNone(result)
 
-    @patch(
-        "octomil.data_loader._get_azure_options", return_value={"account_name": "acct"}
-    )
+    @patch("octomil.data_loader._get_azure_options", return_value={"account_name": "acct"})
     def test_get_storage_options_azure_path(self, mock_azure):
         result_az = _get_storage_options("az://container/data.csv")
         self.assertEqual(result_az, {"account_name": "acct"})
@@ -325,9 +317,7 @@ class DataLoaderTests(unittest.TestCase):
             }
         )
         architecture = {"output_type": "binary", "output_dim": 1}
-        result_df, feature_cols, sample_count = prepare_data(
-            df, target_col="label", model_architecture=architecture
-        )
+        result_df, feature_cols, sample_count = prepare_data(df, target_col="label", model_architecture=architecture)
         self.assertEqual(sample_count, 4)
         self.assertEqual(sorted(feature_cols), ["feat1", "feat2"])
         self.assertIn("label", result_df.columns)
@@ -380,9 +370,7 @@ class DataLoaderTests(unittest.TestCase):
             }
         )
         architecture = {"output_type": "multiclass", "output_dim": 3}
-        result_df, feature_cols, sample_count = prepare_data(
-            df, target_col="target", model_architecture=architecture
-        )
+        result_df, feature_cols, sample_count = prepare_data(df, target_col="target", model_architecture=architecture)
         self.assertEqual(sample_count, 6)
         self.assertEqual(sorted(feature_cols), ["feat1", "feat2"])
         self.assertEqual(len(result_df["target"].unique()), 3)

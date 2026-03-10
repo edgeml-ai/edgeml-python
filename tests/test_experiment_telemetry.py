@@ -19,7 +19,6 @@ import pytest
 from octomil.model import Model, ModelMetadata, Prediction
 from octomil.serve import GenerationChunk, GenerationRequest, InferenceMetrics
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -33,9 +32,7 @@ def _make_metadata(
     version: str = "1.0.0",
     experiment_id: str | None = None,
 ) -> ModelMetadata:
-    return ModelMetadata(
-        model_id=model_id, name=name, version=version, experiment_id=experiment_id
-    )
+    return ModelMetadata(model_id=model_id, name=name, version=version, experiment_id=experiment_id)
 
 
 def _make_engine(backend: MagicMock | None = None) -> MagicMock:
@@ -235,16 +232,10 @@ class TestPredictExperimentMetrics:
             assert call.kwargs["experiment_id"] == "exp_456"
 
         # duration_ms and ttfc_ms values should be positive
-        duration_call = next(
-            c
-            for c in metric_calls
-            if c.kwargs["metric_name"] == "inference.duration_ms"
-        )
+        duration_call = next(c for c in metric_calls if c.kwargs["metric_name"] == "inference.duration_ms")
         assert duration_call.kwargs["metric_value"] > 0
 
-        ttfc_call = next(
-            c for c in metric_calls if c.kwargs["metric_name"] == "inference.ttfc_ms"
-        )
+        ttfc_call = next(c for c in metric_calls if c.kwargs["metric_name"] == "inference.ttfc_ms")
         assert ttfc_call.kwargs["metric_value"] == 50.0
 
     def test_predict_skips_experiment_metrics_when_no_experiment_id(self):
@@ -377,7 +368,5 @@ class TestModelMetadataExperimentId:
         assert meta.experiment_id is None
 
     def test_experiment_id_can_be_set(self):
-        meta = ModelMetadata(
-            model_id="m1", name="n1", version="1.0", experiment_id="exp_1"
-        )
+        meta = ModelMetadata(model_id="m1", name="n1", version="1.0", experiment_id="exp_1")
         assert meta.experiment_id == "exp_1"

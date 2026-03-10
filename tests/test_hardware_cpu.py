@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, mock_open, patch
 
-
 from octomil.hardware._cpu import (
     _detect_x86_features_linux,
     _detect_x86_features_macos,

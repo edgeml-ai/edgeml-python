@@ -37,7 +37,6 @@ from octomil.early_exit import (
     should_exit_early,
 )
 
-
 # ---------------------------------------------------------------------------
 # SpeedQualityPreset
 # ---------------------------------------------------------------------------
@@ -59,17 +58,11 @@ class TestSpeedQualityPreset:
 
     def test_quality_threshold_lowest(self):
         """Quality preset should have the lowest threshold (fewest exits)."""
-        assert (
-            PRESET_THRESHOLDS[SpeedQualityPreset.QUALITY]
-            < PRESET_THRESHOLDS[SpeedQualityPreset.BALANCED]
-        )
+        assert PRESET_THRESHOLDS[SpeedQualityPreset.QUALITY] < PRESET_THRESHOLDS[SpeedQualityPreset.BALANCED]
 
     def test_fast_threshold_highest(self):
         """Fast preset should have the highest threshold (most exits)."""
-        assert (
-            PRESET_THRESHOLDS[SpeedQualityPreset.FAST]
-            > PRESET_THRESHOLDS[SpeedQualityPreset.BALANCED]
-        )
+        assert PRESET_THRESHOLDS[SpeedQualityPreset.FAST] > PRESET_THRESHOLDS[SpeedQualityPreset.BALANCED]
 
     def test_quality_min_layers_highest(self):
         """Quality preset should use the most layers before allowing exit."""
@@ -119,10 +112,7 @@ class TestEarlyExitConfig:
 
     def test_effective_min_layers_fraction_with_preset(self):
         cfg = EarlyExitConfig(preset=SpeedQualityPreset.FAST)
-        assert (
-            cfg.effective_min_layers_fraction
-            == PRESET_MIN_LAYERS_FRACTION[SpeedQualityPreset.FAST]
-        )
+        assert cfg.effective_min_layers_fraction == PRESET_MIN_LAYERS_FRACTION[SpeedQualityPreset.FAST]
 
     def test_min_layers_without_total(self):
         cfg = EarlyExitConfig()
@@ -264,17 +254,13 @@ class TestShouldExitEarly:
 
     def test_min_layer_not_reached(self):
         """Should not exit before min_layers even if entropy is low."""
-        cfg = EarlyExitConfig(
-            enabled=True, threshold=0.5, total_layers=32, min_layers_fraction=0.5
-        )
+        cfg = EarlyExitConfig(enabled=True, threshold=0.5, total_layers=32, min_layers_fraction=0.5)
         # min_layers = 16, current_layer = 5 → too early
         assert should_exit_early(0.01, cfg, 5) is False
 
     def test_min_layer_reached(self):
         """Should exit after min_layers if entropy is low."""
-        cfg = EarlyExitConfig(
-            enabled=True, threshold=0.5, total_layers=32, min_layers_fraction=0.5
-        )
+        cfg = EarlyExitConfig(enabled=True, threshold=0.5, total_layers=32, min_layers_fraction=0.5)
         # min_layers = 16, current_layer = 17 → ok
         assert should_exit_early(0.01, cfg, 17) is True
 
@@ -308,9 +294,7 @@ class TestTokenExitRecord:
         assert record.exited_early is False
 
     def test_with_values(self):
-        record = TokenExitRecord(
-            layer_exited=10, total_layers=32, entropy=0.15, exited_early=True
-        )
+        record = TokenExitRecord(layer_exited=10, total_layers=32, entropy=0.15, exited_early=True)
         assert record.layer_exited == 10
         assert record.exited_early is True
 
@@ -461,21 +445,13 @@ class TestEarlyExitMonitor:
 
     def test_simulate_fast_preset_more_exits(self):
         """Fast preset should produce more early exits than quality."""
-        fast_cfg = EarlyExitConfig(
-            enabled=True, preset=SpeedQualityPreset.FAST, total_layers=32
-        )
-        quality_cfg = EarlyExitConfig(
-            enabled=True, preset=SpeedQualityPreset.QUALITY, total_layers=32
-        )
+        fast_cfg = EarlyExitConfig(enabled=True, preset=SpeedQualityPreset.FAST, total_layers=32)
+        quality_cfg = EarlyExitConfig(enabled=True, preset=SpeedQualityPreset.QUALITY, total_layers=32)
         fast_monitor = EarlyExitMonitor(fast_cfg)
         quality_monitor = EarlyExitMonitor(quality_cfg)
 
-        fast_result = fast_monitor.simulate_token_exits(
-            token_count=100, total_layers=32
-        )
-        quality_result = quality_monitor.simulate_token_exits(
-            token_count=100, total_layers=32
-        )
+        fast_result = fast_monitor.simulate_token_exits(token_count=100, total_layers=32)
+        quality_result = quality_monitor.simulate_token_exits(token_count=100, total_layers=32)
 
         assert fast_result.early_exit_tokens > quality_result.early_exit_tokens
 

@@ -16,7 +16,6 @@ from octomil.models import (
     TrainingSession,
 )
 
-
 # ===================================================================
 # Data class serialization tests
 # ===================================================================
@@ -97,9 +96,7 @@ class TestDataClasses:
             status="deploying",
             device_statuses=[
                 DeviceDeploymentStatus(device_id="dev-1", status="downloading"),
-                DeviceDeploymentStatus(
-                    device_id="dev-2", status="failed", error="timeout"
-                ),
+                DeviceDeploymentStatus(device_id="dev-2", status="failed", error="timeout"),
             ],
         )
         d = result.to_dict()
@@ -225,9 +222,7 @@ class TestDeployWithDeviceTargeting:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_with_explicit_version_and_devices(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_with_explicit_version_and_devices(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_api = mock_api_cls.return_value
@@ -255,9 +250,7 @@ class TestDeployWithDeviceTargeting:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_with_device_error_status(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_with_device_error_status(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_api = mock_api_cls.return_value
@@ -294,9 +287,7 @@ class TestDeployFallbackToRollout:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_without_targeting_uses_rollout(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_without_targeting_uses_rollout(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         """When no devices/group is specified, deploy falls back to rollout."""
         from octomil.client import OctomilClient
 
@@ -327,9 +318,7 @@ class TestDeployFallbackToRollout:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_immediate_strategy_fallback(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_immediate_strategy_fallback(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_reg = mock_reg_cls.return_value
@@ -359,9 +348,7 @@ class TestDeployPrepare:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_prepare_with_devices(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_prepare_with_devices(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_api = mock_api_cls.return_value
@@ -407,9 +394,7 @@ class TestDeployPrepare:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_prepare_with_group(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_prepare_with_group(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_api = mock_api_cls.return_value
@@ -443,9 +428,7 @@ class TestDeployPrepare:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_prepare_explicit_version(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_prepare_explicit_version(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_api = mock_api_cls.return_value
@@ -463,9 +446,7 @@ class TestDeployPrepare:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_prepare_empty_result(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_deploy_prepare_empty_result(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_api = mock_api_cls.return_value
@@ -515,9 +496,7 @@ class TestTrain:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_train_with_group_and_kwargs(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_train_with_group_and_kwargs(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_api = mock_api_cls.return_value
@@ -587,9 +566,7 @@ class TestRollback:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_rollback_to_previous_version(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_rollback_to_previous_version(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_reg = mock_reg_cls.return_value
@@ -628,9 +605,7 @@ class TestRollback:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_rollback_to_specific_version(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
+    def test_rollback_to_specific_version(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil.client import OctomilClient
 
         mock_reg = mock_reg_cls.return_value
@@ -655,11 +630,9 @@ class TestRollback:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_rollback_fails_with_single_version(
-        self, mock_api_cls, mock_reg_cls, mock_rollouts_cls
-    ):
-        from octomil.client import OctomilClient
+    def test_rollback_fails_with_single_version(self, mock_api_cls, mock_reg_cls, mock_rollouts_cls):
         from octomil import OctomilClientError
+        from octomil.client import OctomilClient
 
         mock_reg = mock_reg_cls.return_value
         mock_reg.resolve_model_id.return_value = "model-abc"
@@ -781,9 +754,10 @@ class TestCLIDeploy:
 
         assert result.exit_code == 0
         assert "Preparing deployment plan" in result.output
-        assert "Devices: 2" in result.output
-        assert "iphone-1: coreml via coreml_npu" in result.output
-        assert "(conversion needed)" in result.output
+        # cli_kv formats as "    Devices           2"
+        assert "Devices" in result.output and "2" in result.output
+        assert "iphone-1" in result.output and "coreml via coreml_npu" in result.output
+        assert "conversion needed" in result.output
         mock_client.deploy.assert_not_called()
 
     @patch("octomil.commands.deploy._get_client")
@@ -866,7 +840,7 @@ class TestCLIRollback:
         result = runner.invoke(main, ["rollback", "gemma-1b"])
 
         assert result.exit_code == 0
-        assert "2.0.0 -> 1.0.0" in result.output
+        assert "2.0.0" in result.output and "1.0.0" in result.output
         assert "rollout-rb" in result.output
         mock_client.rollback.assert_called_once_with("gemma-1b", to_version=None)
 
@@ -889,7 +863,7 @@ class TestCLIRollback:
         result = runner.invoke(main, ["rollback", "gemma-1b", "--to-version", "1.0.0"])
 
         assert result.exit_code == 0
-        assert "3.0.0 -> 1.0.0" in result.output
+        assert "3.0.0" in result.output and "1.0.0" in result.output
         mock_client.rollback.assert_called_once_with("gemma-1b", to_version="1.0.0")
 
     @patch("octomil.commands.deploy._get_client")

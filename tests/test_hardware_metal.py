@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from octomil.hardware._metal import MetalBackend, _M_SERIES_SKUS
+from octomil.hardware._metal import _M_SERIES_SKUS, MetalBackend
 
 
 def _completed(stdout: str = "", returncode: int = 0) -> MagicMock:
@@ -151,9 +151,7 @@ class TestMatchSku:
             ("Apple M1 Pro", "M1 Pro"),
         ],
     )
-    def test_known_skus(
-        self, backend: MetalBackend, chip_name: str, expected_key: str
-    ) -> None:
+    def test_known_skus(self, backend: MetalBackend, chip_name: str, expected_key: str) -> None:
         assert backend._match_sku(chip_name) == expected_key
 
     def test_unknown_chip_returns_none(self, backend: MetalBackend) -> None:

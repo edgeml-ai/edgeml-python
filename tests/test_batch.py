@@ -21,7 +21,6 @@ from octomil.serve import (
     create_app,
 )
 
-
 # ---------------------------------------------------------------------------
 # RequestQueue unit tests
 # ---------------------------------------------------------------------------
@@ -67,9 +66,7 @@ class TestRequestQueueUnit:
         # Submit multiple requests concurrently
         tasks = []
         for i in range(4):
-            task = asyncio.create_task(
-                queue.submit_generate(f"req-{i}", make_generate(i))
-            )
+            task = asyncio.create_task(queue.submit_generate(f"req-{i}", make_generate(i)))
             tasks.append(task)
 
         results = await asyncio.gather(*tasks)
@@ -88,7 +85,7 @@ class TestRequestQueueUnit:
         queue.start()
 
         # Use an event to block the first request inside the generate fn
-        blocker = asyncio.Event()
+        _ = asyncio.Event()  # noqa: F841 — event unused in this test path
 
         async def slow_generate_wrapper():
             def slow_generate(req):
@@ -148,9 +145,7 @@ class TestRequestQueueUnit:
             return ("done", {})
 
         # Start a long-running request
-        task_blocking = asyncio.create_task(
-            queue.submit_generate("blocking", blocking_generate)
-        )
+        task_blocking = asyncio.create_task(queue.submit_generate("blocking", blocking_generate))
         await asyncio.sleep(0.05)  # Let it start processing
 
         # This one should time out waiting in the queue

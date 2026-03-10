@@ -51,9 +51,7 @@ class TestCodingToolSchemas:
     def test_required_fields_exist_in_properties(self, name: str):
         schema = CODING_TOOL_SCHEMAS[name]
         for req_field in schema["required"]:
-            assert (
-                req_field in schema["properties"]
-            ), f"Required field '{req_field}' not in properties for '{name}'"
+            assert req_field in schema["properties"], f"Required field '{req_field}' not in properties for '{name}'"
 
     def test_read_file_schema(self):
         schema = CODING_TOOL_SCHEMAS["read_file"]

@@ -12,9 +12,7 @@ class TestClientInit:
     def test_init_with_explicit_args(self, mock_api, mock_registry, mock_rollouts):
         from octomil.client import OctomilClient
 
-        c = OctomilClient(
-            api_key="key123", org_id="org1", api_base="https://custom.api"
-        )
+        c = OctomilClient(api_key="key123", org_id="org1", api_base="https://custom.api")
         assert c._api_key == "key123"
         assert c._org_id == "org1"
         assert c._api_base == "https://custom.api"
@@ -22,9 +20,7 @@ class TestClientInit:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_init_from_env_vars(
-        self, mock_api, mock_registry, mock_rollouts, monkeypatch
-    ):
+    def test_init_from_env_vars(self, mock_api, mock_registry, mock_rollouts, monkeypatch):
         from octomil.client import OctomilClient
 
         monkeypatch.setenv("OCTOMIL_API_KEY", "env_key")
@@ -54,9 +50,7 @@ class TestClientInit:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_explicit_args_override_env(
-        self, mock_api, mock_registry, mock_rollouts, monkeypatch
-    ):
+    def test_explicit_args_override_env(self, mock_api, mock_registry, mock_rollouts, monkeypatch):
         from octomil.client import OctomilClient
 
         monkeypatch.setenv("OCTOMIL_API_KEY", "env_key")
@@ -209,9 +203,7 @@ class TestClientDeploy:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_deploy_immediate_strategy(
-        self, mock_api, mock_registry_cls, mock_rollouts
-    ):
+    def test_deploy_immediate_strategy(self, mock_api, mock_registry_cls, mock_rollouts):
         from octomil.client import OctomilClient
 
         mock_registry = mock_registry_cls.return_value
@@ -243,9 +235,7 @@ class TestClientStatus:
         mock_rollouts = mock_rollouts_cls.return_value
         mock_registry.resolve_model_id.return_value = "model-abc"
         mock_registry.get_model.return_value = {"name": "my-model", "id": "model-abc"}
-        mock_rollouts.list_active.return_value = [
-            {"version": "1.0.0", "status": "active"}
-        ]
+        mock_rollouts.list_active.return_value = [{"version": "1.0.0", "status": "active"}]
 
         c = OctomilClient(api_key="key")
         result = c.status("my-model")
@@ -292,9 +282,7 @@ class TestClientTrain:
     @patch("octomil.client.RolloutsAPI")
     @patch("octomil.client.ModelRegistry")
     @patch("octomil.client._ApiClient")
-    def test_train_with_all_options(
-        self, mock_api_cls, mock_registry_cls, mock_rollouts
-    ):
+    def test_train_with_all_options(self, mock_api_cls, mock_registry_cls, mock_rollouts):
         from octomil.client import OctomilClient
         from octomil.models import TrainingSession
 

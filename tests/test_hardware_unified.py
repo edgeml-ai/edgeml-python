@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-
 from octomil.hardware._base import GPUBackend, GPUBackendRegistry, reset_gpu_registry
 from octomil.hardware._types import (
     CPUInfo,
@@ -14,7 +13,6 @@ from octomil.hardware._types import (
     HardwareProfile,
 )
 from octomil.hardware._unified import UnifiedDetector, detect_hardware
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -37,9 +35,7 @@ def _make_cpu(**overrides) -> CPUInfo:
     return CPUInfo(**defaults)
 
 
-def _make_gpu_result(
-    backend: str = "cuda", vram_gb: float = 24.0
-) -> GPUDetectionResult:
+def _make_gpu_result(backend: str = "cuda", vram_gb: float = 24.0) -> GPUDetectionResult:
     return GPUDetectionResult(
         gpus=[
             GPUInfo(
@@ -55,9 +51,7 @@ def _make_gpu_result(
     )
 
 
-def _mock_virtual_memory(
-    total_gb: float = 16.0, available_gb: float = 12.0
-) -> MagicMock:
+def _mock_virtual_memory(total_gb: float = 16.0, available_gb: float = 12.0) -> MagicMock:
     """Build a mock psutil virtual_memory result."""
     mock_vm = MagicMock()
     mock_vm.total = int(total_gb * (1024**3))
@@ -129,9 +123,7 @@ class TestGPUBackendRegistry:
         metal_result = _make_gpu_result("metal", 16.0)
 
         registry.register(_FakeBackend(name="cuda", available=True, result=cuda_result))
-        registry.register(
-            _FakeBackend(name="metal", available=True, result=metal_result)
-        )
+        registry.register(_FakeBackend(name="metal", available=True, result=metal_result))
 
         result, diagnostics = registry.detect_best()
         assert result is not None
@@ -143,9 +135,7 @@ class TestGPUBackendRegistry:
         metal_result = _make_gpu_result("metal", 16.0)
 
         registry.register(_FakeBackend(name="cuda", available=False))
-        registry.register(
-            _FakeBackend(name="metal", available=True, result=metal_result)
-        )
+        registry.register(_FakeBackend(name="metal", available=True, result=metal_result))
 
         result, diagnostics = registry.detect_best()
         assert result is not None
@@ -186,9 +176,7 @@ class TestGPUBackendRegistry:
             total_vram_gb=0.0,
             speed_coefficient=0,
         )
-        registry.register(
-            _FakeBackend(name="cuda", available=True, result=empty_result)
-        )
+        registry.register(_FakeBackend(name="cuda", available=True, result=empty_result))
 
         result, diagnostics = registry.detect_best()
         assert result is None
@@ -212,9 +200,7 @@ class TestUnifiedDetector:
     @patch("octomil.hardware._unified.detect_cpu")
     @patch("octomil.hardware._unified.get_gpu_registry")
     @patch("psutil.virtual_memory")
-    def test_cuda_detected_uses_cuda(
-        self, mock_vm_fn, mock_get_registry, mock_detect_cpu
-    ):
+    def test_cuda_detected_uses_cuda(self, mock_vm_fn, mock_get_registry, mock_detect_cpu):
         """When CUDA GPU is detected, best_backend should be 'cuda'."""
         mock_detect_cpu.return_value = _make_cpu()
         mock_vm_fn.return_value = _mock_virtual_memory(32.0, 24.0)

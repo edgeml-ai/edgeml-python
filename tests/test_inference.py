@@ -1,5 +1,5 @@
-import unittest
 import time
+import unittest
 from typing import Optional
 
 from octomil.inference import (
@@ -168,9 +168,7 @@ class GenerateTextTests(unittest.TestCase):
     def test_generate_text_yields_chunks(self):
         api = _StubApi()
         client = _make_client(api)
-        chunks = list(
-            client.generate("model-1", prompt="Hello world", modality=Modality.TEXT)
-        )
+        chunks = list(client.generate("model-1", prompt="Hello world", modality=Modality.TEXT))
         self.assertGreater(len(chunks), 0)
         for ch in chunks:
             self.assertIsInstance(ch, InferenceChunk)
@@ -209,9 +207,7 @@ class GenerateImageTests(unittest.TestCase):
     def test_generate_image_yields_20_chunks(self):
         api = _StubApi()
         client = _make_client(api)
-        chunks = list(
-            client.generate("img-model", input="a photo", modality=Modality.IMAGE)
-        )
+        chunks = list(client.generate("img-model", input="a photo", modality=Modality.IMAGE))
         self.assertEqual(len(chunks), 20)
         for i, ch in enumerate(chunks):
             self.assertEqual(ch.index, i)
@@ -231,9 +227,7 @@ class GenerateAudioTests(unittest.TestCase):
     def test_generate_audio_yields_80_chunks(self):
         api = _StubApi()
         client = _make_client(api)
-        chunks = list(
-            client.generate("audio-model", input="audio input", modality=Modality.AUDIO)
-        )
+        chunks = list(client.generate("audio-model", input="audio input", modality=Modality.AUDIO))
         self.assertEqual(len(chunks), 80)
         for ch in chunks:
             self.assertEqual(ch.modality, Modality.AUDIO)
@@ -242,9 +236,7 @@ class GenerateAudioTests(unittest.TestCase):
     def test_generate_audio_events(self):
         api = _StubApi()
         client = _make_client(api)
-        list(
-            client.generate("audio-model", input="audio input", modality=Modality.AUDIO)
-        )
+        list(client.generate("audio-model", input="audio input", modality=Modality.AUDIO))
         event_types = [call[1]["event_type"] for call in api.calls]
         self.assertIn("generation_started", event_types)
         self.assertIn("generation_completed", event_types)
@@ -254,9 +246,7 @@ class GenerateVideoTests(unittest.TestCase):
     def test_generate_video_yields_30_chunks(self):
         api = _StubApi()
         client = _make_client(api)
-        chunks = list(
-            client.generate("video-model", input="video input", modality=Modality.VIDEO)
-        )
+        chunks = list(client.generate("video-model", input="video input", modality=Modality.VIDEO))
         self.assertEqual(len(chunks), 30)
         for ch in chunks:
             self.assertEqual(ch.modality, Modality.VIDEO)
@@ -265,9 +255,7 @@ class GenerateVideoTests(unittest.TestCase):
     def test_generate_video_events(self):
         api = _StubApi()
         client = _make_client(api)
-        list(
-            client.generate("video-model", input="video input", modality=Modality.VIDEO)
-        )
+        list(client.generate("video-model", input="video input", modality=Modality.VIDEO))
         event_types = [call[1]["event_type"] for call in api.calls]
         self.assertIn("generation_started", event_types)
         self.assertIn("generation_completed", event_types)
@@ -283,9 +271,7 @@ class GenerateAsyncTextTests(unittest.IsolatedAsyncioTestCase):
         api = _StubApi()
         client = _make_client(api)
         chunks = []
-        async for ch in client.generate_async(
-            "model-1", prompt="Hello", modality=Modality.TEXT
-        ):
+        async for ch in client.generate_async("model-1", prompt="Hello", modality=Modality.TEXT):
             chunks.append(ch)
         self.assertGreater(len(chunks), 0)
         for ch in chunks:
@@ -296,9 +282,7 @@ class GenerateAsyncTextTests(unittest.IsolatedAsyncioTestCase):
         api = _StubApi()
         client = _make_client(api)
         chunks = []
-        async for ch in client.generate_async(
-            "model-1", prompt="Hello", modality=Modality.TEXT
-        ):
+        async for ch in client.generate_async("model-1", prompt="Hello", modality=Modality.TEXT):
             chunks.append(ch)
         self.assertGreater(len(chunks), 0)
         event_types = [call[1]["event_type"] for call in api.calls]
@@ -308,9 +292,7 @@ class GenerateAsyncTextTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_generate_populates_last_result(self):
         client = _make_client()
         chunks = []
-        async for ch in client.generate_async(
-            "model-1", prompt="Hello", modality=Modality.TEXT
-        ):
+        async for ch in client.generate_async("model-1", prompt="Hello", modality=Modality.TEXT):
             chunks.append(ch)
         self.assertIsNotNone(client.last_result)
         self.assertEqual(client.last_result.modality, Modality.TEXT)
@@ -327,9 +309,7 @@ class GenerateAsyncTextTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             chunks = []
-            async for ch in client.generate_async(
-                "model-1", prompt="Hello", modality=Modality.TEXT
-            ):
+            async for ch in client.generate_async("model-1", prompt="Hello", modality=Modality.TEXT):
                 chunks.append(ch)
 
         event_types = [call[1]["event_type"] for call in api.calls]
@@ -482,22 +462,14 @@ class ParameterResolutionTests(unittest.TestCase):
         # We verify by inspecting _init_session's resolved_input indirectly:
         # the text backend produces output containing "used", not "ignored"
         result_text = b"".join(
-            ch.data
-            for ch in client.generate(
-                "model-1", input="ignored", prompt="used", modality=Modality.TEXT
-            )
+            ch.data for ch in client.generate("model-1", input="ignored", prompt="used", modality=Modality.TEXT)
         )
         self.assertIn(b"used", result_text)
         self.assertNotIn(b"ignored", result_text)
 
     def test_input_used_when_prompt_is_none(self):
         client = _make_client()
-        result_text = b"".join(
-            ch.data
-            for ch in client.generate(
-                "model-1", input="my input", modality=Modality.TEXT
-            )
-        )
+        result_text = b"".join(ch.data for ch in client.generate("model-1", input="my input", modality=Modality.TEXT))
         self.assertIn(b"my input", result_text)
 
     def test_both_none_uses_none(self):

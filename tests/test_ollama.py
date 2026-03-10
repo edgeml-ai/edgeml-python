@@ -295,44 +295,35 @@ class TestOllamaModelProperties:
 
 
 class TestModelsCommand:
-    @patch("octomil.ollama.is_ollama_running", return_value=True)
-    @patch("octomil.ollama.list_ollama_models")
-    def test_models_ollama_only(self, mock_list, mock_running):
-        mock_list.return_value = [
-            _make_model(name="gemma:2b", size=1_678_000_000),
-        ]
+    def test_models_lists_catalog(self):
+        """The models command lists catalog entries (no --source flag)."""
         runner = CliRunner()
-        result = runner.invoke(main, ["models", "--source", "ollama"])
+        result = runner.invoke(main, ["models"])
         assert result.exit_code == 0
-        assert "Local (ollama):" in result.output
-        assert "gemma:2b" in result.output
-        assert "Q4_K_M" in result.output
+        # Catalog should have at least some models
+        assert "MODEL" in result.output
+        assert "gemma-1b" in result.output
 
-    @patch("octomil.ollama.is_ollama_running", return_value=False)
-    def test_models_ollama_not_running(self, mock_running):
+    def test_models_shows_params(self):
+        """The models command shows parameter count."""
         runner = CliRunner()
-        result = runner.invoke(main, ["models", "--source", "ollama"])
+        result = runner.invoke(main, ["models"])
         assert result.exit_code == 0
-        assert "not running" in result.output
+        assert "PARAMS" in result.output
 
-    @patch("octomil.ollama.is_ollama_running", return_value=True)
-    @patch("octomil.ollama.list_ollama_models", return_value=[])
-    def test_models_ollama_no_models(self, mock_list, mock_running):
+    def test_models_shows_publisher(self):
+        """The models command shows publisher info."""
         runner = CliRunner()
-        result = runner.invoke(main, ["models", "--source", "ollama"])
+        result = runner.invoke(main, ["models"])
         assert result.exit_code == 0
-        assert "no models found" in result.output
+        assert "BY" in result.output
 
-    def test_models_registry_no_key(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("OCTOMIL_API_KEY", raising=False)
-        monkeypatch.setattr(
-            "octomil.cli_helpers.os.path.expanduser",
-            lambda p: str(tmp_path / p.lstrip("~/")),
-        )
+    def test_models_shows_size(self):
+        """The models command shows estimated download size."""
         runner = CliRunner()
-        result = runner.invoke(main, ["models", "--source", "registry"])
+        result = runner.invoke(main, ["models"])
         assert result.exit_code == 0
-        assert "no API key" in result.output
+        assert "SIZE" in result.output
 
 
 # ---------------------------------------------------------------------------

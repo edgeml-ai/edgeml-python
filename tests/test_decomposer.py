@@ -735,8 +735,7 @@ class TestMultiModelServeDecomposition:
                         {
                             "role": "user",
                             "content": (
-                                "1. Summarize the latest AI news in detail "
-                                "2. Write a tweet about it for social media"
+                                "1. Summarize the latest AI news in detail 2. Write a tweet about it for social media"
                             ),
                         }
                     ],

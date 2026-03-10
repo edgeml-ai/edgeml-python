@@ -7,12 +7,11 @@ from unittest.mock import MagicMock, patch
 import click
 
 from octomil.interactive import (
-    _CommandEntry,
     _build_command_catalog,
+    _CommandEntry,
     _fallback_interactive,
     _fuzzy_filter,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — build a Click group for testing
@@ -74,9 +73,7 @@ def _make_cli_group() -> click.Group:
 
 class Test_CommandEntry:
     def test_fields(self):
-        entry = _CommandEntry(
-            name="serve", description="Start server.", category="Serve"
-        )
+        entry = _CommandEntry(name="serve", description="Start server.", category="Serve")
         assert entry.name == "serve"
         assert entry.description == "Start server."
         assert entry.category == "Serve"
@@ -249,21 +246,11 @@ class TestCategoryMapping:
 class TestFuzzyFilter:
     def _entries(self) -> list[_CommandEntry]:
         return [
-            _CommandEntry(
-                name="serve", description="Start inference server.", category="Serve"
-            ),
-            _CommandEntry(
-                name="deploy", description="Deploy model to device.", category="Deploy"
-            ),
-            _CommandEntry(
-                name="hw", description="Show hardware info.", category="Hardware"
-            ),
-            _CommandEntry(
-                name="optimize", description="Optimize model.", category="Hardware"
-            ),
-            _CommandEntry(
-                name="login", description="Authenticate.", category="Account"
-            ),
+            _CommandEntry(name="serve", description="Start inference server.", category="Serve"),
+            _CommandEntry(name="deploy", description="Deploy model to device.", category="Deploy"),
+            _CommandEntry(name="hw", description="Show hardware info.", category="Hardware"),
+            _CommandEntry(name="optimize", description="Optimize model.", category="Hardware"),
+            _CommandEntry(name="login", description="Authenticate.", category="Account"),
             _CommandEntry(name="scan", description="Scan network.", category="Deploy"),
         ]
 
@@ -346,9 +333,7 @@ class TestFallbackInteractive:
         """Fallback groups commands by category and prints category headers."""
         commands = [
             _CommandEntry(name="serve", description="Start server.", category="Serve"),
-            _CommandEntry(
-                name="deploy", description="Deploy model.", category="Deploy"
-            ),
+            _CommandEntry(name="deploy", description="Deploy model.", category="Deploy"),
         ]
         with patch("octomil.interactive.click") as mock_click:
             mock_click.prompt.return_value = "q"

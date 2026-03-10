@@ -61,11 +61,7 @@ class _StubApi:
 
     def post(self, path, payload=None):
         self.calls.append(("post", path, payload))
-        if (
-            path.startswith("/models")
-            and "versions" in path
-            and not path.endswith("/versions")
-        ):
+        if path.startswith("/models") and "versions" in path and not path.endswith("/versions"):
             return {"version": "1.0.0"}
         return {"id": "model_123", "version": "1.0.0"}
 
@@ -123,9 +119,7 @@ class ModelRegistryTests(unittest.TestCase):
         registry = ModelRegistry(auth_token_provider=lambda: "token123", org_id="org_1")
         stub = _StubApi()
         registry.api = stub
-        registry.list_models(
-            framework="pytorch", use_case="classification", limit=50, offset=10
-        )
+        registry.list_models(framework="pytorch", use_case="classification", limit=50, offset=10)
         method, path, params = stub.calls[-1]
         self.assertEqual(method, "get")
         self.assertEqual(path, "/models")
@@ -175,9 +169,7 @@ class ModelRegistryTests(unittest.TestCase):
     def test_get_latest_version(self):
         registry = ModelRegistry(auth_token_provider=lambda: "token123")
         stub = _StubApi()
-        stub.set_response(
-            ("/models/model_1/versions/latest", None), {"version": "3.1.0"}
-        )
+        stub.set_response(("/models/model_1/versions/latest", None), {"version": "3.1.0"})
         registry.api = stub
         result = registry.get_latest_version("model_1")
         self.assertEqual(result, "3.1.0")
@@ -301,9 +293,7 @@ class ModelRegistryTests(unittest.TestCase):
     def test_download_version_missing_url_raises(self):
         registry = ModelRegistry(auth_token_provider=lambda: "token123")
         stub = _StubApi()
-        stub.set_response(
-            ("/models/model_1/versions/1.0.0/download-url", (("format", "onnx"),)), {}
-        )
+        stub.set_response(("/models/model_1/versions/1.0.0/download-url", (("format", "onnx"),)), {})
         registry.api = stub
         with self.assertRaises(OctomilClientError) as ctx:
             registry.download_version(
@@ -362,13 +352,9 @@ class ModelRegistryTests(unittest.TestCase):
         registry = ModelRegistry(auth_token_provider=lambda: "token123", org_id="org_1")
         stub = _StubApi()
         existing_model = {"name": "existing_model", "id": "model_789"}
-        stub.set_response(
-            ("/models", (("org_id", "org_1"),)), {"models": [existing_model]}
-        )
+        stub.set_response(("/models", (("org_id", "org_1"),)), {"models": [existing_model]})
         registry.api = stub
-        result = registry.ensure_model(
-            name="existing_model", framework="pytorch", use_case="detection"
-        )
+        result = registry.ensure_model(name="existing_model", framework="pytorch", use_case="detection")
         self.assertEqual(result, existing_model)
         self.assertEqual(len(stub.calls), 1)  # Only GET, no POST
 
@@ -377,9 +363,7 @@ class ModelRegistryTests(unittest.TestCase):
         stub = _StubApi()
         stub.set_response(("/models", (("org_id", "org_1"),)), {"models": []})
         registry.api = stub
-        registry.ensure_model(
-            name="new_model", framework="pytorch", use_case="detection"
-        )
+        registry.ensure_model(name="new_model", framework="pytorch", use_case="detection")
         _, _, payload = stub.calls[-1]
         self.assertNotIn("model_contract", payload)
         self.assertNotIn("data_contract", payload)
