@@ -283,7 +283,7 @@ def create_mcp_server(model: Optional[str] = None, **fastmcp_kwargs: Any) -> Any
 
 Steps:
 1. First, resolve the model to check availability: use resolve_model with name="{model_name}"
-2. Check hardware capabilities: use detect_hardware_profile
+2. Check hardware capabilities: use detect_hardware
 3. Get optimization recommendations: use recommend_model
 4. Plan the deployment: use plan_deployment with name="{model_name}"
 5. Execute the deployment: use deploy_model with name="{model_name}"

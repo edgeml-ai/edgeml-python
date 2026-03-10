@@ -7,7 +7,7 @@ All tools return JSON for structured data, plain text for errors.
 Tools registered here:
   Phase 1: resolve_model, list_models, detect_engines, run_inference,
            get_metrics, deploy_model
-  Phase 2: convert_model, optimize_model, detect_hardware_profile, benchmark_model,
+  Phase 2: convert_model, optimize_model, detect_hardware, benchmark_model,
            recommend_model, scan_codebase, compress_prompt, plan_deployment, embed
 """
 
@@ -409,7 +409,7 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             title="Detect Hardware", readOnlyHint=True, idempotentHint=True, openWorldHint=False
         )
     )
-    def detect_hardware_profile(
+    def detect_hardware(
         force_refresh: Annotated[
             bool, Field(description="Force re-detection instead of using cached hardware info")
         ] = False,
@@ -458,7 +458,7 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
 
             return json.dumps(result, indent=2)
         except Exception as exc:
-            logger.exception("detect_hardware_profile failed")
+            logger.exception("detect_hardware failed")
             return json.dumps({"error": "hardware_error", "message": str(exc)})
 
     @mcp.tool(
