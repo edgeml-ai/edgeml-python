@@ -1001,20 +1001,34 @@ class OctomilClient:
         eng_registry = get_registry()
         selected_engine, _ = eng_registry.auto_select(name, engine_override=engine)
 
-        # Skip registry pull for engines that manage their own downloads
-        # (e.g. mlx-lm loads from HuggingFace, ollama pulls via its API).
+        # Skip registry pull when the engine handles its own downloads
+        # (mlx-lm, ollama), OR the name is a direct HF repo / local file,
+        # OR the name resolves via the local model catalog (including Ollama
+        # tags like "qwen2.5:3b").  The cloud registry is only needed for
+        # models that aren't in the local catalog at all.
+        _is_passthrough = "/" in name or name.endswith((".gguf", ".pte", ".mnn"))
+        _resolves_locally = False
+        if not _is_passthrough and not selected_engine.manages_own_download:
+            try:
+                from .models.resolver import resolve as _resolve_local
+
+                _resolve_local(name, engine=selected_engine.name)
+                _resolves_locally = True
+            except Exception:
+                pass
+        skip_registry = selected_engine.manages_own_download or _is_passthrough or _resolves_locally
+
         engine_kwargs: dict[str, Any] = {}
-        if selected_engine.manages_own_download:
+        if skip_registry:
             pull_result = {}
         else:
             pull_result = self.pull(name, version=version, format=format, destination=destination)
             engine_kwargs["model_path"] = pull_result.get("model_path")
 
-        # When the engine manages its own downloads, resolve metadata locally
-        # instead of hitting the cloud registry (which requires an API key).
+        # Resolve metadata locally when skipping the registry.
         model_id: str
         resolved_version: str | None
-        if selected_engine.manages_own_download:
+        if skip_registry:
             model_id = name
             resolved_version = version or "local"
         else:
