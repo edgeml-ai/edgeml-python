@@ -582,25 +582,19 @@ def models() -> None:
         cli_warn("No models available")
         return
 
-    # Build rows: (name, params, quants, engines)
-    rows: list[tuple[str, str, str, str]] = []
+    # Build rows: (name, params, quants)
+    rows: list[tuple[str, str, str]] = []
     for name, entry in sorted(CATALOG.items()):
         quants = ", ".join(sorted(entry.variants.keys()))
-        engines = ", ".join(sorted(entry.engines))
-        rows.append((name, entry.params, quants, engines))
+        rows.append((name, entry.params, quants))
 
     name_w = max(len(r[0]) for r in rows) + 2
     name_w = max(name_w, 14)
     params_w = 8
-    quants_w = 20
-    cli_table_header(("MODEL", name_w), ("PARAMS", params_w), ("QUANTS", quants_w), ("ENGINES", 30))
-    for model_name, params, quants, engines in rows:
+    cli_table_header(("MODEL", name_w), ("PARAMS", params_w), ("QUANTS", 20))
+    for model_name, params, quants in rows:
         click.echo(
-            "    "
-            + click.style(model_name.ljust(name_w), fg="white", bold=True)
-            + params.ljust(params_w)
-            + quants.ljust(quants_w)
-            + click.style(engines, dim=True)
+            "    " + click.style(model_name.ljust(name_w), fg="white", bold=True) + params.ljust(params_w) + quants
         )
     click.echo()
     click.echo(
