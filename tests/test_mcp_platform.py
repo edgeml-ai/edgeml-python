@@ -561,7 +561,7 @@ class TestOptimizeModel:
 
 
 # ---------------------------------------------------------------------------
-# detect_hardware_profile
+# detect_hardware
 # ---------------------------------------------------------------------------
 
 
@@ -569,7 +569,7 @@ class TestHardwareProfile:
     def test_detects_hardware(self) -> None:
         tools = _get_tool_funcs()
         with patch("octomil.hardware._unified.detect_hardware", return_value=FakeHardware()):
-            result = json.loads(tools["detect_hardware_profile"]())
+            result = json.loads(tools["detect_hardware"]())
 
         assert result["platform"] == "darwin"
         assert result["best_backend"] == "mlx"
@@ -582,14 +582,14 @@ class TestHardwareProfile:
         hw.gpu = None  # Override post_init
         tools = _get_tool_funcs()
         with patch("octomil.hardware._unified.detect_hardware", return_value=hw):
-            result = json.loads(tools["detect_hardware_profile"]())
+            result = json.loads(tools["detect_hardware"]())
 
         assert result["gpu"] is None
 
     def test_hardware_error(self) -> None:
         tools = _get_tool_funcs()
         with patch("octomil.hardware._unified.detect_hardware", side_effect=RuntimeError("detection failed")):
-            result = json.loads(tools["detect_hardware_profile"]())
+            result = json.loads(tools["detect_hardware"]())
 
         assert result["error"] == "hardware_error"
 
@@ -854,7 +854,7 @@ class TestRegistration:
             # Phase 2
             "convert_model",
             "optimize_model",
-            "detect_hardware_profile",
+            "detect_hardware",
             "benchmark_model",
             "recommend_model",
             "scan_codebase",
