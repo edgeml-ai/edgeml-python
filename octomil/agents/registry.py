@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import shutil
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 
 @dataclasses.dataclass
@@ -68,26 +68,33 @@ def _configure_opencode(base_url: str, model: str) -> dict[str, str]:
     import json
     import os
 
-    config = {
-        "$schema": "https://opencode.ai/config.json",
-        "provider": {
-            "octomil": {
-                "npm": "@ai-sdk/openai-compatible",
-                "name": "Octomil Local",
-                "options": {
-                    "baseURL": base_url,
-                    "apiKey": "octomil-local",
-                },
-                "models": {
-                    model: {"name": model},
-                },
-            },
+    provider_def: dict[str, Any] = {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "Octomil Local",
+        "options": {
+            "baseURL": base_url,
+            "apiKey": "octomil-local",
+        },
+        "models": {
+            model: {"name": model},
         },
     }
 
-    config_path = os.path.join(os.getcwd(), "opencode.json")
+    config_dir = os.path.expanduser("~/.config/opencode")
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = os.path.join(config_dir, "opencode.json")
+
+    # Merge with existing config if present
+    existing: dict[str, Any] = {}
+    if os.path.exists(config_path):
+        with open(config_path) as f:
+            existing = json.load(f)
+    existing.setdefault("$schema", "https://opencode.ai/config.json")
+    providers: dict[str, Any] = existing.setdefault("provider", {})
+    providers["octomil"] = provider_def
+
     with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
+        json.dump(existing, f, indent=2)
 
     return {}  # no env overrides needed
 
