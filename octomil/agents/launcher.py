@@ -340,15 +340,19 @@ def _run_model_tui(
 
     @bindings.add("backspace")
     def _backspace(event):  # type: ignore[no-untyped-def]
-        if search_mode[0] and search_query[0]:
+        if search_query[0]:
             search_query[0] = search_query[0][:-1]
             filtered[0] = _fuzzy_filter(search_query[0])
             selected[0] = 0
+            if not search_query[0]:
+                search_mode[0] = False
 
     @bindings.add("<any>")
     def _any_key(event):  # type: ignore[no-untyped-def]
-        if search_mode[0]:
-            search_query[0] += event.data
+        ch = event.data
+        if ch.isprintable() and len(ch) == 1:
+            search_mode[0] = True
+            search_query[0] += ch
             filtered[0] = _fuzzy_filter(search_query[0])
             selected[0] = 0
 
