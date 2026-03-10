@@ -5,6 +5,29 @@
 - Added `DeviceAuthClient` runtime auth helper for device token bootstrap, refresh, and revoke flows.
 - Added optional `auth` extra with `keyring` secure storage dependency.
 
+## 2.8.0 (2026-03-10)
+
+### Features
+
+- integrate settle402 for batch payment settlement (#219)
+- add Dockerfile and K8s manifests for MCP HTTP server (#220)
+- add Streamable HTTP transport at /mcp for Smithery
+- add parameter descriptions, annotations, prompts, and resources
+- add smithery.yaml with configSchema for quality score
+- Anthropic translation layer, color TUI, welcome redesign (#230)
+- redesign CLI output, fix Ollama tag resolution and GGUF handling (#231)
+- replace Ollama/registry with catalog in models command (#233)
+
+### Fixes
+
+- use 'instructions' kwarg instead of 'description' for FastMCP
+- use lifespan-managed session manager for Streamable HTTP
+- use ASGI wrapper for MCP session manager route
+- improve tool names and add params to zero-param tools for Smithery score (#228)
+- rename detect_hardware_profile → detect_hardware for consistent 2-word tool names (#229)
+- server-side /resolve fallback for scrubbed catalog (#222)
+- skip cloud registry for locally-resolvable models (#232)
+
 ## 2.7.0 (2026-03-09)
 
 ### Features
