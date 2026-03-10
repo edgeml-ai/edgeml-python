@@ -11,12 +11,13 @@ Tools registered here:
            recommend_model, scan_codebase, compress_prompt, plan_deployment, embed
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os
-from typing import Any
+from typing import Annotated, Any
+
+from mcp.types import ToolAnnotations
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
@@ -32,17 +33,16 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
         An ``OctomilMCPBackend`` instance for inference.
     """
 
-    @mcp.tool()
-    def resolve_model(name: str, engine: str = "") -> str:
-        """Resolve a model name to engine-specific artifacts.
-
-        Returns the HuggingFace repo, filename, engine, quantization,
-        and architecture for a given model specifier.
-
-        Args:
-            name: Model specifier (e.g. "gemma-3b", "phi-mini:4bit", "qwen-coder-7b")
-            engine: Force a specific engine (e.g. "mlx", "llama.cpp", "onnx"). Empty = auto-select.
-        """
+    @mcp.tool(
+        annotations=ToolAnnotations(title="Resolve Model", readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    )
+    def resolve_model(
+        name: Annotated[str, Field(description="Model specifier (e.g. 'gemma-3b', 'phi-mini:4bit', 'qwen-coder-7b')")],
+        engine: Annotated[
+            str, Field(description="Force a specific engine (e.g. 'mlx', 'llama.cpp', 'onnx'). Empty = auto-select.")
+        ] = "",
+    ) -> str:
+        """Resolve a model name to engine-specific artifacts including HuggingFace repo, filename, engine, and architecture."""
         try:
             from octomil.models.resolver import ModelResolutionError, resolve
 
@@ -78,13 +78,11 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("resolve_model failed")
             return json.dumps({"error": "internal_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(title="List Models", readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    )
     def list_models() -> str:
-        """List all available models in the Octomil catalog.
-
-        Returns model names with publisher, parameter count, supported engines,
-        default quantization, available variants, and architecture type.
-        """
+        """List all available models in the Octomil catalog with publisher, parameter count, engines, and variants."""
         try:
             from octomil.models.catalog import CATALOG
 
@@ -110,16 +108,13 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("list_models failed")
             return json.dumps({"error": "internal_error", "message": str(exc)})
 
-    @mcp.tool()
-    def detect_engines(model_name: str = "") -> str:
-        """Detect which inference engines are available on this machine.
-
-        Optionally filters by model compatibility. Returns each engine's
-        name, availability, priority, and detection info.
-
-        Args:
-            model_name: If provided, also checks which engines support this model.
-        """
+    @mcp.tool(
+        annotations=ToolAnnotations(title="Detect Engines", readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    )
+    def detect_engines(
+        model_name: Annotated[str, Field(description="Filter engines by model compatibility. Empty = show all.")] = "",
+    ) -> str:
+        """Detect which inference engines are available on this machine."""
         try:
             from octomil.engines.registry import get_registry
 
@@ -150,20 +145,16 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("detect_engines failed")
             return json.dumps({"error": "internal_error", "message": str(exc)})
 
-    @mcp.tool()
-    def run_inference(prompt: str, model: str = "", max_tokens: int = 2048, temperature: float = 0.7) -> str:
-        """Run raw inference through the local on-device model.
-
-        Unlike the code-focused tools (generate_code, review_code, etc.),
-        this sends your prompt directly without any system prompt wrapping.
-        Use this for general-purpose inference.
-
-        Args:
-            prompt: The prompt to send to the model
-            model: Model override (default: server's configured model)
-            max_tokens: Maximum tokens to generate (default: 2048)
-            temperature: Sampling temperature (default: 0.7, lower = more deterministic)
-        """
+    @mcp.tool(
+        annotations=ToolAnnotations(title="Run Inference", readOnlyHint=True, idempotentHint=False, openWorldHint=False)
+    )
+    def run_inference(
+        prompt: Annotated[str, Field(description="The prompt to send to the model")],
+        model: Annotated[str, Field(description="Model override (empty = server's configured model)")] = "",
+        max_tokens: Annotated[int, Field(description="Maximum tokens to generate")] = 2048,
+        temperature: Annotated[float, Field(description="Sampling temperature (lower = more deterministic)")] = 0.7,
+    ) -> str:
+        """Run raw inference through the local on-device model without system prompt wrapping."""
         try:
             messages = [{"role": "user", "content": prompt}]
             text, metrics = backend.generate(messages, max_tokens=max_tokens, temperature=temperature)
@@ -178,13 +169,11 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("run_inference failed")
             return json.dumps({"error": "inference_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(title="Get Metrics", readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    )
     def get_metrics() -> str:
-        """Get current model, engine, and device status.
-
-        Returns loaded model, engine, hardware profile, and available
-        inference engines for this device.
-        """
+        """Get current model, engine, hardware, and device status."""
         try:
             status: dict[str, Any] = {
                 "model": backend.model_name,
@@ -224,27 +213,20 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("get_metrics failed")
             return json.dumps({"error": "internal_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Deploy Model", readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+        )
+    )
     def deploy_model(
-        name: str,
-        version: str = "",
-        devices: str = "",
-        group: str = "",
-        strategy: str = "canary",
-        rollout: int = 100,
+        name: Annotated[str, Field(description="Model name to deploy")],
+        version: Annotated[str, Field(description="Model version (empty = latest)")] = "",
+        devices: Annotated[str, Field(description="Comma-separated device IDs")] = "",
+        group: Annotated[str, Field(description="Device group name")] = "",
+        strategy: Annotated[str, Field(description="Deployment strategy: 'canary' or 'rolling'")] = "canary",
+        rollout: Annotated[int, Field(description="Rollout percentage 1-100")] = 100,
     ) -> str:
-        """Deploy a model to edge devices via the Octomil platform.
-
-        Requires OCTOMIL_API_KEY environment variable.
-
-        Args:
-            name: Model name to deploy
-            version: Model version (optional)
-            devices: Comma-separated device IDs (optional)
-            group: Device group name (optional)
-            strategy: Deployment strategy: "canary" or "rolling" (default: canary)
-            rollout: Rollout percentage 1-100 (default: 100)
-        """
+        """Deploy a model to edge devices via the Octomil platform. Requires OCTOMIL_API_KEY."""
         api_key = os.environ.get("OCTOMIL_API_KEY")
         if not api_key:
             return json.dumps(
@@ -283,22 +265,17 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
     #                scan, compress, plan_deployment, embed
     # ------------------------------------------------------------------
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Convert Model", readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False
+        )
+    )
     def convert_model(
-        model_path: str,
-        target: str = "onnx",
-        input_shape: str = "1,3,224,224",
+        model_path: Annotated[str, Field(description="Path to the PyTorch model file (.pt or .pth)")],
+        target: Annotated[str, Field(description="Comma-separated target formats: onnx, coreml, tflite")] = "onnx",
+        input_shape: Annotated[str, Field(description="Comma-separated input tensor shape")] = "1,3,224,224",
     ) -> str:
-        """Convert a local PyTorch model to edge-optimized formats.
-
-        Converts .pt/.pth files to ONNX, CoreML, or TFLite — without the
-        caller needing torch, coremltools, or tensorflow installed.
-
-        Args:
-            model_path: Path to the PyTorch model file (.pt or .pth)
-            target: Comma-separated target formats: onnx, coreml, tflite (default: onnx)
-            input_shape: Comma-separated input tensor shape (default: 1,3,224,224)
-        """
+        """Convert a local PyTorch model to edge-optimized formats (ONNX, CoreML, TFLite)."""
         try:
             import tempfile
 
@@ -376,24 +353,20 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("convert_model failed")
             return json.dumps({"error": "convert_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Optimize Model", readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True
+        )
+    )
     def optimize_model(
-        name: str,
-        target_devices: str = "",
-        accuracy_threshold: float = 0.95,
-        size_budget_mb: float = 0,
+        name: Annotated[str, Field(description="Model name (must be registered on the platform)")],
+        target_devices: Annotated[
+            str, Field(description="Comma-separated target device types (e.g. 'ios,android')")
+        ] = "",
+        accuracy_threshold: Annotated[float, Field(description="Minimum acceptable accuracy ratio 0-1")] = 0.95,
+        size_budget_mb: Annotated[float, Field(description="Maximum model size in MB (0 = no limit)")] = 0,
     ) -> str:
-        """Optimize a model for on-device deployment via the Octomil platform.
-
-        Runs server-side pruning, quantization, format conversion, and validation.
-        Requires OCTOMIL_API_KEY.
-
-        Args:
-            name: Model name (must be registered on the platform)
-            target_devices: Comma-separated target device types (e.g. "ios,android")
-            accuracy_threshold: Minimum acceptable accuracy ratio 0-1 (default: 0.95)
-            size_budget_mb: Maximum model size in MB (0 = no limit)
-        """
+        """Optimize a model for on-device deployment via server-side pruning and quantization. Requires OCTOMIL_API_KEY."""
         api_key = os.environ.get("OCTOMIL_API_KEY")
         if not api_key:
             return json.dumps(
@@ -422,14 +395,13 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("optimize_model failed")
             return json.dumps({"error": "optimize_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Hardware Profile", readOnlyHint=True, idempotentHint=True, openWorldHint=False
+        )
+    )
     def hardware_profile() -> str:
-        """Detect full hardware capabilities of this machine.
-
-        Returns CPU info (brand, cores, architecture, instruction sets),
-        GPU info (name, VRAM, compute backend), RAM, and the recommended
-        inference backend.
-        """
+        """Detect full hardware capabilities including CPU, GPU, RAM, and recommended inference backend."""
         try:
             from octomil.hardware._unified import detect_hardware
 
@@ -476,18 +448,17 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("hardware_profile failed")
             return json.dumps({"error": "hardware_error", "message": str(exc)})
 
-    @mcp.tool()
-    def benchmark_model(model_name: str, n_tokens: int = 32, engine: str = "") -> str:
-        """Benchmark inference engines for a specific model.
-
-        Runs actual inference to measure tokens/second, latency, and memory.
-        Returns results ranked by performance.
-
-        Args:
-            model_name: Model to benchmark (e.g. "gemma-3b", "phi-mini")
-            n_tokens: Number of tokens to generate per benchmark run (default: 32)
-            engine: Specific engine to benchmark (empty = benchmark all available)
-        """
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Benchmark Model", readOnlyHint=True, idempotentHint=False, openWorldHint=False
+        )
+    )
+    def benchmark_model(
+        model_name: Annotated[str, Field(description="Model to benchmark (e.g. 'gemma-3b', 'phi-mini')")],
+        n_tokens: Annotated[int, Field(description="Number of tokens to generate per benchmark run")] = 32,
+        engine: Annotated[str, Field(description="Specific engine to benchmark (empty = all available)")] = "",
+    ) -> str:
+        """Benchmark inference engines for a specific model, measuring tokens/second and latency."""
         try:
             from octomil.engines.registry import get_registry
 
@@ -528,16 +499,17 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("benchmark_model failed")
             return json.dumps({"error": "benchmark_error", "message": str(exc)})
 
-    @mcp.tool()
-    def recommend_model(priority: str = "balanced") -> str:
-        """Recommend the best model configuration for this hardware.
-
-        Analyzes available RAM, GPU, and CPU to suggest optimal model size,
-        quantization level, and engine — with estimated tokens/second.
-
-        Args:
-            priority: Optimization priority: "speed", "quality", or "balanced" (default: balanced)
-        """
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Recommend Model", readOnlyHint=True, idempotentHint=True, openWorldHint=False
+        )
+    )
+    def recommend_model(
+        priority: Annotated[
+            str, Field(description="Optimization priority: 'speed', 'quality', or 'balanced'")
+        ] = "balanced",
+    ) -> str:
+        """Recommend the best model configuration for this hardware based on available RAM, GPU, and CPU."""
         try:
             from octomil.hardware._unified import detect_hardware
             from octomil.model_optimizer import ModelOptimizer
@@ -582,18 +554,16 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("recommend_model failed")
             return json.dumps({"error": "recommend_error", "message": str(exc)})
 
-    @mcp.tool()
-    def scan_codebase(path: str, platform: str = "") -> str:
-        """Scan a codebase to find all ML inference points.
-
-        Detects CoreML, TFLite, PyTorch, ONNX Runtime, OpenAI, MLX, and
-        HuggingFace usage across iOS, Android, and Python code. Also finds
-        model files (.mlmodel, .tflite, .onnx, .pt, .gguf, .safetensors).
-
-        Args:
-            path: Directory path to scan
-            platform: Filter by platform: "ios", "android", "python" (empty = all)
-        """
+    @mcp.tool(
+        annotations=ToolAnnotations(title="Scan Codebase", readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+    )
+    def scan_codebase(
+        path: Annotated[str, Field(description="Directory path to scan")],
+        platform: Annotated[
+            str, Field(description="Filter by platform: 'ios', 'android', 'python' (empty = all)")
+        ] = "",
+    ) -> str:
+        """Scan a codebase to find all ML inference points across iOS, Android, and Python code."""
         try:
             from octomil.scanner import scan_directory
 
@@ -633,22 +603,21 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("scan_codebase failed")
             return json.dumps({"error": "scan_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Compress Prompt", readOnlyHint=True, idempotentHint=True, openWorldHint=False
+        )
+    )
     def compress_prompt(
-        messages: str,
-        strategy: str = "token_pruning",
-        target_ratio: float = 0.5,
+        messages: Annotated[
+            str, Field(description='JSON array of message objects [{"role": "user", "content": "..."}]')
+        ],
+        strategy: Annotated[
+            str, Field(description="Compression strategy: 'token_pruning' or 'sliding_window'")
+        ] = "token_pruning",
+        target_ratio: Annotated[float, Field(description="Target compression ratio 0-1 (0.5 = reduce by half)")] = 0.5,
     ) -> str:
-        """Compress a prompt to reduce token count before inference.
-
-        Reduces tokens without losing critical meaning — saves cost on
-        downstream inference calls. Supports token pruning and sliding window.
-
-        Args:
-            messages: JSON array of message objects [{"role": "user", "content": "..."}]
-            strategy: Compression strategy: "token_pruning" or "sliding_window" (default: token_pruning)
-            target_ratio: Target compression ratio 0-1 (default: 0.5 = reduce by half)
-        """
+        """Compress a prompt to reduce token count before inference, saving cost without losing meaning."""
         try:
             from octomil.compression import CompressionConfig, PromptCompressor
 
@@ -684,24 +653,16 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("compress_prompt failed")
             return json.dumps({"error": "compress_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(title="Plan Deployment", readOnlyHint=True, idempotentHint=True, openWorldHint=True)
+    )
     def plan_deployment(
-        name: str,
-        version: str = "",
-        devices: str = "",
-        group: str = "",
+        name: Annotated[str, Field(description="Model name to plan deployment for")],
+        version: Annotated[str, Field(description="Model version (empty = latest)")] = "",
+        devices: Annotated[str, Field(description="Comma-separated device IDs")] = "",
+        group: Annotated[str, Field(description="Device group name")] = "",
     ) -> str:
-        """Dry-run a deployment to see the plan without executing it.
-
-        Shows per-device format requirements, conversion needs, and rollout
-        stages. Requires OCTOMIL_API_KEY.
-
-        Args:
-            name: Model name to plan deployment for
-            version: Model version (optional, defaults to latest)
-            devices: Comma-separated device IDs (optional)
-            group: Device group name (optional)
-        """
+        """Dry-run a deployment to see the plan without executing it. Requires OCTOMIL_API_KEY."""
         api_key = os.environ.get("OCTOMIL_API_KEY")
         if not api_key:
             return json.dumps(
@@ -736,19 +697,16 @@ def register_platform_tools(mcp: Any, backend: Any) -> None:
             logger.exception("plan_deployment failed")
             return json.dumps({"error": "plan_error", "message": str(exc)})
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Generate Embeddings", readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        )
+    )
     def embed(
-        text: str,
-        model: str = "",
+        text: Annotated[str, Field(description="Text to embed (single string or JSON array of strings)")],
+        model: Annotated[str, Field(description="Model ID for embeddings (required)")] = "",
     ) -> str:
-        """Generate embeddings for text using the Octomil platform.
-
-        Requires OCTOMIL_API_KEY.
-
-        Args:
-            text: Text to embed (single string or JSON array of strings)
-            model: Model ID for embeddings (uses platform default if empty)
-        """
+        """Generate text embeddings using the Octomil platform. Requires OCTOMIL_API_KEY."""
         api_key = os.environ.get("OCTOMIL_API_KEY")
         if not api_key:
             return json.dumps(
