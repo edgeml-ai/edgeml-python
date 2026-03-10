@@ -33,16 +33,70 @@ class _Candidate:
     size: str  # approximate Q4_K_M download size
 
 
-_ALL_CANDIDATES: list[_Candidate] = [
-    _Candidate("deepseek-v3.2", 685, "DeepSeek V3.2, top open model", "~405 GB"),
-    _Candidate("minimax-m2.1", 229, "MiniMax M2.1, strong multi-lang coding", "~138 GB"),
-    _Candidate("devstral-123b", 123, "Devstral 2, Mistral's agentic coder", "~75 GB"),
-    _Candidate("glm-flash", 30, "GLM-4.7 Flash, fast reasoning & code", "~18.5 GB"),
-    _Candidate("qwen-coder-7b", 7, "Best small coding model, purpose-built", "~4.5 GB"),
-    _Candidate("llama-8b", 8, "Meta Llama 3.1, solid all-rounder", "~4.5 GB"),
-    _Candidate("qwen-coder-3b", 3, "Fast coding model, runs anywhere", "~2 GB"),
-    _Candidate("qwen-coder-1.5b", 1.5, "Ultra-light coder, instant responses", "~1 GB"),
+_CURATED_CANDIDATES: list[_Candidate] = [
+    _Candidate("qwen-7b", 7, "Qwen 2.5 Coder, best small coding model", "4.5 GB"),
+    _Candidate("llama-8b", 8, "Meta Llama 3.1, solid all-rounder", "4.5 GB"),
+    _Candidate("phi-4", 14, "Microsoft Phi-4, strong reasoning", "8.5 GB"),
+    _Candidate("gemma-12b", 12, "Google Gemma 3, multilingual", "7.5 GB"),
 ]
+
+# Recommended keys shown in the top section of the picker
+_RECOMMENDED_KEYS = {"qwen-7b", "llama-8b", "phi-4"}
+
+
+def _params_to_float(params: str) -> float:
+    """Convert catalog params string like '7B' or '360M' to float billions."""
+    p = params.upper().strip()
+    if p.endswith("B"):
+        return float(p[:-1])
+    if p.endswith("M"):
+        return float(p[:-1]) / 1000
+    return 0.0
+
+
+def _estimate_size(params_b: float) -> str:
+    """Rough Q4 download size estimate."""
+    gb = params_b * 0.625
+    if gb < 1:
+        return f"{gb * 1000:.0f} MB"
+    return f"{gb:.1f} GB"
+
+
+def _params_to_float_from_key(key: str) -> float:
+    """Get param count in billions for a catalog key."""
+    try:
+        from ..models.catalog import get_model
+
+        entry = get_model(key)
+        if entry:
+            return _params_to_float(entry.params)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _build_all_candidates() -> list[_Candidate]:
+    """Build candidate list from the live catalog, falling back to curated."""
+    try:
+        from ..models.catalog import CATALOG
+
+        candidates: list[_Candidate] = []
+        for key, entry in CATALOG.items():
+            # Skip speech-to-text models
+            if "whisper" in key:
+                continue
+            params_b = _params_to_float(entry.params)
+            desc = f"{entry.publisher} {key}, {entry.params} params"
+            size = _estimate_size(params_b)
+            candidates.append(_Candidate(key, params_b, desc, size))
+
+        # Sort largest → smallest
+        candidates.sort(key=lambda c: c.params_b, reverse=True)
+        if candidates:
+            return candidates
+    except Exception:
+        pass
+    return list(_CURATED_CANDIDATES)
 
 
 # ---------------------------------------------------------------------------
@@ -117,44 +171,35 @@ class RecommendedModel:
 
 
 def _build_recommendations() -> list[RecommendedModel]:
-    """Build a device-filtered list of recommended models."""
+    """Build the full model list from catalog, sorted largest→smallest."""
     budget = _get_memory_budget_gb()
+    all_candidates = _build_all_candidates()
     models: list[RecommendedModel] = []
 
-    for c in _ALL_CANDIDATES:
-        if _model_fits(c.params_b, budget):
-            models.append(
-                RecommendedModel(
-                    key=c.key,
-                    label=c.key,
-                    description=c.description,
-                    size=c.size,
-                    downloaded=_is_model_downloaded(c.key),
-                )
-            )
-
-    if not models:
-        # Always offer the smallest model as a fallback
-        smallest = _ALL_CANDIDATES[-1]
+    for c in all_candidates:
+        fits = _model_fits(c.params_b, budget)
+        is_rec = c.key in _RECOMMENDED_KEYS and fits
         models.append(
             RecommendedModel(
-                key=smallest.key,
-                label=smallest.key,
-                description=smallest.description,
-                size=smallest.size,
-                downloaded=_is_model_downloaded(smallest.key),
+                key=c.key,
+                label=c.key,
+                description=c.description,
+                size=c.size,
+                recommended=is_rec,
+                downloaded=_is_model_downloaded(c.key),
             )
         )
 
-    # Mark the first (largest fitting) model as recommended
-    models[0] = RecommendedModel(
-        key=models[0].key,
-        label=models[0].label,
-        description=models[0].description,
-        size=models[0].size,
-        recommended=True,
-        downloaded=models[0].downloaded,
-    )
+    if not models:
+        models.append(
+            RecommendedModel(
+                key="smollm-360m",
+                label="smollm-360m",
+                description="Ultra-light, runs anywhere",
+                size="225 MB",
+            )
+        )
+
     return models
 
 
@@ -169,16 +214,19 @@ def _auto_select_model() -> str:
     recommendations = _build_recommendations()
     budget = _get_memory_budget_gb()
 
-    downloaded = [m for m in recommendations if m.downloaded]
+    # Prefer downloaded models that fit in memory
+    fitting = [m for m in recommendations if _model_fits(_params_to_float_from_key(m.key), budget)]
+    downloaded = [m for m in fitting if m.downloaded]
 
     if downloaded:
-        # Pick the largest downloaded model (first in the list — sorted
-        # largest-to-smallest from _ALL_CANDIDATES order).
         best = downloaded[0]
-        click.echo(f"Using {best.key} (already downloaded, best for {budget:.0f} GB). Use --select to choose.")
+        click.echo(f"Using {best.key} (already downloaded). Use --select to choose.")
+    elif fitting:
+        best = fitting[0]
+        click.echo(f"Using {best.key} (will download ~{best.size}). Use --select to choose.")
     else:
-        best = recommendations[0]
-        click.echo(f"Using {best.key} (best for {budget:.0f} GB, will download {best.size}). Use --select to choose.")
+        best = recommendations[-1]  # smallest
+        click.echo(f"Using {best.key} (will download ~{best.size}). Use --select to choose.")
     return best.key
 
 
@@ -223,9 +271,9 @@ def _run_model_tui(
     """Full prompt_toolkit TUI for model selection."""
     statuses = {m.key: _is_model_downloaded(m.key) for m in recommendations}
 
-    # Split into recommended (top 3) and more
-    recommended = [m for m in recommendations if m.recommended or recommendations.index(m) < 3]
-    more = [m for m in recommendations if m not in recommended]
+    # Split into recommended and more
+    recommended = [m for m in recommendations if m.recommended]
+    more = [m for m in recommendations if not m.recommended]
     all_items = recommended + more
 
     selected = [0]
@@ -376,8 +424,8 @@ def _select_model_fallback(
     """Plain numbered list fallback when TUI is unavailable."""
     click.echo("\n  Select model:\n")
 
-    recommended = recommendations[:3]
-    more = recommendations[3:]
+    recommended = [m for m in recommendations if m.recommended]
+    more = [m for m in recommendations if not m.recommended]
 
     if recommended:
         click.echo("  Recommended")
@@ -490,6 +538,27 @@ def _build_serve_cmd(model: str, port: int) -> list[str]:
     return [sys.executable, "-m", "octomil", "serve", model, "--port", str(port)]
 
 
+def _extract_serve_error(log_path: str) -> str:
+    """Extract a human-readable error message from the serve log file."""
+    try:
+        with open(log_path) as f:
+            lines = f.readlines()
+    except Exception:
+        return "Server exited unexpectedly."
+
+    for line in reversed(lines):
+        stripped = line.strip()
+        for prefix in ("ValueError: ", "ModelResolutionError: "):
+            if stripped.startswith(prefix):
+                return stripped[len(prefix) :]
+        if "ERROR" in stripped and "Failed to" in stripped:
+            parts = stripped.split("Failed to", 1)
+            if len(parts) == 2:
+                return "Failed to" + parts[1]
+
+    return f"Server failed to start. See full log: {log_path}"
+
+
 def start_serve_background(model: str, port: int = 8080, timeout: int = 600) -> subprocess.Popen:
     """Start ``octomil serve`` in the background and wait until ready.
 
@@ -510,15 +579,8 @@ def start_serve_background(model: str, port: int = 8080, timeout: int = 600) -> 
     for i in range(timeout):
         if proc.poll() is not None:
             log_file.close()
-            try:
-                with open(log_path) as f:
-                    tail = f.readlines()[-20:]
-                click.echo("Server exited unexpectedly. Last log lines:", err=True)
-                for line in tail:
-                    click.echo(f"  {line.rstrip()}", err=True)
-            except Exception:
-                pass
-            raise RuntimeError(f"octomil serve exited with code {proc.returncode}")
+            error_msg = _extract_serve_error(log_path)
+            raise click.ClickException(f"{error_msg}\n\n  Full log: {log_path}")
         if is_serve_running(port=port):
             log_file.close()
             return proc
@@ -527,7 +589,7 @@ def start_serve_background(model: str, port: int = 8080, timeout: int = 600) -> 
         time.sleep(1)
     proc.terminate()
     log_file.close()
-    raise RuntimeError(f"octomil serve failed to start within {timeout}s")
+    raise click.ClickException(f"Model server failed to start within {timeout}s.\n\n  Full log: {log_path}")
 
 
 # ---------------------------------------------------------------------------
