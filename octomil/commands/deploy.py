@@ -168,7 +168,7 @@ def deploy(
     if is_phone:
         # Detect ollama models before deploying
         from octomil.ollama import get_ollama_model
-        from octomil.qr import build_deep_link, render_qr_terminal
+        from octomil.qr import build_custom_scheme_link, build_deep_link, render_qr_terminal
 
         ollama_model = get_ollama_model(name)
         if ollama_model:
@@ -297,10 +297,11 @@ def deploy(
         session = resp.json()
         code = session["code"]
 
-        # Build the deep link URL for the Octomil mobile app.
-        # The octomil:// scheme is handled by DeepLinkHandler in the
-        # iOS and Android SDKs, opening the app directly to pairing.
+        # Build the Universal Link URL for the QR code (https:// so iOS Camera
+        # can open the app via Universal Links) and a custom-scheme fallback
+        # for the "Or open manually" hint in the terminal box.
         pair_url = build_deep_link(token=code, host=api_base)
+        fallback_url = build_custom_scheme_link(token=code, host=api_base)
 
         # Render QR code in a styled box
         qr_art = render_qr_terminal(pair_url)
@@ -317,7 +318,7 @@ def deploy(
             padded = ("  " + line).ljust(box_inner)
             click.echo("\u2502" + padded + "\u2502")
         click.echo("\u2502" + " " * box_inner + "\u2502")
-        click.echo("\u2502" + f"  Or open manually: {pair_url}".ljust(box_inner) + "\u2502")
+        click.echo("\u2502" + f"  Or open manually: {fallback_url}".ljust(box_inner) + "\u2502")
         click.echo("\u2502" + "  Expires in 5 minutes".ljust(box_inner) + "\u2502")
         click.echo("\u2570" + "\u2500" * box_inner + "\u256f")
         click.echo()
