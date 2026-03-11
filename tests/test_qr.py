@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 from octomil.cli import main
-from octomil.qr import build_deep_link, print_qr_code, render_qr_terminal
+from octomil.qr import build_custom_scheme_link, build_deep_link, print_qr_code, render_qr_terminal
 
 
 def _mock_deploy_http(*responses):
@@ -78,13 +78,13 @@ class TestRenderQrTerminal:
 class TestBuildDeepLink:
     def test_basic_deep_link(self):
         url = build_deep_link(token="ABC123", host="https://api.octomil.com/api/v1")
-        assert url.startswith("octomil://pair?")
+        assert url.startswith("https://octomil.com/pair?")
         assert "token=ABC123" in url
         assert "host=https%3A%2F%2Fapi.octomil.com%2Fapi%2Fv1" in url
 
     def test_deep_link_scheme(self):
         url = build_deep_link(token="T", host="https://example.com")
-        assert url.startswith("octomil://pair?")
+        assert url.startswith("https://octomil.com/pair?")
 
     def test_token_is_url_encoded(self):
         url = build_deep_link(token="a+b&c=d", host="https://example.com")
@@ -102,8 +102,9 @@ class TestBuildDeepLink:
         import urllib.parse
 
         parsed = urllib.parse.urlparse(url)
-        assert parsed.scheme == "octomil"
-        assert parsed.netloc == "pair"
+        assert parsed.scheme == "https"
+        assert parsed.netloc == "octomil.com"
+        assert parsed.path == "/pair"
         params = urllib.parse.parse_qs(parsed.query)
         assert params["token"] == ["ep_7kx"]
         assert params["host"] == ["https://api.octomil.com/api/v1"]
@@ -119,6 +120,35 @@ class TestBuildDeepLink:
     def test_empty_token(self):
         url = build_deep_link(token="", host="https://api.octomil.com/api/v1")
         assert "token=&" in url or url.endswith("token=")
+
+
+# ---------------------------------------------------------------------------
+# build_custom_scheme_link
+# ---------------------------------------------------------------------------
+
+
+class TestBuildCustomSchemeLink:
+    def test_basic_custom_scheme_link(self):
+        url = build_custom_scheme_link(token="ABC123", host="https://api.octomil.com/api/v1")
+        assert url.startswith("octomil://pair?")
+        assert "token=ABC123" in url
+        assert "host=https%3A%2F%2Fapi.octomil.com%2Fapi%2Fv1" in url
+
+    def test_custom_scheme(self):
+        url = build_custom_scheme_link(token="T", host="https://example.com")
+        import urllib.parse
+
+        parsed = urllib.parse.urlparse(url)
+        assert parsed.scheme == "octomil"
+        assert parsed.netloc == "pair"
+
+    def test_token_is_url_encoded(self):
+        url = build_custom_scheme_link(token="a+b&c=d", host="https://example.com")
+        assert "token=a%2Bb%26c%3Dd" in url
+
+    def test_host_is_url_encoded(self):
+        url = build_custom_scheme_link(token="T", host="https://api.octomil.com/api/v1")
+        assert "host=https%3A%2F%2Fapi.octomil.com%2Fapi%2Fv1" in url
 
 
 # ---------------------------------------------------------------------------
@@ -184,12 +214,16 @@ class TestDeployPhoneQr:
         # Box borders should be present
         assert "\u256d" in result.output  # top-left corner
         assert "\u256f" in result.output  # bottom-right corner
-        # Deep link URL should be shown with the token
+        # Token should appear in the fallback URL
         assert "XYZ789" in result.output
-        assert "octomil://pair?" in result.output
         assert "Scan this QR code with your phone camera:" in result.output
         assert "Or open manually:" in result.output
+        # The "Or open manually" line uses the custom scheme fallback
+        assert "Or open manually: octomil://pair?" in result.output
         assert "Expires in 5 minutes" in result.output
+        # webbrowser.open should be called with the Universal Link
+        url = mock_open.call_args[0][0]
+        assert url.startswith("https://octomil.com/pair?")
 
     @patch("octomil.commands.deploy.webbrowser.open")
     def test_deploy_phone_shows_completion(self, mock_open, monkeypatch):
@@ -258,7 +292,7 @@ class TestDeployPhoneQr:
         assert result.exit_code == 0
         mock_open.assert_called_once()
         url = mock_open.call_args[0][0]
-        assert url.startswith("octomil://pair?")
+        assert url.startswith("https://octomil.com/pair?")
         assert "token=QR1234" in url
         assert "host=" in url
 
@@ -286,8 +320,8 @@ class TestDeployPhoneQr:
         assert result.exit_code != 0
 
     @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_qr_payload_is_deep_link(self, mock_open, monkeypatch):
-        """The QR code payload and webbrowser.open URL must be a valid octomil:// deep link."""
+    def test_deploy_phone_qr_payload_is_universal_link(self, mock_open, monkeypatch):
+        """The QR code payload and webbrowser.open URL must be a valid https:// Universal Link."""
         import urllib.parse
 
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
@@ -312,8 +346,9 @@ class TestDeployPhoneQr:
         assert result.exit_code == 0
         url = mock_open.call_args[0][0]
         parsed = urllib.parse.urlparse(url)
-        assert parsed.scheme == "octomil"
-        assert parsed.netloc == "pair"
+        assert parsed.scheme == "https"
+        assert parsed.netloc == "octomil.com"
+        assert parsed.path == "/pair"
         params = urllib.parse.parse_qs(parsed.query)
         assert "token" in params
         assert params["token"] == ["DL_TEST"]
@@ -322,8 +357,8 @@ class TestDeployPhoneQr:
         assert "api.octomil.com" in params["host"][0]
 
     @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_deep_link_displayed_in_output(self, mock_open, monkeypatch):
-        """The deep link URL should be displayed as a fallback in the terminal output."""
+    def test_deploy_phone_custom_scheme_displayed_in_output(self, mock_open, monkeypatch):
+        """The custom scheme fallback URL should be displayed in the terminal output."""
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
         mock_check = MagicMock(status_code=200, json=MagicMock(return_value={"name": "test-model"}))
@@ -347,8 +382,8 @@ class TestDeployPhoneQr:
         assert "Or open manually: octomil://pair?token=DISP01&host=" in result.output
 
     @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_custom_api_base_in_deep_link(self, mock_open, monkeypatch):
-        """A custom API base URL should be encoded in the deep link host param."""
+    def test_deploy_phone_custom_api_base_in_universal_link(self, mock_open, monkeypatch):
+        """A custom API base URL should be encoded in the Universal Link host param."""
         import urllib.parse
 
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
@@ -374,6 +409,8 @@ class TestDeployPhoneQr:
         assert result.exit_code == 0
         url = mock_open.call_args[0][0]
         parsed = urllib.parse.urlparse(url)
+        assert parsed.scheme == "https"
+        assert parsed.netloc == "octomil.com"
         params = urllib.parse.parse_qs(parsed.query)
         assert params["host"] == ["http://localhost:8000/api/v1"]
         assert params["token"] == ["CUST01"]
@@ -406,7 +443,9 @@ class TestDeployPhoneQr:
             result = runner.invoke(main, ["deploy", "test-model", "--phone"])
 
         assert result.exit_code == 0
-        # Should still show the deep link URL even without QR
+        # Should still show the Universal Link URL even without QR
         assert "FB0001" in result.output
-        assert "octomil://pair?" in result.output
+        assert "https://octomil.com/pair?" in result.output
+        # The "Or open manually" line uses the custom scheme fallback
+        assert "Or open manually: octomil://pair?" in result.output
         assert "Scan this QR code with your phone camera:" in result.output
