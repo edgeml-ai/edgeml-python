@@ -123,9 +123,14 @@ def resolve_and_download(name: str) -> str:
             return result.path
         raise RuntimeError(f"Could not download '{ref}' from {source}")
 
+    # ── Resolve catalog alias (phi-4-mini → phi-mini, etc.) ─────────────
+    from ..models.catalog import _resolve_alias
+
+    canonical = _resolve_alias(name)
+
     # ── Alias lookup (server-fetched) ────────────────────────────────────
     model_aliases = _get_model_aliases()
-    aliases = model_aliases.get(name)
+    aliases = model_aliases.get(canonical) or model_aliases.get(name)
     if aliases:
         # Try Ollama first (fastest — local cache), then HuggingFace
         if "ollama" in aliases:
@@ -183,8 +188,11 @@ def resolve_hf_repo(name: str, *, prefer_onnx: bool = True) -> Optional[str]:
         return ref if source == "hf" else None
 
     # Alias lookup — prefer ONNX variant for server-side import
+    from ..models.catalog import _resolve_alias
+
+    canonical = _resolve_alias(name)
     model_aliases = _get_model_aliases()
-    aliases = model_aliases.get(name)
+    aliases = model_aliases.get(canonical) or model_aliases.get(name)
     if aliases:
         if prefer_onnx and "hf_onnx" in aliases:
             return aliases["hf_onnx"]

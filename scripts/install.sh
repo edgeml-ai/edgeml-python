@@ -330,7 +330,7 @@ main() {
     printf "  ${YELLOW}Get started${RESET}\n"
     printf "    ${WHITE}octomil serve qwen-7b${RESET}        ${DIM}Start a local model server${RESET}\n"
     printf "    ${WHITE}octomil launch${RESET}               ${DIM}Launch a coding agent (Claude, Codex, …)${RESET}\n"
-    printf "    ${WHITE}octomil deploy phi-4-mini${RESET}    ${DIM}Deploy a model to devices${RESET}\n"
+    printf "    ${WHITE}octomil deploy phi-mini${RESET}      ${DIM}Deploy a model to devices${RESET}\n"
     printf "    ${WHITE}octomil benchmark gemma-1b${RESET}   ${DIM}Benchmark inference performance${RESET}\n"
     echo ""
     printf "  ${YELLOW}More${RESET}\n"
