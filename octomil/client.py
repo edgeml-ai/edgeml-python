@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .control import OctomilControl
     from .embeddings import EmbeddingResult
     from .model import Model, Prediction
+    from .models_namespace import OctomilModels
     from .responses.responses import OctomilResponses
     from .serve import GenerationChunk
     from .streaming import StreamToken
@@ -101,10 +102,11 @@ class OctomilClient:
         )
         self._rollouts = RolloutsAPI(self._api)
 
-        # Lazy-initialised response, workflow, and control APIs
+        # Lazy-initialised response, workflow, control, and models namespace APIs
         self._responses: OctomilResponses | None = None
         self._workflows: WorkflowRunner | None = None
         self._control: OctomilControl | None = None
+        self._models_ns: OctomilModels | None = None
 
         # Telemetry — best-effort, never blocks or raises
         self._reporter: TelemetryReporter | None = None
@@ -119,6 +121,19 @@ class OctomilClient:
                 )
             except Exception:
                 logger.debug("Failed to initialise telemetry reporter", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Models namespace — SDK Facade Contract lifecycle API
+    # ------------------------------------------------------------------
+
+    @property
+    def models(self) -> "OctomilModels":
+        """Model lifecycle operations (status, load, unload, list, clear_cache)."""
+        if self._models_ns is None:
+            from .models_namespace import OctomilModels
+
+            self._models_ns = OctomilModels(self)
+        return self._models_ns
 
     # ------------------------------------------------------------------
     # Responses API — structured on-device inference
