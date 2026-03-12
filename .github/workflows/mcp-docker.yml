@@ -6,7 +6,7 @@ on:
     paths:
       - "octomil/mcp/**"
       - "octomil/commands/mcp_cmd.py"
-      - "Dockerfile.mcp"
+      - "packaging/Dockerfile.mcp"
   workflow_dispatch:
 
 env:
@@ -34,7 +34,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.mcp
+          file: packaging/Dockerfile.mcp
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest

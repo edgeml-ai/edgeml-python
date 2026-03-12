@@ -68,7 +68,7 @@ rm -rf build/ dist/octomil dist/octomil.pkg
 # Run PyInstaller
 # ---------------------------------------------------------------------------
 echo "==> Building binary with PyInstaller..."
-pyinstaller octomil.spec --noconfirm
+pyinstaller packaging/octomil.spec --noconfirm
 
 # Verify the binary was created
 BINARY="dist/octomil"
