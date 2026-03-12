@@ -142,6 +142,19 @@ class OctomilClient:
         return self._models_ns
 
     # ------------------------------------------------------------------
+    # Capabilities namespace — device profiling
+    # ------------------------------------------------------------------
+
+    @property
+    def capabilities(self) -> "CapabilitiesClient":
+        """Device capabilities (runtimes, memory, accelerators)."""
+        if self._capabilities_ns is None:
+            from .capabilities_client import CapabilitiesClient
+
+            self._capabilities_ns = CapabilitiesClient(self)
+        return self._capabilities_ns
+
+    # ------------------------------------------------------------------
     # Responses API — structured on-device inference
     # ------------------------------------------------------------------
 
