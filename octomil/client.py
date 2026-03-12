@@ -75,6 +75,8 @@ class OctomilClient:
         api_key: API key. Falls back to ``OCTOMIL_API_KEY`` env var.
         org_id: Organisation identifier. Falls back to ``OCTOMIL_ORG_ID`` env var.
         api_base: API base URL. Falls back to ``OCTOMIL_API_BASE`` env var.
+        device_id: Stable device identifier. When ``None``, one is derived
+            automatically from the host hardware (see :mod:`octomil.device_info`).
     """
 
     def __init__(
@@ -82,6 +84,7 @@ class OctomilClient:
         api_key: Optional[str] = None,
         org_id: Optional[str] = None,
         api_base: Optional[str] = None,
+        device_id: str | None = None,
     ) -> None:
         _key = api_key if api_key is not None else os.environ.get("OCTOMIL_API_KEY", "")
         _oid = org_id if org_id is not None else os.environ.get("OCTOMIL_ORG_ID", "default")
@@ -89,6 +92,7 @@ class OctomilClient:
         self._api_key: str = _key
         self._org_id: str = _oid
         self._api_base: str = _base
+        self._device_id: str | None = device_id
         self._models: dict[str, "Model"] = {}
 
         def _token_provider() -> str:
@@ -124,9 +128,28 @@ class OctomilClient:
                     api_key=self._api_key,
                     api_base=self._api_base,
                     org_id=self._org_id,
+                    device_id=self._device_id,
                 )
             except Exception:
                 logger.debug("Failed to initialise telemetry reporter", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Device ID — stable identifier for this device
+    # ------------------------------------------------------------------
+
+    @property
+    def device_id(self) -> str:
+        """Stable device identifier.
+
+        Returns the explicitly configured ``device_id`` if one was
+        provided at construction time; otherwise derives one from the
+        host hardware.
+        """
+        if self._device_id is None:
+            from .device_info import get_stable_device_id
+
+            self._device_id = get_stable_device_id()
+        return self._device_id
 
     # ------------------------------------------------------------------
     # Models namespace — SDK Facade Contract lifecycle API
