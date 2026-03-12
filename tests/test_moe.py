@@ -34,6 +34,8 @@ from octomil.models.catalog import (
 from octomil.models.resolver import ResolvedModel, resolve
 from octomil.telemetry import TelemetryReporter, _compute_load_balance
 
+from .conftest import parse_otlp_kv
+
 # =====================================================================
 # Catalog — MoE model entries
 # =====================================================================
@@ -418,8 +420,12 @@ class TestTelemetryMoERouting:
             time.sleep(0.05)
 
     def _get_event_attrs(self, index: int = 0) -> dict:
-        """Extract event attributes from the sent envelope at given index."""
-        return self.sent[index]["events"][0]["attributes"]
+        """Extract event attributes from the sent OTLP envelope at given index."""
+        records = []
+        for rl in self.sent[index].get("resourceLogs", []):
+            for sl in rl.get("scopeLogs", []):
+                records.extend(sl.get("logRecords", []))
+        return parse_otlp_kv(records[0]["attributes"])
 
     def test_moe_routing_event_structure(self) -> None:
         self.reporter.report_moe_routing(
@@ -432,13 +438,19 @@ class TestTelemetryMoERouting:
         )
         self._wait_for_events()
         assert len(self.sent) >= 1
-        event = self.sent[0]["events"][0]
-        assert event["name"] == "inference.moe_routing"
-        # Resource carries device_id and org_id
-        resource = self.sent[0]["resource"]
-        assert resource["device_id"] == "dev-moe"
-        assert resource["org_id"] == "test-org"
-        attrs = event["attributes"]
+        # Extract from OTLP envelope
+        records = []
+        for rl in self.sent[0].get("resourceLogs", []):
+            for sl in rl.get("scopeLogs", []):
+                records.extend(sl.get("logRecords", []))
+        record = records[0]
+        assert record["body"]["stringValue"] == "inference.moe_routing"
+        # Resource carries device_id and org_id in OTLP KeyValue format
+        resource = self.sent[0]["resourceLogs"][0]["resource"]
+        res_attrs = parse_otlp_kv(resource["attributes"])
+        assert res_attrs["device.id"] == "dev-moe"
+        assert res_attrs["org.id"] == "test-org"
+        attrs = parse_otlp_kv(record["attributes"])
         assert attrs["model.id"] == "mixtral-8x7b"
         assert attrs["inference.session_id"] == "sess-1"
         assert attrs["inference.moe.num_experts"] == 8
@@ -459,7 +471,8 @@ class TestTelemetryMoERouting:
         self._wait_for_events()
         assert len(self.sent) >= 1
         attrs = self._get_event_attrs()
-        assert attrs["inference.moe.expert_activation_counts"] == counts
+        # Dict is stringified in OTLP format
+        assert attrs["inference.moe.expert_activation_counts"] == str(counts)
         # Load balance score should be auto-computed
         assert "inference.moe.load_balance_score" in attrs
         assert 0.0 <= attrs["inference.moe.load_balance_score"] <= 1.0

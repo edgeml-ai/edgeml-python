@@ -15,6 +15,8 @@ from octomil.serve import (
 )
 from octomil.telemetry import TelemetryReporter
 
+from .conftest import parse_otlp_kv
+
 # ---------------------------------------------------------------------------
 # InferenceMetrics — attention_backend field
 # ---------------------------------------------------------------------------
@@ -270,9 +272,14 @@ class TestTelemetryAttentionBackend:
             reporter.close()
 
         assert len(sent) >= 1
-        event = sent[0]["events"][0]
-        assert event["name"] == "inference.started"
-        assert event["attributes"]["inference.attention_backend"] == "flash_attention"
+        records = []
+        for rl in sent[0].get("resourceLogs", []):
+            for sl in rl.get("scopeLogs", []):
+                records.extend(sl.get("logRecords", []))
+        record = records[0]
+        assert record["body"]["stringValue"] == "inference.started"
+        attrs = parse_otlp_kv(record["attributes"])
+        assert attrs["inference.attention_backend"] == "flash_attention"
 
     def test_inference_started_no_attention_backend_has_no_attr(self):
         sent: list[dict] = []
@@ -296,7 +303,11 @@ class TestTelemetryAttentionBackend:
             reporter.close()
 
         assert len(sent) >= 1
-        attrs = sent[0]["events"][0]["attributes"]
+        records = []
+        for rl in sent[0].get("resourceLogs", []):
+            for sl in rl.get("scopeLogs", []):
+                records.extend(sl.get("logRecords", []))
+        attrs = parse_otlp_kv(records[0]["attributes"])
         assert "inference.attention_backend" not in attrs
 
     def test_inference_completed_includes_attention_backend(self):
@@ -326,9 +337,13 @@ class TestTelemetryAttentionBackend:
             reporter.close()
 
         assert len(sent) >= 1
-        event = sent[0]["events"][0]
-        assert event["name"] == "inference.completed"
-        attrs = event["attributes"]
+        records = []
+        for rl in sent[0].get("resourceLogs", []):
+            for sl in rl.get("scopeLogs", []):
+                records.extend(sl.get("logRecords", []))
+        record = records[0]
+        assert record["body"]["stringValue"] == "inference.completed"
+        attrs = parse_otlp_kv(record["attributes"])
         assert attrs["inference.attention_backend"] == "metal_fused"
         # Original attributes should still be present
         assert attrs["inference.total_tokens"] == 10
@@ -361,7 +376,11 @@ class TestTelemetryAttentionBackend:
             reporter.close()
 
         assert len(sent) >= 1
-        attrs = sent[0]["events"][0]["attributes"]
+        records = []
+        for rl in sent[0].get("resourceLogs", []):
+            for sl in rl.get("scopeLogs", []):
+                records.extend(sl.get("logRecords", []))
+        attrs = parse_otlp_kv(records[0]["attributes"])
         assert "inference.attention_backend" not in attrs
 
 
