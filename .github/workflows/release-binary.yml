@@ -45,7 +45,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build binary
-        run: pyinstaller octomil.spec --noconfirm
+        run: pyinstaller packaging/octomil.spec --noconfirm
 
       - name: Verify binary
         run: |
