@@ -1,4 +1,4 @@
-"""Backward-compatible re-exports — use octomil.runtime.core instead."""
+"""Runtime core — protocols, types, registries, and adapters."""
 
 from octomil.runtime.core.adapter import InferenceBackendAdapter
 from octomil.runtime.core.cloud_runtime import CloudModelRuntime
@@ -34,10 +34,3 @@ __all__ = [
     "RuntimeToolDef",
     "RuntimeUsage",
 ]
-
-
-def _connect_engines() -> None:
-    """Wire EngineRegistry as the default factory for ModelRuntimeRegistry."""
-    from octomil.runtime import _connect_engines as _real_connect
-
-    _real_connect()
