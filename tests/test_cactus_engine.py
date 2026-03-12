@@ -178,18 +178,20 @@ class TestCactusEngineInRegistry(unittest.TestCase):
     """Test that CactusEngine is registered in the global registry."""
 
     def test_registry_contains_cactus(self):
-        from octomil.runtime.engines.registry import EngineRegistry, _auto_register
+        from octomil.runtime.engines.registry import EngineRegistry, _auto_register, _register_experimental
 
         registry = EngineRegistry()
         _auto_register(registry)
+        _register_experimental(registry)
         names = [e.name for e in registry.engines]
         self.assertIn("cactus", names)
 
     def test_cactus_after_llamacpp_in_registry(self):
-        from octomil.runtime.engines.registry import EngineRegistry, _auto_register
+        from octomil.runtime.engines.registry import EngineRegistry, _auto_register, _register_experimental
 
         registry = EngineRegistry()
         _auto_register(registry)
+        _register_experimental(registry)
         names = [e.name for e in registry.engines]
         llama_idx = names.index("llama.cpp")
         cactus_idx = names.index("cactus")

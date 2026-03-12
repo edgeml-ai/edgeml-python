@@ -720,18 +720,24 @@ class TestMLCRegistry:
         assert registry.get_engine("mlc-llm") is engine
 
     def test_auto_register_includes_mlc(self) -> None:
-        from octomil.runtime.engines.registry import EngineRegistry, _auto_register
+        from octomil.runtime.engines.registry import EngineRegistry, _auto_register, _register_experimental
 
         registry = EngineRegistry()
         _auto_register(registry)
+        _register_experimental(registry)
         assert registry.get_engine("mlc-llm") is not None
 
     def test_global_registry_has_mlc(self) -> None:
-        from octomil.runtime.engines.registry import get_registry, reset_registry
+        from octomil.runtime.engines.registry import (
+            _register_experimental,
+            get_registry,
+            reset_registry,
+        )
 
         reset_registry()
         try:
             reg = get_registry()
+            _register_experimental(reg)
             names = [e.name for e in reg.engines]
             assert "mlc-llm" in names
         finally:
@@ -739,10 +745,11 @@ class TestMLCRegistry:
 
     def test_priority_ordering(self) -> None:
         """mlc-llm (18) should be after mnn (15) and before llama.cpp (20)."""
-        from octomil.runtime.engines.registry import EngineRegistry, _auto_register
+        from octomil.runtime.engines.registry import EngineRegistry, _auto_register, _register_experimental
 
         registry = EngineRegistry()
         _auto_register(registry)
+        _register_experimental(registry)
 
         mlc = registry.get_engine("mlc-llm")
         mnn = registry.get_engine("mnn")
@@ -763,10 +770,11 @@ class TestMLCRegistry:
         assert mlc_count == 1
 
     def test_detect_all_includes_mlc(self) -> None:
-        from octomil.runtime.engines.registry import EngineRegistry, _auto_register
+        from octomil.runtime.engines.registry import EngineRegistry, _auto_register, _register_experimental
 
         registry = EngineRegistry()
         _auto_register(registry)
+        _register_experimental(registry)
         results = registry.detect_all()
         engine_names = [r.engine.name for r in results]
         assert "mlc-llm" in engine_names

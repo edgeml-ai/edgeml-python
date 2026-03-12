@@ -154,8 +154,9 @@ class TestMNNRegistry:
         assert registry.get_engine("mnn") is engine
 
     def test_auto_register_includes_mnn(self) -> None:
-        from octomil.runtime.engines.registry import EngineRegistry, _auto_register
+        from octomil.runtime.engines.registry import EngineRegistry, _auto_register, _register_experimental
 
         registry = EngineRegistry()
         _auto_register(registry)
+        _register_experimental(registry)
         assert registry.get_engine("mnn") is not None
