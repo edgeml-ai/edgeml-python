@@ -1,4 +1,4 @@
-"""Shared test fixtures for model catalog, aliases, and registry tests.
+"""Shared test fixtures and helpers for the octomil test suite.
 
 Provides mock server response data so tests run without a live Octomil API.
 The fixture data mirrors a minimal subset of the old hardcoded catalogs —
@@ -7,7 +7,42 @@ just enough to satisfy the models referenced in the test suite.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
+
+# ---------------------------------------------------------------------------
+# OTLP telemetry helpers (used across multiple test files)
+# ---------------------------------------------------------------------------
+
+
+def parse_otlp_kv(kv_list: list[dict[str, Any]]) -> dict[str, Any]:
+    """Convert an OTLP KeyValue array to a flat dict with native types."""
+    result: dict[str, Any] = {}
+    for kv in kv_list:
+        key = kv["key"]
+        val = kv["value"]
+        if "stringValue" in val:
+            result[key] = val["stringValue"]
+        elif "intValue" in val:
+            result[key] = int(val["intValue"])
+        elif "doubleValue" in val:
+            result[key] = val["doubleValue"]
+        elif "boolValue" in val:
+            result[key] = val["boolValue"]
+        else:
+            result[key] = str(val)
+    return result
+
+
+def extract_otlp_records(envelope: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten all LogRecords from an OTLP ExportLogsServiceRequest."""
+    records: list[dict[str, Any]] = []
+    for rl in envelope.get("resourceLogs", []):
+        for sl in rl.get("scopeLogs", []):
+            records.extend(sl.get("logRecords", []))
+    return records
+
 
 # ---------------------------------------------------------------------------
 # Mock catalog data (returned as if from GET /api/v1/models/catalog)

@@ -34,6 +34,8 @@ from octomil.models.catalog import (
 from octomil.models.resolver import ResolvedModel, resolve
 from octomil.telemetry import TelemetryReporter, _compute_load_balance
 
+from .conftest import parse_otlp_kv
+
 # =====================================================================
 # Catalog — MoE model entries
 # =====================================================================
@@ -441,10 +443,10 @@ class TestTelemetryMoERouting:
         assert record["body"]["stringValue"] == "inference.moe_routing"
         # Resource carries device_id and org_id in OTLP KeyValue format
         resource = self.sent[0]["resourceLogs"][0]["resource"]
-        res_attrs = {kv["key"]: list(kv["value"].values())[0] for kv in resource["attributes"]}
+        res_attrs = parse_otlp_kv(resource["attributes"])
         assert res_attrs["device.id"] == "dev-moe"
         assert res_attrs["org.id"] == "test-org"
-        attrs = {kv["key"]: list(kv["value"].values())[0] for kv in record["attributes"]}
+        attrs = parse_otlp_kv(record["attributes"])
         assert attrs["model.id"] == "mixtral-8x7b"
         assert attrs["inference.session_id"] == "sess-1"
         assert attrs["inference.moe.num_experts"] == 8

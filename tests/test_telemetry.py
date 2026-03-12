@@ -17,6 +17,8 @@ from octomil.telemetry import (
     _v2_url,
 )
 
+from .conftest import parse_otlp_kv
+
 
 def _extract_records(envelope: dict) -> list[dict]:
     """Flatten all LogRecords from an OTLP ExportLogsServiceRequest."""
@@ -155,7 +157,7 @@ class TestTelemetryV2Envelope:
         resource = sent[0]["resourceLogs"][0]["resource"]
         assert "attributes" in resource
         # Convert OTLP KV list to dict for easier assertion
-        attrs = {kv["key"]: list(kv["value"].values())[0] for kv in resource["attributes"]}
+        attrs = parse_otlp_kv(resource["attributes"])
         assert attrs["service.name"] == "octomil-sdk"
         assert attrs["sdk.language"] == "python"
         assert attrs["device.id"] == "dev-abc"
@@ -1125,8 +1127,8 @@ class TestTelemetryClose:
                 )
             reporter.close()
 
-        # Count total events across all envelopes
-        total_events = sum(len(e.get("events", [])) for e in sent)
+        # Count total LogRecords across all OTLP envelopes
+        total_events = sum(len(_extract_records(e)) for e in sent)
         assert total_events == 5
 
     def test_close_is_idempotent(self):

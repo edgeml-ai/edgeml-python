@@ -18,6 +18,8 @@ from octomil.compression import (
     estimate_tokens,
 )
 
+from .conftest import parse_otlp_kv
+
 # ---------------------------------------------------------------------------
 # estimate_tokens
 # ---------------------------------------------------------------------------
@@ -502,7 +504,7 @@ class TestCompressionTelemetry:
         assert len(records) >= 1
         record = records[0]
         assert record["body"]["stringValue"] == "inference.prompt_compressed"
-        attrs = {kv["key"]: list(kv["value"].values())[0] for kv in record["attributes"]}
+        attrs = parse_otlp_kv(record["attributes"])
         assert attrs["inference.compression.original_tokens"] == 500
         assert attrs["inference.compression.compressed_tokens"] == 250
         assert attrs["inference.compression.tokens_saved"] == 250
