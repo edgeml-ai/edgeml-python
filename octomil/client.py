@@ -1160,6 +1160,7 @@ class OctomilClient:
             model_id=model_id,
             name=name,
             version=resolved_version,
+            format=format,
         )
 
         t0 = time.monotonic()
