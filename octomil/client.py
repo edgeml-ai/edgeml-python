@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Optional
 
 if TYPE_CHECKING:
+    from .control import OctomilControl
     from .embeddings import EmbeddingResult
     from .model import Model, Prediction
     from .responses.responses import OctomilResponses
@@ -100,9 +101,10 @@ class OctomilClient:
         )
         self._rollouts = RolloutsAPI(self._api)
 
-        # Lazy-initialised response and workflow APIs
+        # Lazy-initialised response, workflow, and control APIs
         self._responses: OctomilResponses | None = None
         self._workflows: WorkflowRunner | None = None
+        self._control: OctomilControl | None = None
 
         # Telemetry — best-effort, never blocks or raises
         self._reporter: TelemetryReporter | None = None
@@ -143,6 +145,22 @@ class OctomilClient:
 
             self._workflows = WorkflowRunner(self.responses)
         return self._workflows
+
+    # ------------------------------------------------------------------
+    # Control — device registration and heartbeat
+    # ------------------------------------------------------------------
+
+    @property
+    def control(self) -> "OctomilControl":
+        """Device registration and heartbeat management."""
+        if self._control is None:
+            from .control import OctomilControl
+
+            self._control = OctomilControl(
+                api=self._api,
+                org_id=self._org_id,
+            )
+        return self._control
 
     # ------------------------------------------------------------------
     # Push — upload a model file + trigger server-side conversion
@@ -1104,6 +1122,9 @@ class OctomilClient:
 
     def close(self) -> None:
         """Release all cached models and shut down the telemetry reporter."""
+        if self._control is not None:
+            self._control.stop_heartbeat()
+            self._control = None
         self._models.clear()
         if self._reporter:
             try:
