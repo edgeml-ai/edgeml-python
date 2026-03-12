@@ -19,6 +19,7 @@ from typing import Optional as _Optional
 
 from . import responses  # noqa: F401
 from .client import OctomilClient
+from .control import DeviceRegistration, HeartbeatResponse, OctomilControl
 from .decomposer import (
     DecompositionResult,
     QueryDecomposer,
@@ -285,4 +286,7 @@ __all__ = [
     "embed",
     "RouterConfig",
     "SmartRouter",
+    "OctomilControl",
+    "DeviceRegistration",
+    "HeartbeatResponse",
 ]
