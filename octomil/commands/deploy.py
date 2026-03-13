@@ -12,6 +12,7 @@ import click
 from octomil.cli_helpers import (
     _complete_model_name,
     _get_client,
+    _get_org_id,
     _get_telemetry_reporter,
     _require_api_key,
     cli_header,
@@ -206,14 +207,28 @@ def deploy(
         dashboard_url = os.environ.get("OCTOMIL_DASHBOARD_URL", "https://app.octomil.com")
         headers = {"Authorization": f"Bearer {api_key}"}
 
-        # Ensure model exists in registry — auto-download, convert, push if needed
+        # Ensure model exists in registry — auto-download, convert, push if needed.
+        # The /models/{id} endpoint only accepts UUIDs, so we search by name
+        # via the list endpoint instead.
+        org_id = _get_org_id()
+        list_params: dict[str, str] = {}
+        if org_id:
+            list_params["org_id"] = org_id
         check_resp = http_request(
             "GET",
-            f"{api_base}/models/{name}",
+            f"{api_base}/models",
             headers=headers,
+            params=list_params,
             timeout=10.0,
         )
-        if check_resp.status_code == 404:
+        model_found = False
+        if check_resp.status_code == 200:
+            for m in check_resp.json().get("models", []):
+                m_name = m.get("name") or m.get("model_id") or ""
+                if m_name == name:
+                    model_found = True
+                    break
+        if not model_found:
             click.echo(f"Model '{name}' not in registry — importing...")
             client = _get_client()
             effective_version = version or "1.0.0"
