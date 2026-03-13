@@ -171,7 +171,7 @@ def init(
 
     Raises
     ------
-    ValueError
+    OctomilError
         If no API key is provided and ``OCTOMIL_API_KEY`` is not set.
     """
     global _config, _reporter  # noqa: PLW0603
@@ -181,7 +181,10 @@ def init(
     resolved_base = api_base if api_base else _os.environ.get("OCTOMIL_API_BASE", "https://api.octomil.com/api/v1")
 
     if not resolved_key:
-        raise ValueError("Octomil API key required. Pass api_key= or set OCTOMIL_API_KEY.")
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_API_KEY,
+            message="Octomil API key required. Pass api_key= or set OCTOMIL_API_KEY.",
+        )
 
     _config = {
         "api_key": resolved_key,
@@ -209,7 +212,10 @@ def init(
         )
     else:
         if resp.status_code in (401, 403):
-            raise ValueError(f"Invalid Octomil API key (HTTP {resp.status_code}). Check your OCTOMIL_API_KEY.")
+            raise OctomilError(
+                code=OctomilErrorCode.INVALID_API_KEY,
+                message=f"Invalid Octomil API key (HTTP {resp.status_code}). Check your OCTOMIL_API_KEY.",
+            )
 
     _reporter = TelemetryReporter(
         api_key=resolved_key,

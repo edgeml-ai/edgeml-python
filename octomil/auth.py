@@ -31,6 +31,7 @@ from typing import Union
 from ._generated.auth_type import AuthType
 from ._generated.principal_type import PrincipalType
 from ._generated.scope import Scope
+from .errors import OctomilError, OctomilErrorCode
 
 __all__ = [
     "AuthType",
@@ -75,7 +76,10 @@ class OrgApiKeyAuth:
         """
         api_key = os.environ.get(api_key_var, "")
         if not api_key:
-            raise ValueError(f"Environment variable {api_key_var} is required but not set.")
+            raise OctomilError(
+                code=OctomilErrorCode.INVALID_API_KEY,
+                message=f"Environment variable {api_key_var} is required but not set.",
+            )
         org_id = os.environ.get(org_id_var, "default")
         api_base = os.environ.get(api_base_var, _DEFAULT_API_BASE)
         return cls(api_key=api_key, org_id=org_id, api_base=api_base)

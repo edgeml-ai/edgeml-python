@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, Field
 
+from .errors import OctomilError, OctomilErrorCode
 from .models.catalog import CATALOG as _UNIFIED_CATALOG
 from .models.resolver import ModelResolutionError as _NewResolutionError
 from .models.resolver import resolve as _resolve_new
@@ -109,15 +110,16 @@ def resolve_model_name(name: str, backend: str) -> str:
     try:
         resolved = _resolve_new(name, engine=engine)
     except _NewResolutionError as exc:
-        raise ValueError(str(exc)) from exc
+        raise OctomilError(code=OctomilErrorCode.MODEL_NOT_FOUND, message=str(exc)) from exc
 
     if backend == "mlx":
         if resolved.mlx_repo:
             return resolved.mlx_repo
         if resolved.hf_repo:
             return resolved.hf_repo
-        raise ValueError(
-            f"No MLX source found for '{name}'. Pass a full HuggingFace repo ID (e.g. 'mlx-community/model-4bit')."
+        raise OctomilError(
+            code=OctomilErrorCode.MODEL_NOT_FOUND,
+            message=f"No MLX source found for '{name}'. Pass a full HuggingFace repo ID (e.g. 'mlx-community/model-4bit').",
         )
 
     if backend == "gguf":
@@ -128,8 +130,9 @@ def resolve_model_name(name: str, backend: str) -> str:
         # If the resolver found a GGUF artifact, return the family name
         if resolved.is_gguf and family:
             return family
-        raise ValueError(
-            f"No GGUF source found for '{name}'. Pass a path to a local .gguf file or a HuggingFace repo ID."
+        raise OctomilError(
+            code=OctomilErrorCode.MODEL_NOT_FOUND,
+            message=f"No GGUF source found for '{name}'. Pass a path to a local .gguf file or a HuggingFace repo ID.",
         )
 
     return name
@@ -719,10 +722,11 @@ class LlamaCppBackend(InferenceBackend):
 
         # Fallback: short name → legacy catalog lookup
         if model_name not in _GGUF_MODELS:
-            raise ValueError(
-                f"Unknown model '{model_name}'. "
+            raise OctomilError(
+                code=OctomilErrorCode.MODEL_NOT_FOUND,
+                message=f"Unknown model '{model_name}'. "
                 f"Available: {', '.join(sorted(_GGUF_MODELS))}\n"
-                f"Or pass a local .gguf path or HuggingFace repo ID."
+                f"Or pass a local .gguf path or HuggingFace repo ID.",
             )
 
         repo_id, filename = _GGUF_MODELS[model_name]
@@ -885,7 +889,10 @@ def _detect_backend(
         engine = registry.get_engine(engine_override)
         if engine is None:
             available = [e.name for e in registry.engines]
-            raise ValueError(f"Unknown engine '{engine_override}'. Available: {', '.join(available)}")
+            raise OctomilError(
+                code=OctomilErrorCode.RUNTIME_UNAVAILABLE,
+                message=f"Unknown engine '{engine_override}'. Available: {', '.join(available)}",
+            )
         backend: InferenceBackend = engine.create_backend(model_name, **backend_kwargs)
         return backend
 
