@@ -3,9 +3,9 @@
 Takes a parsed model specifier and resolves it to a concrete HuggingFace
 repo ID (and optional filename) for a given engine.
 
-Engine priority and alias data are fetched from the Octomil server at
-runtime and cached locally. A minimal fallback (``["auto"]``) is embedded
-for offline bootstrap only.
+Now powered by the v2 manifest: resolution first tries a direct manifest
+lookup, selecting the best package for the requested engine and platform.
+Falls back to the legacy CATALOG-based resolution for backward compat.
 
 Usage::
 
@@ -23,8 +23,17 @@ import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from .catalog import CATALOG, ModelEntry, MoEMetadata, _resolve_alias, resolve_ollama_tag
-from .catalog_client import EnginePriorityClient
+from .catalog import (
+    _EXECUTOR_TO_ENGINE,
+    _QUANT_TO_CANONICAL,
+    CATALOG,
+    ModelEntry,
+    MoEMetadata,
+    _parse_hf_uri,
+    _resolve_alias,
+    resolve_ollama_tag,
+)
+from .catalog_client import CatalogClientV2
 from .parser import normalize_variant, parse
 
 logger = logging.getLogger(__name__)
@@ -84,25 +93,19 @@ _ENGINE_ALIASES: dict[str, str] = {
     "echo": "echo",
 }
 
-# ---------------------------------------------------------------------------
-# Server-fetched engine priority (singleton)
-# ---------------------------------------------------------------------------
-
-_priority_client: Optional[EnginePriorityClient] = None
-
-
-def _get_priority_client() -> EnginePriorityClient:
-    """Return the module-level EnginePriorityClient singleton."""
-    global _priority_client
-    if _priority_client is None:
-        _priority_client = EnginePriorityClient()
-    return _priority_client
-
-
-def _get_engine_priority() -> list[str]:
-    """Return the engine priority list from server (cached) or fallback."""
-    return _get_priority_client().get_priority()
-
+# Reverse map: canonical engine name -> v2 manifest runtime_executor names
+_ENGINE_TO_EXECUTORS: dict[str, list[str]] = {
+    "llama.cpp": ["llamacpp", "llama.cpp"],
+    "mlx-lm": ["mlx", "mlx-lm"],
+    "whisper.cpp": ["whisper", "whisper.cpp"],
+    "onnxruntime": ["onnxruntime", "ort"],
+    "mlc-llm": ["mlc", "mlc-llm"],
+    "ollama": ["ollama"],
+    "echo": ["echo"],
+    "mnn": ["mnn"],
+    "executorch": ["executorch"],
+    "cactus": ["cactus"],
+}
 
 # Backward-compatible module-level name for direct imports.
 # Tests that do ``from octomil.models.resolver import _ENGINE_PRIORITY``
@@ -116,7 +119,231 @@ def _normalize_engine(engine: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Server-side resolution fallback
+# V2 manifest-based resolution
+# ---------------------------------------------------------------------------
+
+_v2_client: Optional[CatalogClientV2] = None
+
+
+def _get_v2_client() -> CatalogClientV2:
+    """Return the module-level CatalogClientV2 singleton for resolution."""
+    global _v2_client
+    if _v2_client is None:
+        _v2_client = CatalogClientV2()
+    return _v2_client
+
+
+def _find_manifest_model(models: list[dict], family: str, model_id: str | None = None) -> Optional[dict]:
+    """Find a model in the manifest by ID or family match.
+
+    Tries exact ID match first, then family match, then ID-contains-family.
+    """
+    family_lower = family.lower()
+    id_lower = model_id.lower() if model_id else family_lower
+
+    # 1. Exact ID match
+    for m in models:
+        if m.get("id", "").lower() == id_lower:
+            return m
+
+    # 2. Exact family match (returns first model in that family)
+    for m in models:
+        if m.get("family", "").lower() == family_lower:
+            return m
+
+    # 3. ID starts with family (e.g. family="gemma-2", id="gemma-2-2b")
+    for m in models:
+        mid = m.get("id", "").lower()
+        if mid.startswith(family_lower + "-") or mid.startswith(family_lower):
+            return m
+
+    return None
+
+
+def _select_package(
+    packages: list[dict],
+    quant: str,
+    engine: str | None = None,
+    available_engines: list[str] | None = None,
+) -> Optional[dict]:
+    """Select the best package from a model's package list.
+
+    Selection priority:
+    1. If engine is specified, find a package matching that engine + quant
+    2. If available_engines is provided, find the best match in priority order
+    3. Pick the default package (is_default=True) matching quant
+    4. Pick any package matching quant
+
+    The ``quant`` parameter should already be in raw manifest form
+    (e.g. ``q4_k_m``) or canonical form (e.g. ``4bit``).
+    """
+    quant_lower = quant.lower()
+    # Also get the canonical form for matching
+    quant_canonical = _QUANT_TO_CANONICAL.get(quant_lower, quant_lower)
+
+    def _quant_matches(pkg: dict) -> bool:
+        pkg_quant = pkg.get("quantization", "").lower()
+        pkg_canonical = _QUANT_TO_CANONICAL.get(pkg_quant, pkg_quant)
+        return pkg_quant == quant_lower or pkg_canonical == quant_canonical
+
+    def _engine_matches(pkg: dict, target_engine: str) -> bool:
+        executor = pkg.get("runtime_executor", "")
+        pkg_engine = _EXECUTOR_TO_ENGINE.get(executor, executor)
+        target_executors = _ENGINE_TO_EXECUTORS.get(target_engine, [target_engine])
+        return executor in target_executors or pkg_engine == target_engine
+
+    # 1. Specific engine requested
+    if engine:
+        norm_engine = _normalize_engine(engine)
+        for pkg in packages:
+            if _quant_matches(pkg) and _engine_matches(pkg, norm_engine):
+                return pkg
+        # Relax quant constraint — just match engine
+        for pkg in packages:
+            if _engine_matches(pkg, norm_engine):
+                return pkg
+        return None
+
+    # 2. Available engines — pick first match in order
+    if available_engines:
+        norm_available = [_normalize_engine(e) for e in available_engines]
+        for eng in norm_available:
+            for pkg in packages:
+                if _quant_matches(pkg) and _engine_matches(pkg, eng):
+                    return pkg
+
+    # 3. Default package matching quant
+    for pkg in packages:
+        if _quant_matches(pkg) and pkg.get("is_default", False):
+            return pkg
+
+    # 4. Any package matching quant
+    for pkg in packages:
+        if _quant_matches(pkg):
+            return pkg
+
+    # 5. Absolute fallback: default package regardless of quant
+    for pkg in packages:
+        if pkg.get("is_default", False):
+            return pkg
+
+    # 6. First package
+    return packages[0] if packages else None
+
+
+def _resolve_from_manifest(
+    name: str,
+    parsed_family: str,
+    parsed_variant: str | None,
+    *,
+    engine: str | None = None,
+    available_engines: list[str] | None = None,
+) -> Optional[ResolvedModel]:
+    """Attempt to resolve a model specifier from the v2 manifest.
+
+    Returns None if the model is not found in the manifest,
+    allowing fallback to the legacy catalog-based resolution.
+    """
+    client = _get_v2_client()
+    try:
+        models = client.get_models()
+    except Exception:
+        logger.debug("Failed to get v2 manifest for resolution", exc_info=True)
+        return None
+
+    if not models:
+        return None
+
+    # Resolve alias first
+    canonical = _resolve_alias(parsed_family)
+
+    # Find model in manifest
+    manifest_model = _find_manifest_model(models, canonical, model_id=canonical)
+    if manifest_model is None:
+        # Try with the original (un-aliased) family name
+        manifest_model = _find_manifest_model(models, parsed_family, model_id=parsed_family)
+
+    if manifest_model is None:
+        return None
+
+    # Determine quant
+    default_quant_raw = manifest_model.get("default_quantization", "4bit")
+    if parsed_variant is not None:
+        quant = normalize_variant(parsed_variant)
+    else:
+        quant = _QUANT_TO_CANONICAL.get(default_quant_raw, default_quant_raw)
+
+    # Select best package
+    packages = manifest_model.get("packages", [])
+    if not packages:
+        return None
+
+    selected = _select_package(packages, quant, engine=engine, available_engines=available_engines)
+    if selected is None:
+        return None
+
+    # Build ResolvedModel from selected package
+    executor = selected.get("runtime_executor", "")
+    resolved_engine = _EXECUTOR_TO_ENGINE.get(executor, executor)
+    if engine:
+        resolved_engine = _normalize_engine(engine)
+
+    fmt = selected.get("artifact_format", "")
+    weights = None
+    for res in selected.get("resources", []):
+        if res.get("kind") == "weights":
+            weights = res
+            break
+
+    if weights is None:
+        return None
+
+    uri = weights.get("uri", "")
+    path = weights.get("path", "")
+    repo, filename = _parse_hf_uri(uri)
+
+    hf_repo: str
+    resolved_filename: str | None = None
+    mlx_repo: str | None = None
+
+    if executor in ("mlx", "mlx-lm") or fmt == "mlx":
+        hf_repo = repo
+        mlx_repo = repo
+    elif executor in ("llamacpp", "llama.cpp") and fmt == "gguf":
+        hf_repo = repo
+        resolved_filename = path or filename
+    elif executor in ("whisper", "whisper.cpp"):
+        hf_repo = repo
+        resolved_filename = path or filename
+    elif executor in ("onnxruntime", "ort"):
+        hf_repo = repo
+    elif executor in ("mlc", "mlc-llm"):
+        hf_repo = repo
+    elif executor == "ollama":
+        hf_repo = uri  # Ollama tags stored directly
+    else:
+        hf_repo = repo
+        if path and path != ".":
+            resolved_filename = path
+
+    model_id = manifest_model.get("id", canonical)
+    pkg_quant_raw = selected.get("quantization", default_quant_raw)
+    resolved_quant = _QUANT_TO_CANONICAL.get(pkg_quant_raw, pkg_quant_raw)
+
+    return ResolvedModel(
+        family=model_id,
+        quant=resolved_quant,
+        engine=resolved_engine,
+        hf_repo=hf_repo,
+        filename=resolved_filename,
+        mlx_repo=mlx_repo,
+        source_repo=None,
+        raw=name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Legacy catalog-based resolution (fallback)
 # ---------------------------------------------------------------------------
 
 
@@ -187,37 +414,34 @@ def _pick_engine(
         return None
 
     normalized_available = [_normalize_engine(e) for e in available_engines]
-    engine_priority = _get_engine_priority()
 
-    # If server returned the minimal fallback ["auto"], use available_engines
-    # order directly — let the caller's ordering decide.
-    if engine_priority == ["auto"]:
-        engine_priority = list(dict.fromkeys(normalized_available))
+    # Use available_engines order directly — let the caller's ordering decide.
+    engine_priority = list(dict.fromkeys(normalized_available))
 
-    for engine in engine_priority:
-        if engine not in normalized_available:
+    for engine_name in engine_priority:
+        if engine_name not in normalized_available:
             continue
 
         # Ollama support is derived from catalog tags, not entry.engines
-        if engine == "ollama" and variant.ollama:
-            return engine
+        if engine_name == "ollama" and variant.ollama:
+            return engine_name
 
-        if engine not in entry.engines:
+        if engine_name not in entry.engines:
             continue
 
         # Check that this engine has an artifact for this quant
-        if engine == "mlx-lm" and variant.mlx:
-            return engine
-        if engine == "mlc-llm" and (variant.mlc or variant.source_repo):
-            return engine
-        if engine == "llama.cpp" and variant.gguf:
-            return engine
-        if engine in ("mnn", "executorch") and (variant.gguf or variant.source_repo):
-            return engine
-        if engine == "onnxruntime" and (variant.ort or variant.source_repo):
-            return engine
-        if engine == "echo":
-            return engine
+        if engine_name == "mlx-lm" and variant.mlx:
+            return engine_name
+        if engine_name == "mlc-llm" and (variant.mlc or variant.source_repo):
+            return engine_name
+        if engine_name == "llama.cpp" and variant.gguf:
+            return engine_name
+        if engine_name in ("mnn", "executorch") and (variant.gguf or variant.source_repo):
+            return engine_name
+        if engine_name == "onnxruntime" and (variant.ort or variant.source_repo):
+            return engine_name
+        if engine_name == "echo":
+            return engine_name
 
     return None
 
@@ -229,6 +453,13 @@ def resolve(
     engine: Optional[str] = None,
 ) -> ResolvedModel:
     """Resolve a model specifier to an engine-specific artifact.
+
+    Resolution strategy:
+    1. Parse the model specifier
+    2. If passthrough (local file or full repo ID), return directly
+    3. Try v2 manifest-based resolution (preferred)
+    4. Fall back to legacy CATALOG-based resolution
+    5. Fall back to server-side resolution as last resort
 
     Parameters
     ----------
@@ -267,13 +498,24 @@ def resolve(
             raw=name,
         )
 
-    # --- Catalog lookup (with alias resolution) ---
+    # --- V2 manifest resolution (preferred path) ---
     assert parsed.family is not None
+    manifest_result = _resolve_from_manifest(
+        name,
+        parsed.family,
+        parsed.variant,
+        engine=engine,
+        available_engines=available_engines,
+    )
+    if manifest_result is not None:
+        return manifest_result
+
+    # --- Legacy catalog lookup (fallback for models not yet in v2) ---
     canonical = _resolve_alias(parsed.family)
     entry = CATALOG.get(canonical)
 
     # If not found directly, try reverse Ollama tag lookup.
-    # e.g. "qwen2.5:3b" → catalog entry "qwen-3b" at quant "4bit"
+    # e.g. "qwen2.5:3b" -> catalog entry "qwen-3b" at quant "4bit"
     ollama_resolved_quant: str | None = None
     if entry is None:
         ollama_match = resolve_ollama_tag(name)
