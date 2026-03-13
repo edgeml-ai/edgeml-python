@@ -104,10 +104,10 @@ class TestFromHttpStatus:
     @pytest.mark.parametrize(
         ("status", "expected"),
         [
-            (401, OctomilErrorCode.INVALID_API_KEY),
+            (400, OctomilErrorCode.INVALID_INPUT),
+            (401, OctomilErrorCode.AUTHENTICATION_FAILED),
             (403, OctomilErrorCode.FORBIDDEN),
             (404, OctomilErrorCode.MODEL_NOT_FOUND),
-            (408, OctomilErrorCode.REQUEST_TIMEOUT),
             (429, OctomilErrorCode.RATE_LIMITED),
             (500, OctomilErrorCode.SERVER_ERROR),
             (502, OctomilErrorCode.SERVER_ERROR),
@@ -118,7 +118,7 @@ class TestFromHttpStatus:
         err = OctomilError.from_http_status(status)
         assert err.code is expected
 
-    @pytest.mark.parametrize("status", [200, 201, 204, 301, 400, 418, 504])
+    @pytest.mark.parametrize("status", [200, 201, 204, 301, 408, 418, 504])
     def test_unmapped_status_returns_unknown(self, status: int) -> None:
         err = OctomilError.from_http_status(status)
         assert err.code is OctomilErrorCode.UNKNOWN
@@ -182,7 +182,7 @@ class TestOctomilError:
 class TestOctomilErrorFromHttpStatus:
     def test_with_explicit_message(self) -> None:
         err = OctomilError.from_http_status(401, "Invalid token")
-        assert err.code is OctomilErrorCode.INVALID_API_KEY
+        assert err.code is OctomilErrorCode.AUTHENTICATION_FAILED
         assert err.error_message == "Invalid token"
 
     def test_without_message_uses_default(self) -> None:

@@ -1280,12 +1280,16 @@ def create_app(
 
         classification = ERROR_CLASSIFICATION.get(exc.code)
         status_map = {
+            OctomilErrorCode.INVALID_INPUT: 400,
+            OctomilErrorCode.AUTHENTICATION_FAILED: 401,
+            OctomilErrorCode.INVALID_API_KEY: 401,
+            OctomilErrorCode.FORBIDDEN: 403,
+            OctomilErrorCode.MODEL_NOT_FOUND: 404,
+            OctomilErrorCode.RATE_LIMITED: 429,
             OctomilErrorCode.MODEL_LOAD_FAILED: 503,
             OctomilErrorCode.RUNTIME_UNAVAILABLE: 503,
-            OctomilErrorCode.MODEL_NOT_FOUND: 404,
-            OctomilErrorCode.INVALID_INPUT: 400,
-            OctomilErrorCode.INVALID_API_KEY: 401,
-            OctomilErrorCode.RATE_LIMITED: 429,
+            OctomilErrorCode.INFERENCE_FAILED: 503,
+            OctomilErrorCode.SERVER_ERROR: 500,
             OctomilErrorCode.REQUEST_TIMEOUT: 504,
         }
         status_code = status_map.get(exc.code, 500)
@@ -1296,8 +1300,6 @@ def create_app(
                 "message": str(exc),
                 "retryable": classification.retry_class != RetryClass.NEVER if classification else False,
                 "category": classification.category.value if classification else "unknown",
-                "suggested_action": classification.suggested_action.value if classification else "report_bug",
-                "fallback_eligible": classification.fallback_eligible if classification else False,
             },
         )
 
@@ -2182,12 +2184,16 @@ def create_multi_model_app(
 
         classification = ERROR_CLASSIFICATION.get(exc.code)
         status_map = {
+            OctomilErrorCode.INVALID_INPUT: 400,
+            OctomilErrorCode.AUTHENTICATION_FAILED: 401,
+            OctomilErrorCode.INVALID_API_KEY: 401,
+            OctomilErrorCode.FORBIDDEN: 403,
+            OctomilErrorCode.MODEL_NOT_FOUND: 404,
+            OctomilErrorCode.RATE_LIMITED: 429,
             OctomilErrorCode.MODEL_LOAD_FAILED: 503,
             OctomilErrorCode.RUNTIME_UNAVAILABLE: 503,
-            OctomilErrorCode.MODEL_NOT_FOUND: 404,
-            OctomilErrorCode.INVALID_INPUT: 400,
-            OctomilErrorCode.INVALID_API_KEY: 401,
-            OctomilErrorCode.RATE_LIMITED: 429,
+            OctomilErrorCode.INFERENCE_FAILED: 503,
+            OctomilErrorCode.SERVER_ERROR: 500,
             OctomilErrorCode.REQUEST_TIMEOUT: 504,
         }
         status_code = status_map.get(exc.code, 500)
@@ -2198,8 +2204,6 @@ def create_multi_model_app(
                 "message": str(exc),
                 "retryable": classification.retry_class != RetryClass.NEVER if classification else False,
                 "category": classification.category.value if classification else "unknown",
-                "suggested_action": classification.suggested_action.value if classification else "report_bug",
-                "fallback_eligible": classification.fallback_eligible if classification else False,
             },
         )
 
