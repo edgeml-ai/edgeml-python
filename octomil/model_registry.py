@@ -130,16 +130,57 @@ def _get_v2_client() -> CatalogClientV2:
     return _v2_client
 
 
+def _flatten_server_manifest(manifest: dict) -> list[dict]:
+    """Convert server's nested {family: {variants: ...}} to flat model list.
+
+    The server returns families keyed by name with nested variants/versions/packages.
+    The SDK expects a flat list of models with packages directly attached.
+    """
+    models = []
+    for family_name, family_data in manifest.items():
+        if not isinstance(family_data, dict) or "variants" not in family_data:
+            continue
+        for variant_name, variant_data in family_data.get("variants", {}).items():
+            # Collect all packages across all versions
+            packages = []
+            for _ver_key, ver_data in variant_data.get("versions", {}).items():
+                for pkg in ver_data.get("packages", []):
+                    packages.append(pkg)
+
+            quants = variant_data.get("quantizations", [])
+            default_quant = quants[0].lower() if quants else "q4_k_m"
+
+            models.append(
+                {
+                    "id": variant_name,
+                    "family": family_name,
+                    "name": variant_name,
+                    "parameter_count": variant_data.get("parameter_count", ""),
+                    "default_quantization": default_quant,
+                    "packages": packages,
+                }
+            )
+    return models
+
+
 def _manifest_to_families(manifest: dict) -> dict[str, ModelFamily]:
     """Convert a v2 manifest to a dict of ModelFamily objects.
 
     Each manifest model becomes a ModelFamily keyed by model ID.
     Packages are grouped by quantization into ModelVariant objects,
     with each package contributing a ModelSource.
+
+    Handles both embedded format ({"models": [...]}) and server format
+    ({"family_name": {"variants": {...}}}).
     """
     result: dict[str, ModelFamily] = {}
 
-    for model in manifest.get("models", []):
+    # Detect format: embedded has "models" key, server has family names as keys
+    models_list = manifest.get("models")
+    if models_list is None:
+        models_list = _flatten_server_manifest(manifest)
+
+    for model in models_list:
         model_id: str = model.get("id", "")
         family_name: str = model.get("family", "")
         params: str = model.get("parameter_count", "")
