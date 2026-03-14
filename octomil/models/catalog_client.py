@@ -136,7 +136,7 @@ class _ServerFetcher:
 
         # Try fetching from server
         fetched = self._fetch_from_server(params=params)
-        if fetched is not None:
+        if fetched is not None and fetched.data:
             self._cached = fetched
             self._save_to_disk(fetched)
             return self._cached.data
