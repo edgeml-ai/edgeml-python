@@ -10,13 +10,19 @@ from .error_code import ErrorCode
 from .finish_reason import FinishReason
 from .model_status import ModelStatus
 from .otlp_resource_attributes import (
+    OCTOMIL_ACCELERATORS,
+    OCTOMIL_AVAILABLE_RUNTIMES,
+    OCTOMIL_DEVICE_CLASS,
     OCTOMIL_DEVICE_ID,
     OCTOMIL_ORG_ID,
-    OCTOMIL_SDK,
-    OS_TYPE,
+    OCTOMIL_PLATFORM,
+    OCTOMIL_SDK_SURFACE,
     REQUIRED_KEYS,
     SERVICE_NAME,
     SERVICE_VERSION,
+    TELEMETRY_SDK_LANGUAGE,
+    TELEMETRY_SDK_NAME,
+    TELEMETRY_SDK_VERSION,
 )
 from .telemetry_events import (
     DEPLOY_COMPLETED,
@@ -37,10 +43,16 @@ __all__ = [
     # OTLP resource attributes
     "SERVICE_NAME",
     "SERVICE_VERSION",
-    "OCTOMIL_SDK",
+    "TELEMETRY_SDK_NAME",
+    "TELEMETRY_SDK_LANGUAGE",
+    "TELEMETRY_SDK_VERSION",
     "OCTOMIL_ORG_ID",
     "OCTOMIL_DEVICE_ID",
-    "OS_TYPE",
+    "OCTOMIL_PLATFORM",
+    "OCTOMIL_SDK_SURFACE",
+    "OCTOMIL_DEVICE_CLASS",
+    "OCTOMIL_AVAILABLE_RUNTIMES",
+    "OCTOMIL_ACCELERATORS",
     "REQUIRED_KEYS",
     # Telemetry events
     "INFERENCE_STARTED",
