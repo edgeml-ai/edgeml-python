@@ -5,6 +5,17 @@
 - Added `DeviceAuthClient` runtime auth helper for device token bootstrap, refresh, and revoke flows.
 - Added optional `auth` extra with `keyring` secure storage dependency.
 
+## 4.0.1 (2026-03-14)
+
+### Fixes
+
+- resolve octomil.spec paths relative to repo root (#274)
+- replace ValueError with OctomilError, add contract error responses (#276)
+- improve terminal QR code scannability (#277)
+- resolve auth module shadowing in PyInstaller builds (#278)
+- look up models by name via list endpoint (#279)
+- add auth re-export for PyInstaller, shrink QR URL (#280)
+
 ## 4.0.0 (2026-03-12)
 
 ### Breaking Changes
