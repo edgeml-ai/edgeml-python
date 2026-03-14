@@ -131,29 +131,55 @@ def _get_v2_client() -> CatalogClientV2:
     return _v2_client
 
 
-def _find_manifest_model(models: list[dict], family: str, model_id: str | None = None) -> Optional[dict]:
-    """Find a model in the manifest by ID or family match.
+def _find_manifest_model(manifest: dict, family: str, model_id: str | None = None) -> Optional[dict]:
+    """Find a model in the nested manifest by variant ID or family match.
 
-    Tries exact ID match first, then family match, then ID-contains-family.
+    Walks the canonical nested manifest (family → variants → versions →
+    packages) and returns a flat dict compatible with ``_select_package``.
+
+    Tries exact variant ID match first, then family match (first variant),
+    then variant-ID-starts-with-family prefix match.
     """
     family_lower = family.lower()
     id_lower = model_id.lower() if model_id else family_lower
 
-    # 1. Exact ID match
-    for m in models:
-        if m.get("id", "").lower() == id_lower:
-            return m
+    def _variant_to_flat(fname: str, vname: str, vdata: dict) -> dict:
+        packages: list[dict] = []
+        for ver_data in vdata.get("versions", {}).values():
+            packages.extend(ver_data.get("packages", []))
+        quants = vdata.get("quantizations", [])
+        default_quant = quants[0].lower() if quants else "q4_k_m"
+        return {
+            "id": vname,
+            "family": fname,
+            "parameter_count": vdata.get("parameter_count", ""),
+            "default_quantization": default_quant,
+            "packages": packages,
+        }
 
-    # 2. Exact family match (returns first model in that family)
-    for m in models:
-        if m.get("family", "").lower() == family_lower:
-            return m
+    # Collect all (family_name, variant_name, variant_data) tuples
+    all_variants: list[tuple[str, str, dict]] = []
+    for fname, fdata in manifest.items():
+        if not isinstance(fdata, dict) or "variants" not in fdata:
+            continue
+        for vname, vdata in fdata["variants"].items():
+            all_variants.append((fname, vname, vdata))
 
-    # 3. ID starts with family (e.g. family="gemma-2", id="gemma-2-2b")
-    for m in models:
-        mid = m.get("id", "").lower()
-        if mid.startswith(family_lower + "-") or mid.startswith(family_lower):
-            return m
+    # 1. Exact variant ID match
+    for fname, vname, vdata in all_variants:
+        if vname.lower() == id_lower:
+            return _variant_to_flat(fname, vname, vdata)
+
+    # 2. Exact family match (returns first variant in that family)
+    for fname, vname, vdata in all_variants:
+        if fname.lower() == family_lower:
+            return _variant_to_flat(fname, vname, vdata)
+
+    # 3. Variant ID starts with family (e.g. family="gemma-2", id="gemma-2-2b")
+    for fname, vname, vdata in all_variants:
+        vid = vname.lower()
+        if vid.startswith(family_lower + "-") or vid.startswith(family_lower):
+            return _variant_to_flat(fname, vname, vdata)
 
     return None
 
@@ -244,22 +270,22 @@ def _resolve_from_manifest(
     """
     client = _get_v2_client()
     try:
-        models = client.get_models()
+        manifest = client.get_manifest()
     except Exception:
         logger.debug("Failed to get v2 manifest for resolution", exc_info=True)
         return None
 
-    if not models:
+    if not manifest:
         return None
 
     # Resolve alias first
     canonical = _resolve_alias(parsed_family)
 
     # Find model in manifest
-    manifest_model = _find_manifest_model(models, canonical, model_id=canonical)
+    manifest_model = _find_manifest_model(manifest, canonical, model_id=canonical)
     if manifest_model is None:
         # Try with the original (un-aliased) family name
-        manifest_model = _find_manifest_model(models, parsed_family, model_id=parsed_family)
+        manifest_model = _find_manifest_model(manifest, parsed_family, model_id=parsed_family)
 
     if manifest_model is None:
         return None
