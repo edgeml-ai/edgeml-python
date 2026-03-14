@@ -73,6 +73,7 @@ def render_qr_terminal(url: str, *, border: int = 2) -> str:
     row_count = len(modules)
 
     # Process two rows at a time using half-block characters.
+    # Each module is 2 chars wide for better phone camera scanning.
     # Top row dark + bottom row dark = full block
     # Top row dark + bottom row light = upper half block
     # Top row light + bottom row dark = lower half block
@@ -85,13 +86,14 @@ def render_qr_terminal(url: str, *, border: int = 2) -> str:
             top = row_top[x]
             bot = row_bot[x]
             if top and bot:
-                line_chars.append("\u2588")  # full block
+                ch = "\u2588\u2588"  # full block x2
             elif top and not bot:
-                line_chars.append("\u2580")  # upper half block
+                ch = "\u2580\u2580"  # upper half block x2
             elif not top and bot:
-                line_chars.append("\u2584")  # lower half block
+                ch = "\u2584\u2584"  # lower half block x2
             else:
-                line_chars.append(" ")
+                ch = "  "  # two spaces
+            line_chars.append(ch)
         lines.append("".join(line_chars))
 
     return "\n".join(lines)
