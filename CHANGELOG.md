@@ -5,6 +5,16 @@
 - Added `DeviceAuthClient` runtime auth helper for device token bootstrap, refresh, and revoke flows.
 - Added optional `auth` extra with `keyring` secure storage dependency.
 
+## 4.1.2 (2026-03-14)
+
+### Fixes
+
+- fall back to embedded manifest when server returns empty (#290)
+- handle server's nested manifest format (#291)
+- parse server's nested manifest format natively (#292)
+- add HF checkpoint resolver for sharded + directory models (#293)
+- iterate nested manifest directly, remove \_iter_manifest_models (#294)
+
 ## 4.1.1 (2026-03-14)
 
 ### Fixes
