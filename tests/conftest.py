@@ -1076,10 +1076,9 @@ def _mock_model_routing_clients(monkeypatch):
         """Mock v2 client — prevents real HTTP requests."""
 
         def get_manifest(self, platform=None):
-            return {"version": "mock-v1", "generated_at": "2026-01-01T00:00:00Z", "models": []}
-
-        def get_models(self, platform=None):
-            return []
+            # Return empty nested manifest (no families) — resolution falls
+            # through to the directly-injected CATALOG/MODEL_ALIASES.
+            return {}
 
         def invalidate_cache(self):
             pass

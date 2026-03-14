@@ -328,14 +328,14 @@ def _manifest_model_to_entry(model: dict) -> tuple[str, ModelEntry]:
     )
 
 
-def _iter_manifest_models(manifest: dict) -> list[dict]:
-    """Extract flat model dicts from the canonical nested manifest format.
+def _hydrate_manifest(manifest: dict) -> dict[str, ModelEntry]:
+    """Convert a v2 nested manifest to the catalog dict format.
 
-    The canonical manifest (from server and embedded fallback) is keyed by
-    family name with nested variants/versions/packages. This flattens it
-    to the model dicts that ``_manifest_model_to_entry`` expects.
+    Walks the canonical nested manifest (family → variants → versions →
+    packages) directly.  Each variant becomes a ``ModelEntry`` keyed by
+    variant name.
     """
-    models: list[dict] = []
+    result: dict[str, ModelEntry] = {}
     for family_name, family_data in manifest.items():
         if not isinstance(family_data, dict) or "variants" not in family_data:
             continue
@@ -347,80 +347,59 @@ def _iter_manifest_models(manifest: dict) -> list[dict]:
             quants = variant_data.get("quantizations", [])
             default_quant = quants[0].lower() if quants else "q4_k_m"
 
-            models.append(
-                {
-                    "id": variant_name,
-                    "family": family_name,
-                    "name": variant_name,
-                    "parameter_count": variant_data.get("parameter_count", ""),
-                    "default_quantization": default_quant,
-                    "packages": packages,
-                }
-            )
-    return models
-
-
-def _hydrate_manifest(manifest: dict) -> dict[str, ModelEntry]:
-    """Convert a v2 manifest dict to the legacy catalog dict format.
-
-    Each manifest variant becomes a ``ModelEntry`` keyed by variant name.
-    Parses the canonical nested manifest format from the server.
-    """
-    result: dict[str, ModelEntry] = {}
-    for model in _iter_manifest_models(manifest):
-        try:
-            key, entry = _manifest_model_to_entry(model)
-            if key:
-                result[key] = entry
-        except Exception:
-            logger.debug(
-                "Failed to hydrate manifest model %s",
-                model.get("id", "<unknown>"),
-                exc_info=True,
-            )
+            model: dict = {
+                "id": variant_name,
+                "family": family_name,
+                "name": variant_name,
+                "parameter_count": variant_data.get("parameter_count", ""),
+                "default_quantization": default_quant,
+                "packages": packages,
+            }
+            try:
+                key, entry = _manifest_model_to_entry(model)
+                if key:
+                    result[key] = entry
+            except Exception:
+                logger.debug(
+                    "Failed to hydrate manifest model %s",
+                    variant_name,
+                    exc_info=True,
+                )
     return result
 
 
 def _build_aliases(manifest: dict) -> dict[str, str]:
     """Build alias map from v2 manifest model names and families.
 
+    Walks the canonical nested manifest (family → variants) directly.
     Maps common name variations to canonical model IDs:
     - family name -> model ID (e.g. "gemma-2" -> "gemma-2-2b")
     - lowercase model name -> model ID
     - name with spaces/hyphens normalized -> model ID
-
-    Parses the canonical nested manifest format from the server.
     """
     aliases: dict[str, str] = {}
-    # Track which families we've seen to handle multiple models per family
     family_models: dict[str, list[str]] = {}
 
-    for model in _iter_manifest_models(manifest):
-        model_id = model.get("id", "")
-        family = model.get("family", "")
-        name = model.get("name", "")
-
-        if not model_id:
+    for family_name, family_data in manifest.items():
+        if not isinstance(family_data, dict) or "variants" not in family_data:
             continue
+        for variant_name, variant_data in family_data["variants"].items():
+            if not variant_name:
+                continue
 
-        # Name-based aliases (lowercase, normalized)
-        if name:
-            name_lower = name.lower()
-            # "Gemma 2 2B" -> "gemma 2 2b" -> "gemma-2-2b"
+            # Name-based aliases (lowercase, normalized)
+            name_lower = variant_name.lower()
             name_hyphen = re.sub(r"\s+", "-", name_lower)
-            if name_hyphen != model_id:
-                aliases[name_hyphen] = model_id
-            # Also store the space-separated version
-            aliases[name_lower] = model_id
+            if name_hyphen != variant_name:
+                aliases[name_hyphen] = variant_name
+            aliases[name_lower] = variant_name
 
-        # Track family -> model IDs
-        if family:
-            family_models.setdefault(family, []).append(model_id)
+            family_models.setdefault(family_name, []).append(variant_name)
 
-    # For families with only one model, alias the family to the model
-    for family, model_ids in family_models.items():
-        if len(model_ids) == 1:
-            aliases[family] = model_ids[0]
+    # For families with only one variant, alias the family name to that variant
+    for family, variant_ids in family_models.items():
+        if len(variant_ids) == 1:
+            aliases[family] = variant_ids[0]
 
     return aliases
 

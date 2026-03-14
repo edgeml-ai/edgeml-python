@@ -44,61 +44,66 @@ def _get_v2_client() -> CatalogClientV2:
 
 
 def _manifest_to_aliases(manifest: dict) -> Dict[str, Dict[str, Union[str, Dict[str, Any]]]]:
-    """Convert a v2 manifest to source alias mappings.
+    """Convert a v2 nested manifest to source alias mappings.
 
-    For each model, extracts download sources from packages:
+    Walks the canonical nested manifest format (family → variants → versions
+    → packages) and extracts download sources for each variant:
     - Packages with ``runtime_executor=ollama`` → ``ollama`` alias (bare string)
     - Packages with ``hf://`` URIs → ``hf`` alias (dict with resolution context)
     - Packages with ``runtime_executor in (onnxruntime, ort)`` and ``hf://`` → ``hf_onnx`` alias
     """
     aliases: Dict[str, Dict[str, Union[str, Dict[str, Any]]]] = {}
 
-    for model in manifest.get("models", []):
-        model_id: str = model.get("id", "")
-        if not model_id:
+    for family_name, family_data in manifest.items():
+        if not isinstance(family_data, dict) or "variants" not in family_data:
             continue
 
-        model_aliases: Dict[str, Union[str, Dict[str, Any]]] = {}
-
-        for pkg in model.get("packages", []):
-            executor: str = pkg.get("runtime_executor", "")
-            artifact_format: str = pkg.get("artifact_format", "")
-            quantization: str = pkg.get("quantization", "")
-
-            # Find weights resource
-            weights = None
-            for res in pkg.get("resources", []):
-                if res.get("kind") == "weights":
-                    weights = res
-                    break
-            if weights is None:
+        for variant_name, variant_data in family_data["variants"].items():
+            if not variant_name:
                 continue
 
-            uri: str = weights.get("uri", "")
-            meta: dict = weights.get("metadata") or {}
-            uri_type: str = meta.get("uri_type", "file")
-            revision: Optional[str] = meta.get("revision")
+            model_aliases: Dict[str, Union[str, Dict[str, Any]]] = {}
 
-            if executor == "ollama" and "ollama" not in model_aliases:
-                model_aliases["ollama"] = uri
-            elif executor in ("onnxruntime", "ort") and uri.startswith("hf://"):
-                repo, _ = _parse_hf_uri(uri)
-                if "hf_onnx" not in model_aliases:
-                    model_aliases["hf_onnx"] = repo
-            elif uri.startswith("hf://") and "hf" not in model_aliases:
-                repo, filename = _parse_hf_uri(uri)
-                # Carry full resolution context for HF sources
-                model_aliases["hf"] = {
-                    "repo_id": repo,
-                    "filename": filename or None,
-                    "revision": revision,
-                    "quantization_hint": quantization.lower() if quantization else None,
-                    "artifact_format": artifact_format or None,
-                    "uri_type": uri_type,
-                }
+            # Collect packages from all versions
+            for ver_data in variant_data.get("versions", {}).values():
+                for pkg in ver_data.get("packages", []):
+                    executor: str = pkg.get("runtime_executor", "")
+                    artifact_format: str = pkg.get("artifact_format", "")
+                    quantization: str = pkg.get("quantization", "")
 
-        if model_aliases:
-            aliases[model_id] = model_aliases
+                    # Find weights resource
+                    weights = None
+                    for res in pkg.get("resources", []):
+                        if res.get("kind") == "weights":
+                            weights = res
+                            break
+                    if weights is None:
+                        continue
+
+                    uri: str = weights.get("uri", "")
+                    meta: dict = weights.get("metadata") or {}
+                    uri_type: str = meta.get("uri_type", "file")
+                    revision: Optional[str] = meta.get("revision")
+
+                    if executor == "ollama" and "ollama" not in model_aliases:
+                        model_aliases["ollama"] = uri
+                    elif executor in ("onnxruntime", "ort") and uri.startswith("hf://"):
+                        repo, _ = _parse_hf_uri(uri)
+                        if "hf_onnx" not in model_aliases:
+                            model_aliases["hf_onnx"] = repo
+                    elif uri.startswith("hf://") and "hf" not in model_aliases:
+                        repo, filename = _parse_hf_uri(uri)
+                        model_aliases["hf"] = {
+                            "repo_id": repo,
+                            "filename": filename or None,
+                            "revision": revision,
+                            "quantization_hint": quantization.lower() if quantization else None,
+                            "artifact_format": artifact_format or None,
+                            "uri_type": uri_type,
+                        }
+
+            if model_aliases:
+                aliases[variant_name] = model_aliases
 
     return aliases
 

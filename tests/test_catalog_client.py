@@ -197,19 +197,21 @@ class TestCatalogClientV2:
         assert "gemma-2" in manifest
         assert "variants" in manifest["gemma-2"]
 
-    def test_get_models_returns_list(self) -> None:
-        """get_models() should return a flat models list from manifest."""
+    def test_manifest_has_nested_families(self) -> None:
+        """get_manifest() should return nested dict keyed by family name."""
         client = CatalogClientV2(base_url="https://api.example.com")
 
         with patch.dict("sys.modules", {"httpx": None}):
-            models = client.get_models(platform="all")
+            manifest = client.get_manifest(platform="all")
 
-        assert isinstance(models, list)
-        assert len(models) == 3
-        model_ids = {m["id"] for m in models}
-        assert "gemma-2-2b" in model_ids
-        assert "qwen2.5-3b" in model_ids
-        assert "whisper-large-v3" in model_ids
+        assert isinstance(manifest, dict)
+        assert "gemma-2" in manifest
+        assert "qwen2.5" in manifest
+        assert "whisper" in manifest
+        # Each family has variants
+        assert "gemma-2-2b" in manifest["gemma-2"]["variants"]
+        assert "qwen2.5-3b" in manifest["qwen2.5"]["variants"]
+        assert "whisper-large-v3" in manifest["whisper"]["variants"]
 
     def test_invalidate_cache(self) -> None:
         """invalidate_cache() should clear the fetcher cache."""
