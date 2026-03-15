@@ -337,8 +337,6 @@ def deploy(
         click.echo(click.style("  Expires in 5 minutes", dim=True))
         click.echo()
 
-        webbrowser.open(pair_url)
-
         click.echo("Waiting for device to connect (Ctrl+C to cancel)...")
         last_status = ""
         try:
@@ -366,6 +364,48 @@ def deploy(
                             fg="green",
                         )
                     )
+                    # Trigger deployment — provide download URL as fallback
+                    # when the server catalog doesn't have a version.
+                    deploy_body = {}
+                    try:
+                        from octomil.models.resolver import resolve
+
+                        resolved = resolve(name)
+                        if resolved.hf_repo and resolved.filename:
+                            hf_url = f"https://huggingface.co/{resolved.hf_repo}" f"/resolve/main/{resolved.filename}"
+                            deploy_body = {
+                                "download_url": hf_url,
+                                "download_format": "gguf" if resolved.is_gguf else "onnx",
+                                "model_version": version or "1.0.0",
+                            }
+                    except Exception:
+                        pass  # Best-effort — server may have the version
+                    try:
+                        deploy_resp = http_request(
+                            "POST",
+                            f"{api_base}/deploy/pair/{code}/deploy",
+                            headers=headers,
+                            json=deploy_body or None,
+                            timeout=10.0,
+                        )
+                        if deploy_resp.status_code >= 400:
+                            click.echo(
+                                click.style(
+                                    f"  Deploy trigger failed: {deploy_resp.status_code} — {deploy_resp.text}",
+                                    fg="red",
+                                ),
+                                err=True,
+                            )
+                            sys.exit(1)
+                        click.echo(click.style("  \u2713 Deploying to device...", fg="yellow"))
+                    except SystemExit:
+                        raise
+                    except Exception as exc:
+                        click.echo(
+                            click.style(f"  Deploy trigger error: {exc}", fg="red"),
+                            err=True,
+                        )
+                        sys.exit(1)
                 elif status_val == "converting":
                     click.echo(click.style("  \u2713 Converting model for device...", fg="yellow"))
                 elif status_val == "deploying":

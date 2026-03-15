@@ -8,21 +8,27 @@ import urllib.parse
 
 
 def build_deep_link(token: str, host: str) -> str:
-    """Build a Universal Link URL for QR code pairing.
+    """Build an ``octomil://`` deep link for QR code pairing.
 
-    Uses query-parameter format ``https://octomil.com/pair?token=CODE``
-    to match the Android/iOS SDK deep link parsers.
+    Uses the custom scheme so Android/iOS open the companion app directly
+    without requiring App Links / Universal Links domain verification.
+    Falls back cleanly: the OS routes ``octomil://`` to the registered
+    intent-filter / URL type handler.
     """
     default_host = "https://api.octomil.com/api/v1"
     params = {"token": token}
     if host != default_host:
         params["host"] = host
-    return f"https://octomil.com/pair?{urllib.parse.urlencode(params)}"
+    return f"octomil://pair?{urllib.parse.urlencode(params)}"
 
 
 def build_custom_scheme_link(token: str, host: str) -> str:
     """Build an ``octomil://`` deep link for manual opening."""
-    return f"octomil://pair?token={urllib.parse.quote(token)}"
+    default_host = "https://api.octomil.com/api/v1"
+    params = {"token": token}
+    if host != default_host:
+        params["host"] = host
+    return f"octomil://pair?{urllib.parse.urlencode(params)}"
 
 
 def render_qr_terminal(url: str, *, border: int = 4) -> str:
