@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from typing import Any, Callable, Optional
 
 import httpx
@@ -297,9 +296,6 @@ class ModelRegistry:
             payload["data_contract"] = data_contract
         return self.api.post(_MODELS_PATH, payload, params={"org_id": self.org_id})
 
-    # Size threshold for switching to presigned upload (100 MB).
-    _PRESIGNED_THRESHOLD = 100 * 1024 * 1024
-
     def upload_version_from_path(
         self,
         model_id: str,
@@ -324,46 +320,13 @@ class ModelRegistry:
             raise OctomilClientError(f"File not found: {file_path}")
 
         file_size = os.path.getsize(file_path)
-
-        # Large files use presigned S3 upload to avoid server OOM.
-        if file_size >= self._PRESIGNED_THRESHOLD:
-            return self._upload_via_presigned(
-                model_id=model_id,
-                file_path=file_path,
-                file_size=file_size,
-                version=version,
-                description=description,
-            )
-
-        data: dict[str, Any] = {"version": version}
-        if description:
-            data["description"] = description
-        if formats:
-            data["formats"] = formats
-        if architecture:
-            data["architecture"] = architecture
-        if input_dim is not None:
-            data["input_dim"] = str(input_dim)
-        if hidden_dim is not None:
-            data["hidden_dim"] = str(hidden_dim)
-        if output_dim is not None:
-            data["output_dim"] = str(output_dim)
-
-        with contextlib.ExitStack() as stack:
-            files: dict[str, Any] = {"file": stack.enter_context(open(file_path, "rb"))}
-            if onnx_data_path:
-                files["onnx_data"] = stack.enter_context(open(onnx_data_path, "rb"))
-            upload_timeout = max(self.api.timeout, 600.0)
-            with httpx.Client(timeout=upload_timeout) as client:
-                res = client.post(
-                    f"{self.api.api_base}/models/{model_id}/versions/upload",
-                    data=data,
-                    files=files,
-                    headers=self.api._headers(),
-                )
-        if res.status_code >= 400:
-            raise OctomilClientError(res.text)
-        return res.json()
+        return self._upload_via_presigned(
+            model_id=model_id,
+            file_path=file_path,
+            file_size=file_size,
+            version=version,
+            description=description,
+        )
 
     def _upload_via_presigned(
         self,
