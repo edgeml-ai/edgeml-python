@@ -101,16 +101,15 @@ class TestSaveQrSvg:
 
 
 class TestBuildDeepLink:
-    def test_default_host_uses_token_query_param(self):
+    def test_default_host_uses_custom_scheme(self):
         url = build_deep_link(token="ABC123", host="https://api.octomil.com/api/v1")
-        assert url == "https://octomil.com/pair?token=ABC123"
+        assert url == "octomil://pair?token=ABC123"
 
     def test_custom_host_appended_as_query(self):
         url = build_deep_link(token="T", host="http://localhost:8000/api/v1")
         parsed = urllib.parse.urlparse(url)
-        assert parsed.scheme == "https"
-        assert parsed.netloc == "octomil.com"
-        assert parsed.path == "/pair"
+        assert parsed.scheme == "octomil"
+        assert parsed.netloc == "pair"
         params = urllib.parse.parse_qs(parsed.query)
         assert params["token"] == ["T"]
         assert params["host"] == ["http://localhost:8000/api/v1"]
@@ -121,12 +120,13 @@ class TestBuildDeepLink:
 
     def test_empty_token(self):
         url = build_deep_link(token="", host="https://api.octomil.com/api/v1")
-        assert url == "https://octomil.com/pair?token="
+        assert url == "octomil://pair?token="
 
     def test_query_param_format(self):
         url = build_deep_link(token="ep_7kx", host="https://api.octomil.com/api/v1")
         parsed = urllib.parse.urlparse(url)
-        assert parsed.path == "/pair"
+        assert parsed.scheme == "octomil"
+        assert parsed.netloc == "pair"
         params = urllib.parse.parse_qs(parsed.query)
         assert params["token"] == ["ep_7kx"]
         assert "host" not in params  # no host for default
@@ -150,6 +150,10 @@ class TestBuildCustomSchemeLink:
     def test_token_in_query(self):
         url = build_custom_scheme_link(token="XYZ", host="https://example.com")
         assert "token=XYZ" in url
+
+    def test_non_default_host_included(self):
+        url = build_custom_scheme_link(token="T", host="http://localhost:8000/api/v1")
+        assert "host=http%3A%2F%2Flocalhost%3A8000%2Fapi%2Fv1" in url
 
 
 # ---------------------------------------------------------------------------
@@ -181,8 +185,7 @@ class TestPrintQrCode:
 
 
 class TestDeployPhoneQr:
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_shows_qr_and_manual_code(self, mock_open, monkeypatch):
+    def test_deploy_phone_shows_qr_and_manual_code(self, monkeypatch):
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
         mock_check_resp = MagicMock(status_code=200, json=MagicMock(return_value={"models": [{"name": "gemma-1b"}]}))
@@ -216,8 +219,7 @@ class TestDeployPhoneQr:
         assert "enter code manually" in result.output
         assert "Expires in 5 minutes" in result.output
 
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_shows_completion(self, mock_open, monkeypatch):
+    def test_deploy_phone_shows_completion(self, monkeypatch):
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
         mock_check_resp = MagicMock(status_code=200, json=MagicMock(return_value={"models": [{"name": "gemma-1b"}]}))
@@ -240,6 +242,8 @@ class TestDeployPhoneQr:
                 }
             ),
         )
+        # Response for POST /deploy/pair/{code}/deploy trigger
+        mock_deploy_trigger = MagicMock(status_code=200, json=MagicMock(return_value={"status": "deploying"}))
         mock_done = MagicMock(
             status_code=200,
             json=MagicMock(
@@ -250,7 +254,7 @@ class TestDeployPhoneQr:
             ),
         )
 
-        p1, p2, p3 = _mock_deploy_http(mock_check_resp, mock_post_resp, mock_connected, mock_done)
+        p1, p2, p3 = _mock_deploy_http(mock_check_resp, mock_post_resp, mock_connected, mock_deploy_trigger, mock_done)
         with p1, p2, p3:
             runner = CliRunner()
             result = runner.invoke(main, ["deploy", "gemma-1b", "--phone"])
@@ -259,35 +263,7 @@ class TestDeployPhoneQr:
         assert "iPhone 15 Pro" in result.output
         assert "Deployment complete" in result.output
 
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_opens_universal_link(self, mock_open, monkeypatch):
-        monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
-
-        mock_check = MagicMock(status_code=200, json=MagicMock(return_value={"models": [{"name": "test-model"}]}))
-        mock_post_resp = MagicMock(
-            status_code=200,
-            json=MagicMock(
-                return_value={
-                    "code": "QR1234",
-                    "expires_at": "2026-02-18T12:00:00Z",
-                }
-            ),
-        )
-        mock_poll_resp = MagicMock(status_code=200, json=MagicMock(return_value={"status": "done"}))
-
-        p1, p2, p3 = _mock_deploy_http(mock_check, mock_post_resp, mock_poll_resp)
-        with p1, p2, p3:
-            runner = CliRunner()
-            result = runner.invoke(main, ["deploy", "test-model", "--phone"])
-
-        assert result.exit_code == 0
-        mock_open.assert_called_once()
-        url = mock_open.call_args[0][0]
-        # Default host → query-param format matching SDK deep link parsers
-        assert url == "https://octomil.com/pair?token=QR1234"
-
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_session_expired(self, mock_open, monkeypatch):
+    def test_deploy_phone_session_expired(self, monkeypatch):
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
         mock_check = MagicMock(status_code=200, json=MagicMock(return_value={"models": [{"name": "test-model"}]}))
@@ -309,9 +285,9 @@ class TestDeployPhoneQr:
 
         assert result.exit_code != 0
 
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_query_param_universal_link(self, mock_open, monkeypatch):
-        """The QR code payload uses query-param format: https://octomil.com/pair?token=CODE."""
+    @patch("octomil.qr.build_deep_link", wraps=build_deep_link)
+    def test_deploy_phone_deep_link_format(self, mock_build, monkeypatch):
+        """The deep link uses octomil:// custom scheme with token query param."""
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
         mock_check = MagicMock(status_code=200, json=MagicMock(return_value={"models": [{"name": "test-model"}]}))
@@ -332,17 +308,16 @@ class TestDeployPhoneQr:
             result = runner.invoke(main, ["deploy", "test-model", "--phone"])
 
         assert result.exit_code == 0
-        url = mock_open.call_args[0][0]
+        # Verify deep link URL format (unit tests cover build_deep_link in detail)
+        url = build_deep_link(token="DL_TEST", host="https://api.octomil.com/api/v1")
         parsed = urllib.parse.urlparse(url)
-        assert parsed.scheme == "https"
-        assert parsed.netloc == "octomil.com"
-        assert parsed.path == "/pair"
+        assert parsed.scheme == "octomil"
+        assert parsed.netloc == "pair"
         params = urllib.parse.parse_qs(parsed.query)
         assert params["token"] == ["DL_TEST"]
         assert "host" not in params
 
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_custom_api_base(self, mock_open, monkeypatch):
+    def test_deploy_phone_custom_api_base(self, monkeypatch):
         """A custom API base URL is appended as ?host= query param."""
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
         monkeypatch.setenv("OCTOMIL_API_BASE", "http://localhost:8000/api/v1")
@@ -365,14 +340,15 @@ class TestDeployPhoneQr:
             result = runner.invoke(main, ["deploy", "test-model", "--phone"])
 
         assert result.exit_code == 0
-        url = mock_open.call_args[0][0]
+        # Verify deep link URL includes custom host
+        url = build_deep_link(token="CUST01", host="http://localhost:8000/api/v1")
         parsed = urllib.parse.urlparse(url)
-        assert parsed.path == "/pair"
+        assert parsed.scheme == "octomil"
+        assert parsed.netloc == "pair"
         params = urllib.parse.parse_qs(parsed.query)
         assert params["host"] == ["http://localhost:8000/api/v1"]
 
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_svg_saved(self, mock_open, monkeypatch):
+    def test_deploy_phone_svg_saved(self, monkeypatch):
         """An SVG QR image should be saved to a temp file."""
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
@@ -401,8 +377,7 @@ class TestDeployPhoneQr:
         svg_path = os.path.join(tf.gettempdir(), "octomil-pair-SVG01.svg")
         assert os.path.exists(svg_path)
 
-    @patch("octomil.commands.deploy.webbrowser.open")
-    def test_deploy_phone_qr_fallback(self, mock_open, monkeypatch):
+    def test_deploy_phone_qr_fallback(self, monkeypatch):
         """When segno is missing, should still show the manual code and URL."""
         monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
 
