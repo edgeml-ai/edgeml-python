@@ -242,7 +242,7 @@ def deploy(
                                 model_has_versions = True
                     break
         if not model_found or not model_has_versions:
-            click.echo(f"Model '{name}' not in registry — importing...")
+            click.echo(click.style(f"  Model '{name}' not in registry — importing...", dim=True))
             client = _get_client()
             effective_version = version or "1.0.0"
             resolved_name = name.split("/")[-1].split(":")[-1]
