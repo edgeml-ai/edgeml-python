@@ -338,7 +338,9 @@ class ModelRegistry:
             files: dict[str, Any] = {"file": stack.enter_context(open(file_path, "rb"))}
             if onnx_data_path:
                 files["onnx_data"] = stack.enter_context(open(onnx_data_path, "rb"))
-            with httpx.Client(timeout=self.api.timeout) as client:
+            # Use a generous timeout for large file uploads (up to several GB).
+            upload_timeout = max(self.api.timeout, 600.0)
+            with httpx.Client(timeout=upload_timeout) as client:
                 res = client.post(
                     f"{self.api.api_base}/models/{model_id}/versions/upload",
                     data=data,
