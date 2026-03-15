@@ -220,13 +220,27 @@ def deploy(
             timeout=10.0,
         )
         model_found = False
+        model_has_versions = False
         if check_resp.status_code == 200:
             for m in check_resp.json().get("models", []):
                 m_name = m.get("name") or m.get("model_id") or ""
                 if m_name.lower() == name.lower():
                     model_found = True
+                    # Check if model has at least one version
+                    m_id = m.get("id", "")
+                    if m_id:
+                        ver_resp = http_request(
+                            "GET",
+                            f"{api_base}/models/{m_id}/versions",
+                            headers=headers,
+                            timeout=10.0,
+                        )
+                        if ver_resp.status_code == 200:
+                            versions = ver_resp.json().get("versions", [])
+                            if versions:
+                                model_has_versions = True
                     break
-        if not model_found:
+        if not model_found or not model_has_versions:
             click.echo(f"Model '{name}' not in registry — importing...")
             client = _get_client()
             effective_version = version or "1.0.0"
@@ -337,8 +351,6 @@ def deploy(
         click.echo(click.style("  Expires in 5 minutes", dim=True))
         click.echo()
 
-        webbrowser.open(pair_url)
-
         click.echo("Waiting for device to connect (Ctrl+C to cancel)...")
         last_status = ""
         try:
@@ -366,6 +378,32 @@ def deploy(
                             fg="green",
                         )
                     )
+                    # Trigger deployment — server resolves model version from catalog
+                    try:
+                        deploy_resp = http_request(
+                            "POST",
+                            f"{api_base}/deploy/pair/{code}/deploy",
+                            headers=headers,
+                            timeout=10.0,
+                        )
+                        if deploy_resp.status_code >= 400:
+                            click.echo(
+                                click.style(
+                                    f"  Deploy trigger failed: {deploy_resp.status_code} — {deploy_resp.text}",
+                                    fg="red",
+                                ),
+                                err=True,
+                            )
+                            sys.exit(1)
+                        click.echo(click.style("  \u2713 Deploying to device...", fg="yellow"))
+                    except SystemExit:
+                        raise
+                    except Exception as exc:
+                        click.echo(
+                            click.style(f"  Deploy trigger error: {exc}", fg="red"),
+                            err=True,
+                        )
+                        sys.exit(1)
                 elif status_val == "converting":
                     click.echo(click.style("  \u2713 Converting model for device...", fg="yellow"))
                 elif status_val == "deploying":
