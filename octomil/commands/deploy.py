@@ -289,6 +289,7 @@ def deploy(
                 click.echo(click.style(f"  Downloaded to {resolved_path}", fg="green"))
 
                 try:
+                    # Push model weights
                     file_size_mb = os.path.getsize(resolved_path) / (1024 * 1024)
                     click.echo(click.style(f"  Uploading to registry ({file_size_mb:.0f} MB)...", dim=True))
                     client.push(
@@ -296,6 +297,18 @@ def deploy(
                         name=resolved_name,
                         version=effective_version,
                     )
+                    # Push companion files (mmproj, etc.) from same directory
+                    model_dir = os.path.dirname(resolved_path)
+                    for companion in os.listdir(model_dir):
+                        if companion.startswith("mmproj") and companion.endswith(".gguf"):
+                            comp_path = os.path.join(model_dir, companion)
+                            comp_mb = os.path.getsize(comp_path) / (1024 * 1024)
+                            click.echo(click.style(f"  Uploading projector ({comp_mb:.0f} MB)...", dim=True))
+                            client.push(
+                                comp_path,
+                                name=f"{resolved_name}-mmproj",
+                                version=effective_version,
+                            )
                     click.echo(click.style(f"  Pushed {resolved_name} v{effective_version}", fg="green"))
                     name = resolved_name
                 except Exception as exc:
