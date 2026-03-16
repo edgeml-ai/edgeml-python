@@ -107,4 +107,31 @@ SCHEMA_STATEMENTS: list[str] = [
         rolled_back_at  TEXT NOT NULL
     )
     """,
+    # -- Runtime binary version tracking --
+    """
+    CREATE TABLE IF NOT EXISTS runtime_versions (
+        runtime_id    TEXT PRIMARY KEY,
+        version       TEXT NOT NULL,
+        status        TEXT NOT NULL,
+        artifact_path TEXT,
+        downloaded_at TEXT,
+        verified_at   TEXT,
+        pending_since TEXT,
+        activated_at  TEXT,
+        updated_at    TEXT NOT NULL
+    )
+    """,
+    # -- Boot history for crash detection --
+    """
+    CREATE TABLE IF NOT EXISTS boot_history (
+        boot_id              TEXT PRIMARY KEY,
+        started_at           TEXT NOT NULL,
+        active_model_id      TEXT,
+        active_model_version TEXT,
+        runtime_version      TEXT,
+        clean_shutdown        INTEGER DEFAULT 0,
+        crash_detected        INTEGER DEFAULT 0,
+        duration_sec          REAL
+    )
+    """,
 ]
