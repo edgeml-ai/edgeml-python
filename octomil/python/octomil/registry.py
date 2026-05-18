@@ -11,19 +11,25 @@ _MODELS_PATH = "/models"
 
 
 # Map common `--use-case` strings to the server's `capability` vocabulary
-# (per OCT-112 in octomil-server/server/app/routers/upload.py). Server
-# accepts: chat, text_completion, reasoning, code, function_calling,
-# keyboard_prediction, transcription, streaming_transcription, vision,
-# classification, embedding. Unknown values pass through verbatim so the
-# server can validate.
+# (per OCT-112 in octomil-server/server/app/routers/upload.py). Server's
+# canonical set is: chat, text_completion, reasoning, code,
+# function_calling, keyboard_prediction, transcription,
+# streaming_transcription, vision, classification, embedding.
+# Unknown values pass through verbatim so the server can validate.
+#
+# Note: TTS / text-to-speech use-cases are deliberately NOT mapped here.
+# As of this writing the server-side accepted capability list (above)
+# doesn't include a `tts` value; until the server-side
+# capability_routing table grows to include it, mapping
+# `tts → tts` here would route the upload through a value the server
+# rejects. Add an alias once the server accepts it (and a test that
+# proves the round-trip).
 _USE_CASE_TO_CAPABILITY: dict[str, str] = {
     "object_detection": "vision",
     "image_classification": "classification",
     "text_generation": "chat",
     "stt": "transcription",
     "speech_to_text": "transcription",
-    "tts": "tts",
-    "text_to_speech": "tts",
     "embeddings": "embedding",
     "nlp": "chat",
 }

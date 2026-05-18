@@ -435,14 +435,26 @@ class TestPushCommand:
         assert push_kwargs.get("use_case") == "object_detection"
 
     def test_use_case_to_capability_mapping(self):
-        """Common --use-case values map to server capability vocabulary."""
-        from octomil.python.octomil.registry import _use_case_to_capability
+        """Common --use-case values map to server capability vocabulary.
+
+        Mapping table is intentionally narrow — only common values that
+        unambiguously match a server-side accepted capability
+        (per octomil-server upload.py / capability_routing). TTS / text-
+        to-speech is deliberately absent; the server's accepted capability
+        list does not include `tts` as of this writing.
+        """
+        from octomil.python.octomil.registry import (
+            _USE_CASE_TO_CAPABILITY,
+            _use_case_to_capability,
+        )
 
         # Mapped (user-friendly → canonical)
         assert _use_case_to_capability("object_detection") == "vision"
         assert _use_case_to_capability("image_classification") == "classification"
         assert _use_case_to_capability("text_generation") == "chat"
         assert _use_case_to_capability("stt") == "transcription"
+        assert _use_case_to_capability("speech_to_text") == "transcription"
+        assert _use_case_to_capability("embeddings") == "embedding"
 
         # Already-canonical passes through
         assert _use_case_to_capability("vision") == "vision"
@@ -457,6 +469,12 @@ class TestPushCommand:
 
         # Case-insensitive
         assert _use_case_to_capability("Object_Detection") == "vision"
+
+        # TTS is intentionally NOT mapped — server doesn't accept a `tts`
+        # capability yet. If this ever changes, add the alias + a
+        # server-round-trip test in the same commit.
+        assert "tts" not in _USE_CASE_TO_CAPABILITY
+        assert "text_to_speech" not in _USE_CASE_TO_CAPABILITY
 
 
 # ---------------------------------------------------------------------------
