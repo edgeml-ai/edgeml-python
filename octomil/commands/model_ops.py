@@ -89,12 +89,13 @@ def push(
     # ── Local file or directory upload ────────────────────────────────
     if path and (os.path.isfile(path) or os.path.isdir(path)):
         if os.path.isdir(path):
-            from octomil.model_ops import _find_model_file
+            from octomil.model_ops import _MODEL_EXTENSIONS, _find_model_file
 
             model_file = _find_model_file(path)
             if not model_file:
+                exts = ", ".join(sorted(_MODEL_EXTENSIONS))
                 click.echo(
-                    f"Error: no model file found in {path}\n  Expected: .safetensors, .gguf, .pt, .pth, .bin, .onnx",
+                    f"Error: no model file found in {path}\n  Expected: {exts}",
                     err=True,
                 )
                 sys.exit(1)

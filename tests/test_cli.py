@@ -327,6 +327,38 @@ class TestPushCommand:
         assert "test-model v1.0.0" in result.output
         mock_client.push.assert_called_once()
 
+    @patch("octomil.commands.model_ops._get_client")
+    def test_push_mlmodel(self, mock_get_client, tmp_path, monkeypatch):
+        """Pre-converted CoreML .mlmodel is accepted as a source artifact.
+
+        Operators may push Apple-distributed models (YOLOv3Tiny, MobileNetV2,
+        etc.) without re-sourcing the upstream PyTorch. Server detects
+        `format=coreml` from the extension and skips conversion.
+        """
+        monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
+        mock_client = MagicMock()
+        mock_client.push.return_value = {"formats": {"coreml": "ok"}}
+        mock_get_client.return_value = mock_client
+
+        model_file = tmp_path / "YOLOv3Tiny.mlmodel"
+        model_file.write_bytes(b"\x08\x03\x12\xe0fake_coreml_protobuf_header")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["push", str(model_file), "--model-id", "yolov3-tiny", "--version", "1.0.0"],
+        )
+        assert result.exit_code == 0
+        assert "yolov3-tiny v1.0.0" in result.output
+        mock_client.push.assert_called_once()
+
+    def test_mlmodel_in_extensions(self):
+        """_MODEL_EXTENSIONS must include .mlmodel so directory-walk
+        scanning of HF / CoreML-package layouts picks it up too."""
+        from octomil.model_ops import _MODEL_EXTENSIONS
+
+        assert ".mlmodel" in _MODEL_EXTENSIONS
+
 
 # ---------------------------------------------------------------------------
 # octomil pull

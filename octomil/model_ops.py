@@ -80,7 +80,21 @@ def _octomil_client_error():
 
 _logger = logging.getLogger(__name__)
 
-_MODEL_EXTENSIONS = {".safetensors", ".gguf", ".pt", ".pth", ".bin", ".onnx"}
+# Source-format extensions the CLI accepts for `octomil push`.
+#
+# `.mlmodel` is a pre-converted CoreML artifact — supported for cases
+# where the operator has an Apple-distributed model (e.g. Apple's
+# YOLOv3Tiny, MobileNetV2) and doesn't want to re-source the upstream
+# PyTorch/ONNX just to push. Server detects `format=coreml` from the
+# extension (octomil-server/server/app/routers/upload.py:149) and skips
+# conversion.
+#
+# `.mlpackage` (CoreML's directory bundle) is NOT included: walking the
+# .mlpackage tree would pick out the inner `Data/.../model.mlmodel`,
+# but uploading that file in isolation loses the bundle metadata and
+# breaks at load time. Server-side .zip-unwrap support for .mlpackage
+# is a separate workstream.
+_MODEL_EXTENSIONS = {".safetensors", ".gguf", ".pt", ".pth", ".bin", ".onnx", ".mlmodel"}
 
 
 def _find_model_file(directory: str) -> str | None:
