@@ -87,6 +87,7 @@ class TestClientPush:
             version="1.0.0",
             description=None,
             formats=None,
+            use_case=None,  # default "other" is normalized to None in client.push()
         )
         assert result["version"] == "1.0.0"
 
@@ -119,6 +120,7 @@ class TestClientPush:
             version="2.0.0",
             description="A test model",
             formats="coreml,tflite",
+            use_case="nlp",
         )
 
 

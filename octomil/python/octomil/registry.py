@@ -10,6 +10,44 @@ from .control_plane import ExperimentsAPI, RolloutsAPI
 _MODELS_PATH = "/models"
 
 
+# Map common `--use-case` strings to the server's `capability` vocabulary
+# (per OCT-112 in octomil-server/server/app/routers/upload.py). Server's
+# canonical set is: chat, text_completion, reasoning, code,
+# function_calling, keyboard_prediction, transcription,
+# streaming_transcription, vision, classification, embedding.
+# Unknown values pass through verbatim so the server can validate.
+#
+# Note: TTS / text-to-speech use-cases are deliberately NOT mapped here.
+# As of this writing the server-side accepted capability list (above)
+# doesn't include a `tts` value; until the server-side
+# capability_routing table grows to include it, mapping
+# `tts → tts` here would route the upload through a value the server
+# rejects. Add an alias once the server accepts it (and a test that
+# proves the round-trip).
+_USE_CASE_TO_CAPABILITY: dict[str, str] = {
+    "object_detection": "vision",
+    "image_classification": "classification",
+    "text_generation": "chat",
+    "stt": "transcription",
+    "speech_to_text": "transcription",
+    "embeddings": "embedding",
+    "nlp": "chat",
+}
+
+
+def _use_case_to_capability(use_case: Optional[str]) -> Optional[str]:
+    """Resolve a user-facing `--use-case` to a server `capability` value.
+
+    Passes already-canonical capabilities through unchanged. Returns None
+    for None input so callers can `if capability is not None: ...` without
+    re-checking.
+    """
+    if not use_case:
+        return None
+    normalised = use_case.strip().lower()
+    return _USE_CASE_TO_CAPABILITY.get(normalised, normalised)
+
+
 def _detect_device_type() -> Optional[str]:
     """Auto-detect device profile from the runtime environment.
 
@@ -308,6 +346,7 @@ class ModelRegistry:
         input_dim: Optional[int] = None,
         hidden_dim: Optional[int] = None,
         output_dim: Optional[int] = None,
+        use_case: Optional[str] = None,
     ) -> dict[str, Any]:
         import os
 
@@ -326,6 +365,7 @@ class ModelRegistry:
             file_size=file_size,
             version=version,
             description=description,
+            use_case=use_case,
         )
 
     def _upload_via_presigned(
@@ -335,6 +375,7 @@ class ModelRegistry:
         file_size: int,
         version: str,
         description: Optional[str] = None,
+        use_case: Optional[str] = None,
     ) -> dict[str, Any]:
         """Upload a large file directly to S3 via a presigned PUT URL."""
         import os
@@ -371,15 +412,26 @@ class ModelRegistry:
             raise OctomilClientError(f"S3 upload failed ({put_resp.status_code}): {put_resp.text}")
 
         # Step 3: Confirm upload with the server to create version record.
+        confirm_data: dict[str, str] = {
+            "version": version,
+            "storage_key": storage_key,
+            "file_size": str(file_size),
+            "description": description or "",
+        }
+        # OCT-112: declare capability at confirm-upload so the server routes
+        # the model to the right engine slot (e.g. vision → CoreML adapter,
+        # not the chat default). Maps user-friendly --use-case values
+        # (object_detection, image_classification) into the server's
+        # canonical capability vocabulary; passes already-canonical values
+        # through verbatim.
+        capability = _use_case_to_capability(use_case)
+        if capability:
+            confirm_data["capability"] = capability
+
         with httpx.Client(timeout=30.0) as client:
             confirm_resp = client.post(
                 f"{self.api.api_base}/models/{model_id}/versions/confirm-upload",
-                data={
-                    "version": version,
-                    "storage_key": storage_key,
-                    "file_size": str(file_size),
-                    "description": description or "",
-                },
+                data=confirm_data,
                 headers=self.api._headers(),
             )
         if confirm_resp.status_code >= 400:

@@ -89,12 +89,27 @@ def push(
     # ── Local file or directory upload ────────────────────────────────
     if path and (os.path.isfile(path) or os.path.isdir(path)):
         if os.path.isdir(path):
-            from octomil.model_ops import _find_model_file
+            from octomil.model_ops import _MODEL_EXTENSIONS, _find_model_file
+
+            # Special-case `.mlpackage` with a helpful message before
+            # _find_model_file returns None for the same case. Server-side
+            # `.zip`-unwrap support for `.mlpackage` is a separate workstream.
+            if path.endswith(".mlpackage") or path.rstrip("/").endswith(".mlpackage"):
+                click.echo(
+                    f"Error: {path} is a .mlpackage directory bundle. "
+                    "Uploading the inner .mlmodel in isolation loses bundle "
+                    "metadata and breaks at load time. Use a single-file "
+                    ".mlmodel, or wait for server-side .zip-unwrap "
+                    "support — separate workstream.",
+                    err=True,
+                )
+                sys.exit(1)
 
             model_file = _find_model_file(path)
             if not model_file:
+                exts = ", ".join(sorted(_MODEL_EXTENSIONS))
                 click.echo(
-                    f"Error: no model file found in {path}\n  Expected: .safetensors, .gguf, .pt, .pth, .bin, .onnx",
+                    f"Error: no model file found in {path}\n  Expected: {exts}",
                     err=True,
                 )
                 sys.exit(1)
