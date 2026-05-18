@@ -359,6 +359,105 @@ class TestPushCommand:
 
         assert ".mlmodel" in _MODEL_EXTENSIONS
 
+    def test_mlpackage_directory_rejected_by_find_model_file(self, tmp_path):
+        """A .mlpackage directory bundle must not be silently unwrapped
+        into its inner .mlmodel — that loses bundle metadata and breaks
+        at load time. The recursive search has to skip it.
+        """
+        from octomil.model_ops import _find_model_file
+
+        # Build a realistic .mlpackage layout: outer dir + Data/.../model.mlmodel
+        pkg = tmp_path / "Detector.mlpackage"
+        nested = pkg / "Data" / "com.apple.CoreML"
+        nested.mkdir(parents=True)
+        (nested / "model.mlmodel").write_bytes(b"fake")
+
+        # Passing the .mlpackage directly: must return None (caller
+        # surfaces a user-readable error).
+        assert _find_model_file(str(pkg)) is None
+
+        # Passing a parent directory that contains a .mlpackage subtree:
+        # also must NOT pick up the inner .mlmodel.
+        parent = tmp_path  # contains only Detector.mlpackage/ … /model.mlmodel
+        assert _find_model_file(str(parent)) is None
+
+    @patch("octomil.commands.model_ops._get_client")
+    def test_mlpackage_directory_cli_rejection(self, mock_get_client, tmp_path, monkeypatch):
+        """CLI's `octomil push <.mlpackage>` returns a helpful error
+        (not the generic 'no model file found' fallback)."""
+        monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
+        mock_get_client.return_value = MagicMock()
+
+        pkg = tmp_path / "Detector.mlpackage"
+        pkg.mkdir()
+        (pkg / "model.mlmodel").write_bytes(b"fake")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["push", str(pkg), "--model-id", "x", "--version", "1.0.0"])
+
+        assert result.exit_code == 1
+        assert ".mlpackage directory bundle" in result.output
+        assert "loses bundle metadata" in result.output
+
+    @patch("octomil.commands.model_ops._get_client")
+    def test_push_use_case_forwarded(self, mock_get_client, tmp_path, monkeypatch):
+        """CLI's --use-case must reach client.push() as a kwarg.
+
+        Regression for the silent-drop bug where the SDK accepted
+        use_case but didn't forward it to the registry / confirm-upload,
+        meaning the catalog entry got the wrong capability.
+        """
+        monkeypatch.setenv("OCTOMIL_API_KEY", "test-key")
+        mock_client = MagicMock()
+        mock_client.push.return_value = {"formats": {"coreml": "ok"}}
+        mock_get_client.return_value = mock_client
+
+        model_file = tmp_path / "yolo.mlmodel"
+        model_file.write_bytes(b"fake")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "push",
+                str(model_file),
+                "--model-id",
+                "yolo-demo",
+                "--version",
+                "1.0.0",
+                "--use-case",
+                "object_detection",
+            ],
+        )
+        assert result.exit_code == 0
+        mock_client.push.assert_called_once()
+        _, push_kwargs = mock_client.push.call_args
+        assert push_kwargs.get("use_case") == "object_detection"
+
+    def test_use_case_to_capability_mapping(self):
+        """Common --use-case values map to server capability vocabulary."""
+        from octomil.python.octomil.registry import _use_case_to_capability
+
+        # Mapped (user-friendly → canonical)
+        assert _use_case_to_capability("object_detection") == "vision"
+        assert _use_case_to_capability("image_classification") == "classification"
+        assert _use_case_to_capability("text_generation") == "chat"
+        assert _use_case_to_capability("stt") == "transcription"
+
+        # Already-canonical passes through
+        assert _use_case_to_capability("vision") == "vision"
+        assert _use_case_to_capability("chat") == "chat"
+
+        # Unknown passes through (server validates)
+        assert _use_case_to_capability("custom_thing") == "custom_thing"
+
+        # None / empty → None (don't add the form field)
+        assert _use_case_to_capability(None) is None
+        assert _use_case_to_capability("") is None
+
+        # Case-insensitive
+        assert _use_case_to_capability("Object_Detection") == "vision"
+
 
 # ---------------------------------------------------------------------------
 # octomil pull

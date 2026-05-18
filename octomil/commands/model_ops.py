@@ -91,6 +91,20 @@ def push(
         if os.path.isdir(path):
             from octomil.model_ops import _MODEL_EXTENSIONS, _find_model_file
 
+            # Special-case `.mlpackage` with a helpful message before
+            # _find_model_file returns None for the same case. Server-side
+            # `.zip`-unwrap support for `.mlpackage` is a separate workstream.
+            if path.endswith(".mlpackage") or path.rstrip("/").endswith(".mlpackage"):
+                click.echo(
+                    f"Error: {path} is a .mlpackage directory bundle. "
+                    "Uploading the inner .mlmodel in isolation loses bundle "
+                    "metadata and breaks at load time. Use a single-file "
+                    ".mlmodel, or wait for server-side .zip-unwrap "
+                    "support — separate workstream.",
+                    err=True,
+                )
+                sys.exit(1)
+
             model_file = _find_model_file(path)
             if not model_file:
                 exts = ", ".join(sorted(_MODEL_EXTENSIONS))

@@ -89,23 +89,43 @@ _logger = logging.getLogger(__name__)
 # extension (octomil-server/server/app/routers/upload.py:149) and skips
 # conversion.
 #
-# `.mlpackage` (CoreML's directory bundle) is NOT included: walking the
-# .mlpackage tree would pick out the inner `Data/.../model.mlmodel`,
-# but uploading that file in isolation loses the bundle metadata and
-# breaks at load time. Server-side .zip-unwrap support for .mlpackage
-# is a separate workstream.
+# `.mlpackage` (CoreML's directory bundle) is NOT supported by this
+# extension set — see `_find_model_file` for the explicit guard. The
+# bundle is a directory tree with `Data/.../model.mlmodel` nested
+# inside; uploading just the inner .mlmodel loses the bundle metadata
+# and breaks at load time. Server-side .zip-unwrap support for
+# .mlpackage is a separate workstream.
 _MODEL_EXTENSIONS = {".safetensors", ".gguf", ".pt", ".pth", ".bin", ".onnx", ".mlmodel"}
 
 
 def _find_model_file(directory: str) -> str | None:
-    """Find the primary model file in a directory (e.g. HuggingFace snapshot)."""
+    """Find the primary model file in a directory (e.g. HuggingFace snapshot).
+
+    Returns None if the directory is itself a `.mlpackage` bundle: walking
+    the tree would discover the inner `Data/.../model.mlmodel` and let the
+    caller upload it in isolation, which loses bundle metadata and breaks
+    at load time. The caller surfaces a user-readable error from None.
+    """
     dir_path = Path(directory)
+
+    # Explicit guard: a `.mlpackage` directory is the wrong upload unit.
+    # Without this, the recursion below would yank the inner .mlmodel and
+    # silently upload a broken artifact.
+    if dir_path.suffix == ".mlpackage":
+        return None
+
     # Direct children first
     for child in sorted(dir_path.iterdir()):
         if child.is_file() and child.suffix in _MODEL_EXTENSIONS:
             return str(child)
-    # Recurse into subdirectories (HF snapshots nest files)
+    # Recurse into subdirectories (HF snapshots nest files), but skip any
+    # nested `.mlpackage` bundles for the same reason as above.
     for child in sorted(dir_path.rglob("*")):
+        if child.is_dir() and child.suffix == ".mlpackage":
+            continue
+        # Also skip files that live INSIDE a .mlpackage subtree
+        if any(p.suffix == ".mlpackage" for p in child.parents):
+            continue
         if child.is_file() and child.suffix in _MODEL_EXTENSIONS:
             return str(child)
     return None
@@ -162,12 +182,16 @@ class ModelOpsMixin:
         try:
             # v2 flow: pass model name directly — server creates v2 catalog
             # entries via ensure_uploaded_model. No v1 Model record needed.
+            # use_case is mapped to the server's `capability` vocabulary
+            # inside the registry (OCT-112) so the catalog row is routed
+            # to the right engine slot.
             result = self._registry.upload_version_from_path(
                 model_id=name,
                 file_path=file_path,
                 version=version,
                 description=description,
                 formats=formats,
+                use_case=use_case if use_case != "other" else None,
             )
         except Exception as exc:
             if self._reporter:
