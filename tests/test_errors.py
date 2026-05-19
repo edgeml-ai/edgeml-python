@@ -7,13 +7,15 @@ import pytest
 from octomil.errors import OctomilError, OctomilErrorCode
 
 # ---------------------------------------------------------------------------
-# All 19 canonical codes
+# All 65 canonical codes (bumped from 39 — contract catalog v1.25.0)
 # ---------------------------------------------------------------------------
 
 ALL_CODES = [
     "invalid_api_key",
     "authentication_failed",
     "forbidden",
+    "insufficient_scope",
+    "missing_org_context",
     "device_not_registered",
     "token_expired",
     "device_revoked",
@@ -25,6 +27,13 @@ ALL_CODES = [
     "unsupported_modality",
     "context_too_large",
     "model_not_found",
+    "no_default_model",
+    "capability_not_supported",
+    "previous_response_not_found",
+    "app_not_found",
+    "capability_not_configured",
+    "app_context_conflict",
+    "invalid_model_ref",
     "model_disabled",
     "version_not_found",
     "download_failed",
@@ -35,27 +44,44 @@ ALL_CODES = [
     "accelerator_unavailable",
     "model_load_failed",
     "inference_failed",
+    "provider_error",
+    "upstream_provider_error",
+    "too_many_tools",
+    "unsupported_tool_calling",
     "stream_interrupted",
     "policy_denied",
     "cloud_fallback_disallowed",
+    "cloud_inference_not_allowed",
+    "hosted_tts_disabled",
+    "plan_limit_exceeded",
     "cloud_credentials_missing",
     "cloud_credentials_revoked",
     "cloud_provider_auth_failed",
     "max_tool_rounds_exceeded",
-    "control_sync_failed",
-    "assignment_not_found",
-    "cancelled",
-    "app_backgrounded",
     "training_failed",
     "training_not_supported",
     "weight_upload_failed",
+    "control_sync_failed",
+    "assignment_not_found",
+    "incident_not_found",
+    "deployment_not_found",
+    "experiment_not_found",
+    "experiment_state_invalid",
+    "api_key_not_found",
+    "api_key_already_revoked",
+    "integration_not_found",
+    "billing_customer_not_found",
+    "action_not_found",
+    "action_state_invalid",
+    "cancelled",
+    "app_backgrounded",
     "unknown",
 ]
 
 
 class TestOctomilErrorCodeEnum:
-    def test_has_exactly_39_members(self) -> None:
-        assert len(OctomilErrorCode) == 39
+    def test_has_exactly_65_members(self) -> None:
+        assert len(OctomilErrorCode) == 65
 
     @pytest.mark.parametrize("value", ALL_CODES)
     def test_all_canonical_codes_exist(self, value: str) -> None:
@@ -86,6 +112,8 @@ RETRYABLE_CODES = {
     OctomilErrorCode.APP_BACKGROUNDED,
     OctomilErrorCode.TRAINING_FAILED,
     OctomilErrorCode.WEIGHT_UPLOAD_FAILED,
+    # New code added in v1.25.0 catalog bump; backoff_safe => retryable
+    OctomilErrorCode.UPSTREAM_PROVIDER_ERROR,
 }
 
 NON_RETRYABLE_CODES = set(OctomilErrorCode) - RETRYABLE_CODES
@@ -235,3 +263,104 @@ class TestOctomilErrorRepr:
         )
         r = repr(err)
         assert "retryable=False" in r
+
+
+# ---------------------------------------------------------------------------
+# retry_after_ms — new field (Pillar 3 / Pillar 3-step-3)
+# ---------------------------------------------------------------------------
+
+
+class TestRetryAfterMs:
+    def test_rate_limited_with_retry_after_ms(self) -> None:
+        err = OctomilError(
+            code=OctomilErrorCode.RATE_LIMITED,
+            message="x",
+            retry_after_ms=1500,
+        )
+        assert err.retry_after_ms == 1500
+
+    def test_rate_limited_is_retryable(self) -> None:
+        err = OctomilError(
+            code=OctomilErrorCode.RATE_LIMITED,
+            message="x",
+            retry_after_ms=1500,
+        )
+        assert err.retryable is True
+
+    def test_retry_after_ms_defaults_to_none(self) -> None:
+        err = OctomilError(
+            code=OctomilErrorCode.SERVER_ERROR,
+            message="500",
+        )
+        assert err.retry_after_ms is None
+
+    def test_from_http_status_429_with_retry_after_ms(self) -> None:
+        err = OctomilError.from_http_status(429, "Too Many Requests", retry_after_ms=30000)
+        assert err.code is OctomilErrorCode.RATE_LIMITED
+        assert err.retry_after_ms == 30000
+        assert err.retryable is True
+
+    def test_from_http_status_no_retry_after_ms(self) -> None:
+        err = OctomilError.from_http_status(500)
+        assert err.retry_after_ms is None
+
+    def test_retry_after_ms_zero_is_valid(self) -> None:
+        """Zero is a legal hint meaning 'retry immediately'."""
+        err = OctomilError(
+            code=OctomilErrorCode.RATE_LIMITED,
+            message="x",
+            retry_after_ms=0,
+        )
+        assert err.retry_after_ms == 0
+
+
+# ---------------------------------------------------------------------------
+# Newly-added codes from v1.25.0 catalog — importable + correct retryable
+# ---------------------------------------------------------------------------
+
+
+class TestNewV125Codes:
+    """Verify all 26 new codes added in the v1.25.0 catalog bump are
+    importable via OctomilErrorCode and have the expected .retryable value."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected_retryable"),
+        [
+            # auth category — never retryable
+            ("insufficient_scope", False),
+            ("missing_org_context", False),
+            # catalog category — never retryable
+            ("no_default_model", False),
+            ("capability_not_supported", False),
+            ("previous_response_not_found", False),
+            ("app_not_found", False),
+            ("capability_not_configured", False),
+            ("app_context_conflict", False),
+            ("invalid_model_ref", False),
+            # runtime category
+            ("provider_error", False),  # never
+            ("upstream_provider_error", True),  # backoff_safe
+            ("too_many_tools", False),  # never
+            ("unsupported_tool_calling", False),  # never
+            # policy category — never retryable
+            ("cloud_inference_not_allowed", False),
+            ("hosted_tts_disabled", False),
+            ("plan_limit_exceeded", False),
+            # control category — never retryable
+            ("incident_not_found", False),
+            ("deployment_not_found", False),
+            ("experiment_not_found", False),
+            ("experiment_state_invalid", False),
+            # new auth-adjacent resource codes — never retryable
+            ("api_key_not_found", False),
+            ("api_key_already_revoked", False),
+            ("integration_not_found", False),
+            ("billing_customer_not_found", False),
+            ("action_not_found", False),
+            ("action_state_invalid", False),
+        ],
+    )
+    def test_code_importable_and_retryable(self, value: str, expected_retryable: bool) -> None:
+        code = OctomilErrorCode(value)
+        err = OctomilError(code=code, message="test")
+        assert err.retryable is expected_retryable
