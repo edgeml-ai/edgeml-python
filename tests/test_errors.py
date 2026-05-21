@@ -7,10 +7,14 @@ import pytest
 from octomil.errors import OctomilError, OctomilErrorCode
 
 # ---------------------------------------------------------------------------
-# All 65 canonical codes (bumped from 39 — contract catalog v1.25.0)
+# Canonical codes — derived from the OctomilErrorCode enum so this list
+# stays in lockstep with contract bumps. The hardcoded subset below
+# (CORE_CODES) covers the v1.25.0 era for regression coverage.
 # ---------------------------------------------------------------------------
 
-ALL_CODES = [
+ALL_CODES = [c.value for c in OctomilErrorCode]
+
+CORE_CODES = [
     "invalid_api_key",
     "authentication_failed",
     "forbidden",
@@ -80,8 +84,11 @@ ALL_CODES = [
 
 
 class TestOctomilErrorCodeEnum:
-    def test_has_exactly_65_members(self) -> None:
-        assert len(OctomilErrorCode) == 65
+    def test_has_exactly_85_members(self) -> None:
+        # Contract is at 1.27.0 — 85 canonical codes. The 1.27.0 batch
+        # added passkeys + account-linking + admin codes. Update this
+        # alongside contract bumps.
+        assert len(OctomilErrorCode) == 85
 
     @pytest.mark.parametrize("value", ALL_CODES)
     def test_all_canonical_codes_exist(self, value: str) -> None:
