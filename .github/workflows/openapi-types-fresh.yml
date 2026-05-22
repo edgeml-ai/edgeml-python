@@ -1,0 +1,73 @@
+name: OpenAPI types freshness
+
+# Python equivalent of octomil-node PR #95 (openapi-types-fresh.yml).
+# Regenerates Pydantic v2 models from the contracts OpenAPI spec and
+# fails if the committed octomil/_generated/types.py is out of date.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: openapi-types-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    name: Generated types are up to date
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout octomil-python
+        uses: actions/checkout@v4
+        with:
+          path: octomil-python
+
+      - name: Checkout octomil-contracts
+        uses: actions/checkout@v4
+        with:
+          repository: octomil/octomil-contracts
+          path: octomil-contracts
+          token: ${{ secrets.OCTOMIL_CONTRACTS_READ_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install datamodel-code-generator and ruff
+        run: pip install "datamodel-code-generator==0.27.0" "ruff>=0.4.0"
+
+      - name: Install contracts spec-build deps
+        run: pip install pyyaml
+
+      - name: Regenerate types
+        run: |
+          OCTOMIL_PYTHON_PATH="${{ github.workspace }}/octomil-python" \
+          OCTOMIL_PYTHON=1 \
+          OCTOMIL_SKIP_INSTALL=1 \
+          octomil-contracts/tools/sdkgen/generate-python.sh
+        working-directory: ${{ github.workspace }}
+
+      - name: Format generated file (ruff)
+        run: ruff format octomil/_generated/types.py
+        working-directory: octomil-python
+
+      - name: Check banner
+        run: python3 scripts/check_openapi_banner.py
+        working-directory: octomil-python
+
+      - name: Fail if types.py is stale
+        run: |
+          git diff --exit-code octomil/_generated/types.py || {
+            echo "ERROR: octomil/_generated/types.py is out of date."
+            echo "Run 'make openapi-generate' in octomil-python and commit the result."
+            exit 1
+          }
+        working-directory: octomil-python
