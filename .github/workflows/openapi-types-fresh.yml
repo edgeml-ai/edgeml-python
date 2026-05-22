@@ -34,7 +34,7 @@ jobs:
         with:
           repository: octomil/octomil-contracts
           path: octomil-contracts
-          token: ${{ secrets.OCTOMIL_CONTRACTS_READ_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
