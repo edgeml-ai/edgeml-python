@@ -34,7 +34,11 @@ jobs:
         with:
           repository: octomil/octomil-contracts
           path: octomil-contracts
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Cross-repo checkout of a private repo — github.token cannot
+          # read it. CROSS_REPO_READ_TOKEN must be a PAT with
+          # `contents: read` on octomil/octomil-contracts. Mirrors
+          # #612 so this branch is correct regardless of merge order.
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
