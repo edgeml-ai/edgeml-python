@@ -80,8 +80,10 @@ ALL_CODES = [
 
 
 class TestOctomilErrorCodeEnum:
-    def test_has_exactly_65_members(self) -> None:
-        assert len(OctomilErrorCode) == 65
+    def test_has_exactly_101_members(self) -> None:
+        # Tripwire for contract drift. Bump alongside _generated/error_code.py
+        # when octomil-contracts adds/removes canonical error codes.
+        assert len(OctomilErrorCode) == 101
 
     @pytest.mark.parametrize("value", ALL_CODES)
     def test_all_canonical_codes_exist(self, value: str) -> None:
@@ -114,6 +116,10 @@ RETRYABLE_CODES = {
     OctomilErrorCode.WEIGHT_UPLOAD_FAILED,
     # New code added in v1.25.0 catalog bump; backoff_safe => retryable
     OctomilErrorCode.UPSTREAM_PROVIDER_ERROR,
+    # New codes in the 1.28.0 catalog bump; backoff_safe / conditional => retryable
+    OctomilErrorCode.AGENT_SYSTEM_UNAVAILABLE,
+    OctomilErrorCode.UPSTREAM_PROVIDER_UNAVAILABLE,
+    OctomilErrorCode.CHECKOUT_NOT_COMPLETE,
 }
 
 NON_RETRYABLE_CODES = set(OctomilErrorCode) - RETRYABLE_CODES
