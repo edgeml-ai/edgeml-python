@@ -21,6 +21,20 @@ class ErrorCode(str, Enum):
     """Access token has expired and must be refreshed or reissued"""
     DEVICE_REVOKED = "device_revoked"
     """Device registration has been revoked by an administrator"""
+    PASSKEY_CHALLENGE_EXPIRED = "passkey_challenge_expired"
+    """400 — WebAuthn challenge has expired or does not exist; start the options step again"""
+    PASSKEY_CREDENTIAL_NOT_FOUND = "passkey_credential_not_found"
+    """404 — passkey credential is not registered for this user or does not exist"""
+    INVALID_TOKEN = "invalid_token"
+    """400 — token (reset, verification, transfer) is invalid, malformed, or expired"""
+    EMAIL_ALREADY_VERIFIED = "email_already_verified"
+    """409 — the user's email is already verified; the requested operation requires an unverified email"""
+    EMAIL_ALREADY_IN_USE = "email_already_in_use"
+    """409 — the requested email address is already associated with another account"""
+    LAST_AUTH_METHOD = "last_auth_method"
+    """400 — cannot remove the user's only authentication method; add another method first"""
+    OAUTH_PROVIDER_NOT_LINKED = "oauth_provider_not_linked"
+    """404 — the specified OAuth provider is not linked to this account"""
     NETWORK_UNAVAILABLE = "network_unavailable"
     """No connectivity"""
     REQUEST_TIMEOUT = "request_timeout"
@@ -111,6 +125,8 @@ class ErrorCode(str, Enum):
     """No model assignment exists for this device/experiment"""
     INCIDENT_NOT_FOUND = "incident_not_found"
     """Incident does not exist or has been deleted"""
+    ALERT_RULE_NOT_FOUND = "alert_rule_not_found"
+    """Alert rule does not exist or has been deleted"""
     DEPLOYMENT_NOT_FOUND = "deployment_not_found"
     """Deployment does not exist or has been deleted"""
     EXPERIMENT_NOT_FOUND = "experiment_not_found"
@@ -129,10 +145,69 @@ class ErrorCode(str, Enum):
     """404 — operations action does not exist for this deployment"""
     ACTION_STATE_INVALID = "action_state_invalid"
     """409 — the action is not in `proposed` status and cannot be executed or dismissed"""
+    CREDENTIAL_NOT_FOUND = "credential_not_found"
+    """404 — BYOK cloud credential with the given credential_id does not exist in this org"""
+    CONNECTION_NOT_FOUND = "connection_not_found"
+    """404 — cloud provider connection with the given connection_id does not exist in this org"""
+    LOCAL_RUNTIME_NOT_FOUND = "local_runtime_not_found"
+    """404 — local runtime target with the given runtime_id does not exist in this org"""
+    CHECKOUT_NOT_COMPLETE = "checkout_not_complete"
+    """409 — Stripe Checkout session has not yet completed (no subscription attached)"""
+    UPSTREAM_PROVIDER_UNAVAILABLE = "upstream_provider_unavailable"
+    """502 — upstream cloud provider returned an unexpected error or could not be reached during connection test"""
+    AGENT_SYSTEM_UNAVAILABLE = "agent_system_unavailable"
+    """503 — the agent system (registry or model client) has not initialized yet or failed to start. Caller should retry after a short delay.
+"""
+    THREAD_NOT_FOUND = "thread_not_found"
+    """404 — agent thread does not exist or belongs to a different org"""
+    RUN_NOT_FOUND = "run_not_found"
+    """404 — agent run does not exist or belongs to a different org"""
+    RUN_STATE_INVALID = "run_state_invalid"
+    """409 — the requested operation (cancel, respond) is not valid from the run's current status
+"""
+    APPROVAL_NOT_FOUND = "approval_not_found"
+    """404 — approval request does not exist or the run belongs to a different org"""
+    APPROVAL_ALREADY_RESOLVED = "approval_already_resolved"
+    """409 — approval request has already been resolved (approved or rejected)"""
+    JOB_NOT_FOUND = "job_not_found"
+    """404 — job does not exist"""
+    JOB_STATE_INVALID = "job_state_invalid"
+    """400 — the requested operation (cancel, retry) is not valid from the job's current status
+"""
     CANCELLED = "cancelled"
     """User or caller cancelled the operation"""
     APP_BACKGROUNDED = "app_backgrounded"
     """App moved to background, operation stopped"""
+    RESOURCE_NOT_FOUND = "resource_not_found"
+    """Generic 404 — the requested resource was not found or the caller lacks access. Prefer domain-specific not-found codes (model_not_found, deployment_not_found, etc.) where applicable."""
+    CATALOG_FAMILY_NOT_FOUND = "catalog_family_not_found"
+    """404 — catalog model family does not exist or belongs to a different org"""
+    CATALOG_VARIANT_NOT_FOUND = "catalog_variant_not_found"
+    """404 — catalog model variant does not exist"""
+    CATALOG_VERSION_NOT_FOUND = "catalog_version_not_found"
+    """404 — catalog model version does not exist"""
+    CATALOG_PACKAGE_NOT_FOUND = "catalog_package_not_found"
+    """404 — catalog model package does not exist"""
+    CATALOG_RESOURCE_NOT_FOUND = "catalog_resource_not_found"
+    """404 — catalog resource file (weights, config) does not exist"""
+    CATALOG_SLUG_CONFLICT = "catalog_slug_conflict"
+    """409 — a family or variant with this slug already exists in the org"""
+    CATALOG_LIFECYCLE_INVALID = "catalog_lifecycle_invalid"
+    """409 — the requested lifecycle transition is not allowed from the current state"""
+    BILLING_EXPORT_NOT_FOUND = "billing_export_not_found"
+    """404 — the requested billing/Zoho export record does not exist"""
+    CLOUD_CATALOG_SOURCE_NOT_FOUND = "cloud_catalog_source_not_found"
+    """404 — the cloud catalog source does not exist"""
+    CLOUD_CATALOG_MAPPING_NOT_FOUND = "cloud_catalog_mapping_not_found"
+    """404 — the cloud catalog model mapping does not exist"""
+    CLOUD_CATALOG_RUN_NOT_FOUND = "cloud_catalog_run_not_found"
+    """404 — the cloud catalog sync run does not exist"""
+    CONFLICT = "conflict"
+    """409 — the request conflicts with current state (e.g. session not in expected status)."""
+    GONE = "gone"
+    """410 — the resource existed but has expired or been permanently removed."""
+    PAYLOAD_TOO_LARGE = "payload_too_large"
+    """413 — the request payload exceeds the server's hard ceiling."""
     UNKNOWN = "unknown"
     """Catch-all for unrecognized errors. SDKs MUST map unrecognized codes here."""
 
@@ -176,10 +251,10 @@ class SuggestedAction(str, Enum):
     REAUTHENTICATE = "reauthenticate"
     CHECK_PERMISSIONS = "check_permissions"
     REGISTER_DEVICE = "register_device"
+    FIX_REQUEST = "fix_request"
     RETRY_OR_FALLBACK = "retry_or_fallback"
     RETRY = "retry"
     RETRY_AFTER = "retry_after"
-    FIX_REQUEST = "fix_request"
     REDUCE_INPUT_OR_FALLBACK = "reduce_input_or_fallback"
     CHECK_MODEL_ID = "check_model_id"
     USE_ALTERNATE_MODEL = "use_alternate_model"
@@ -229,6 +304,27 @@ ERROR_CLASSIFICATION: dict[ErrorCode, ErrorClassification] = {
     ),
     ErrorCode.DEVICE_REVOKED: ErrorClassification(
         ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.REGISTER_DEVICE
+    ),
+    ErrorCode.PASSKEY_CHALLENGE_EXPIRED: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.REAUTHENTICATE
+    ),
+    ErrorCode.PASSKEY_CREDENTIAL_NOT_FOUND: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.INVALID_TOKEN: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.EMAIL_ALREADY_VERIFIED: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.EMAIL_ALREADY_IN_USE: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.LAST_AUTH_METHOD: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.OAUTH_PROVIDER_NOT_LINKED: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
     ),
     ErrorCode.NETWORK_UNAVAILABLE: ErrorClassification(
         ErrorCategory.NETWORK, RetryClass.BACKOFF_SAFE, True, SuggestedAction.RETRY_OR_FALLBACK
@@ -365,6 +461,9 @@ ERROR_CLASSIFICATION: dict[ErrorCode, ErrorClassification] = {
     ErrorCode.INCIDENT_NOT_FOUND: ErrorClassification(
         ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.NONE
     ),
+    ErrorCode.ALERT_RULE_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
     ErrorCode.DEPLOYMENT_NOT_FOUND: ErrorClassification(
         ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
     ),
@@ -392,9 +491,89 @@ ERROR_CLASSIFICATION: dict[ErrorCode, ErrorClassification] = {
     ErrorCode.ACTION_STATE_INVALID: ErrorClassification(
         ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
     ),
+    ErrorCode.CREDENTIAL_NOT_FOUND: ErrorClassification(
+        ErrorCategory.AUTH, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CONNECTION_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.LOCAL_RUNTIME_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CHECKOUT_NOT_COMPLETE: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.CONDITIONAL, False, SuggestedAction.RETRY
+    ),
+    ErrorCode.UPSTREAM_PROVIDER_UNAVAILABLE: ErrorClassification(
+        ErrorCategory.NETWORK, RetryClass.BACKOFF_SAFE, False, SuggestedAction.RETRY
+    ),
+    ErrorCode.AGENT_SYSTEM_UNAVAILABLE: ErrorClassification(
+        ErrorCategory.NETWORK, RetryClass.BACKOFF_SAFE, False, SuggestedAction.RETRY
+    ),
+    ErrorCode.THREAD_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.RUN_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.RUN_STATE_INVALID: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.APPROVAL_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.APPROVAL_ALREADY_RESOLVED: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.JOB_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.JOB_STATE_INVALID: ErrorClassification(
+        ErrorCategory.CONTROL, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
     ErrorCode.CANCELLED: ErrorClassification(ErrorCategory.LIFECYCLE, RetryClass.NEVER, False, SuggestedAction.NONE),
     ErrorCode.APP_BACKGROUNDED: ErrorClassification(
         ErrorCategory.LIFECYCLE, RetryClass.CONDITIONAL, False, SuggestedAction.RESUME_ON_FOREGROUND
+    ),
+    ErrorCode.RESOURCE_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CATALOG_FAMILY_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CATALOG_VARIANT_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CATALOG_VERSION_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CATALOG_PACKAGE_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CATALOG_RESOURCE_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CATALOG_SLUG_CONFLICT: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CATALOG_LIFECYCLE_INVALID: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.BILLING_EXPORT_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CLOUD_CATALOG_SOURCE_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CLOUD_CATALOG_MAPPING_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CLOUD_CATALOG_RUN_NOT_FOUND: ErrorClassification(
+        ErrorCategory.CATALOG, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
+    ),
+    ErrorCode.CONFLICT: ErrorClassification(ErrorCategory.INPUT, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST),
+    ErrorCode.GONE: ErrorClassification(ErrorCategory.INPUT, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST),
+    ErrorCode.PAYLOAD_TOO_LARGE: ErrorClassification(
+        ErrorCategory.INPUT, RetryClass.NEVER, False, SuggestedAction.FIX_REQUEST
     ),
     ErrorCode.UNKNOWN: ErrorClassification(ErrorCategory.UNKNOWN, RetryClass.NEVER, False, SuggestedAction.REPORT_BUG),
 }
