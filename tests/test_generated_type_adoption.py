@@ -131,3 +131,144 @@ class TestRuntimeRouteGeneratedEnums:
         assert FallbackTriggerStage.GATE.value == "gate"
         assert FallbackTriggerStage.INFERENCE.value == "inference"
         assert FallbackTriggerStage.TIMEOUT.value == "timeout"
+
+
+class TestTransportTypeReExports:
+    """Verify that generated wire-format types are importable from octomil.types.
+
+    PR #612 — all types imported here must come from octomil._generated.types
+    and be re-exported via octomil.types without hand-editing.
+    """
+
+    def test_desired_state_importable(self) -> None:
+        from octomil.types import DesiredState
+
+        assert DesiredState.__name__ == "DesiredState"
+        # Pydantic v2 BaseModel
+        assert hasattr(DesiredState, "model_fields")
+        assert "schemaVersion" in DesiredState.model_fields
+        assert "deviceId" in DesiredState.model_fields
+        assert "generatedAt" in DesiredState.model_fields
+
+    def test_observed_state_importable(self) -> None:
+        from octomil.types import ObservedState
+
+        assert ObservedState.__name__ == "ObservedState"
+        assert hasattr(ObservedState, "model_fields")
+        assert "schemaVersion" in ObservedState.model_fields
+        assert "deviceId" in ObservedState.model_fields
+        assert "reportedAt" in ObservedState.model_fields
+
+    def test_device_sync_request_importable(self) -> None:
+        from octomil.types import DeviceSyncRequest
+
+        assert DeviceSyncRequest.__name__ == "DeviceSyncRequest"
+        assert "schemaVersion" in DeviceSyncRequest.model_fields
+        assert "deviceId" in DeviceSyncRequest.model_fields
+        assert "requestedAt" in DeviceSyncRequest.model_fields
+
+    def test_device_sync_response_importable(self) -> None:
+        from octomil.types import DeviceSyncResponse
+
+        assert DeviceSyncResponse.__name__ == "DeviceSyncResponse"
+        assert "stateChanged" in DeviceSyncResponse.model_fields
+        assert "desiredState" in DeviceSyncResponse.model_fields
+
+    def test_telemetry_batch_importable(self) -> None:
+        from octomil.types import TelemetryBatch
+
+        assert TelemetryBatch.__name__ == "TelemetryBatch"
+        assert "batchId" in TelemetryBatch.model_fields
+        assert "deviceId" in TelemetryBatch.model_fields
+        assert "events" in TelemetryBatch.model_fields
+
+    def test_telemetry_event_importable(self) -> None:
+        from octomil.types import TelemetryEvent
+
+        # Re-exported as TelemetryEvent (alias for the generated Event class)
+        assert hasattr(TelemetryEvent, "model_fields")
+        assert "eventId" in TelemetryEvent.model_fields
+        assert "name" in TelemetryEvent.model_fields
+        assert "timestamp" in TelemetryEvent.model_fields
+        assert "telemetryClass" in TelemetryEvent.model_fields
+
+    def test_chat_turn_request_importable(self) -> None:
+        from octomil.types import ChatTurnRequest
+
+        assert ChatTurnRequest.__name__ == "ChatTurnRequest"
+        assert "threadId" in ChatTurnRequest.model_fields
+        assert "input" in ChatTurnRequest.model_fields
+
+    def test_chat_turn_result_importable(self) -> None:
+        from octomil.types import ChatTurnResult
+
+        assert ChatTurnResult.__name__ == "ChatTurnResult"
+        assert "userMessage" in ChatTurnResult.model_fields
+        assert "assistantMessage" in ChatTurnResult.model_fields
+
+    def test_audio_speech_request_importable(self) -> None:
+        from octomil.types import AudioSpeechRequest
+
+        assert AudioSpeechRequest.__name__ == "AudioSpeechRequest"
+        assert hasattr(AudioSpeechRequest, "model_fields")
+
+    def test_audio_speech_result_importable(self) -> None:
+        from octomil.types import AudioSpeechResult
+
+        assert AudioSpeechResult.__name__ == "AudioSpeechResult"
+        assert hasattr(AudioSpeechResult, "model_fields")
+
+    def test_all_transport_types_in_dunder_all(self) -> None:
+        """Verify all transport types appear in octomil.types.__all__."""
+        import octomil.types as types_module
+
+        required = {
+            "DesiredState",
+            "ObservedState",
+            "DeviceSyncRequest",
+            "DeviceSyncResponse",
+            "TelemetryBatch",
+            "TelemetryEvent",
+            "ChatTurnRequest",
+            "ChatTurnResult",
+            "AudioSpeechRequest",
+            "AudioSpeechResult",
+        }
+        missing = required - set(types_module.__all__)
+        assert not missing, f"Missing from __all__: {missing}"
+
+    def test_generated_types_come_from_generated_module(self) -> None:
+        """Transport types must be the same objects as in _generated.types (not copies)."""
+        from octomil._generated.types import AudioSpeechRequest as _GenASReq
+        from octomil._generated.types import AudioSpeechResult as _GenASRes
+        from octomil._generated.types import ChatTurnRequest as _GenCTReq
+        from octomil._generated.types import ChatTurnResult as _GenCTRes
+        from octomil._generated.types import DesiredState as _GenDS
+        from octomil._generated.types import DeviceSyncRequest as _GenDSReq
+        from octomil._generated.types import DeviceSyncResponse as _GenDSRes
+        from octomil._generated.types import Event as _GenEvent
+        from octomil._generated.types import ObservedState as _GenOS
+        from octomil._generated.types import TelemetryBatch as _GenTB
+        from octomil.types import (
+            AudioSpeechRequest,
+            AudioSpeechResult,
+            ChatTurnRequest,
+            ChatTurnResult,
+            DesiredState,
+            DeviceSyncRequest,
+            DeviceSyncResponse,
+            ObservedState,
+            TelemetryBatch,
+            TelemetryEvent,
+        )
+
+        assert DesiredState is _GenDS
+        assert ObservedState is _GenOS
+        assert DeviceSyncRequest is _GenDSReq
+        assert DeviceSyncResponse is _GenDSRes
+        assert TelemetryBatch is _GenTB
+        assert TelemetryEvent is _GenEvent
+        assert ChatTurnRequest is _GenCTReq
+        assert ChatTurnResult is _GenCTRes
+        assert AudioSpeechRequest is _GenASReq
+        assert AudioSpeechResult is _GenASRes

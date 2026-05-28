@@ -34,7 +34,11 @@ jobs:
         with:
           repository: octomil/octomil-contracts
           path: octomil-contracts
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Cross-repo checkout of a private repo — github.token cannot
+          # read it. CROSS_REPO_READ_TOKEN must be a PAT with
+          # `contents: read` on octomil/octomil-contracts. Mirrors
+          # #612 so this branch is correct regardless of merge order.
+          token: ${{ secrets.CROSS_REPO_READ_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,3 +75,31 @@ jobs:
             exit 1
           }
         working-directory: octomil-python
+
+      - name: Fetch latest server openapi snapshot
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_READ_TOKEN || github.token }}
+        run: |
+          SHA=$(gh run list --repo octomil/octomil-server --workflow ci.yml \
+                --branch main --status success --limit 1 --json headSha -q '.[0].headSha')
+          mkdir -p "$GITHUB_WORKSPACE/.snapshot"
+          if gh run download --repo octomil/octomil-server --name "openapi-snapshot-${SHA}" --dir "$GITHUB_WORKSPACE/.snapshot" 2>/dev/null; then
+            echo "Fetched snapshot for SHA $SHA"
+            ls -la "$GITHUB_WORKSPACE/.snapshot/"
+          else
+            echo "::warning::No openapi-snapshot artifact for $SHA — skipping strict check"
+            echo "SKIP_STRICT=1" >> $GITHUB_ENV
+          fi
+
+      - name: Strict spec->server gate (this SDK's contracts SHA has a real server route)
+        if: env.SKIP_STRICT != '1'
+        run: |
+          # Verify every contract method this SDK was generated against
+          # has a real server route. Without this, the SDK could ship
+          # clients for spec-only endpoints that 404 at runtime.
+          cd "$GITHUB_WORKSPACE/octomil-contracts"
+          python3 scripts/spec_coverage.py --strict --openapi-file "$GITHUB_WORKSPACE/.snapshot/openapi-snapshot.json" || {
+            echo "::error::SDK was generated against a contracts SHA with documented-but-not-in-server methods."
+            echo "Wait for octomil-server to ship matching endpoints, OR mark stray methods transport: local in contracts."
+            exit 1
+          }
