@@ -39,7 +39,7 @@ all = [
 torch = ["torch>=2.8.0"]
 dev = [
     "pytest>=8.4.2",
-    "pytest-cov>=4.0.0",
+    "pytest-cov>=7.1.0",
     # See sibling pyproject.toml for rationale. Keeps the SDK package
     # consistent with the umbrella repo's test deps so a hung test
     # surfaces as a 60s failure, not a 6h Actions ceiling kill.
