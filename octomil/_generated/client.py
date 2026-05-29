@@ -10,11 +10,29 @@ from typing import Any
 
 import httpx
 
+from .types import (
+    AlertRuleResponse,
+    ArtifactManifest,
+    AudioSpeechResult,
+    ChatThread,
+    ChatTurnResult,
+    CheckoutResponse,
+    DesiredState,
+    DeviceSyncResponse,
+    IntegrationDetailResponse,
+    IntegrationTestResponse,
+    PortalResponse,
+    Response,
+    TrainingPlan,
+    UsageLimitsResponse,
+)
+
 
 class OctomilApiClient:
     """Typed control-plane API client (generated). Thin httpx wrapper; one
-    method per HTTP client-surface operation. Request params are typed; the
-    parsed JSON response is returned (response-model typing is a later layer)."""
+    method per HTTP client-surface operation. Request params are typed;
+    responses are parsed into the generated pydantic model where the contract
+    declares one (else returned as parsed JSON)."""
 
     def __init__(
         self,
@@ -49,41 +67,41 @@ class OctomilApiClient:
         """artifacts.download_urls — POST /api/v1/artifacts/{artifact_id}/download-urls"""
         return self._request("POST", f"/api/v1/artifacts/{artifact_id}/download-urls", params=params, json=json)
 
-    def artifacts_manifest(self, *, artifact_id: str, params: dict[str, Any] | None = None) -> Any:
+    def artifacts_manifest(self, *, artifact_id: str, params: dict[str, Any] | None = None) -> ArtifactManifest:
         """artifacts.manifest — GET /api/v1/artifacts/{artifact_id}/manifest"""
-        return self._request("GET", f"/api/v1/artifacts/{artifact_id}/manifest", params=params)
+        return ArtifactManifest.model_validate(self._request("GET", f"/api/v1/artifacts/{artifact_id}/manifest", params=params))
 
-    def audio_speech_create(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def audio_speech_create(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> AudioSpeechResult:
         """audio.speech.create — POST /v1/audio/speech"""
-        return self._request("POST", "/v1/audio/speech", params=params, json=json)
+        return AudioSpeechResult.model_validate(self._request("POST", "/v1/audio/speech", params=params, json=json))
 
-    def chat_threads_create(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def chat_threads_create(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> ChatThread:
         """chat.threads.create — POST /api/v1/chat/threads"""
-        return self._request("POST", "/api/v1/chat/threads", params=params, json=json)
+        return ChatThread.model_validate(self._request("POST", "/api/v1/chat/threads", params=params, json=json))
 
-    def chat_threads_get(self, *, thread_id: str, params: dict[str, Any] | None = None) -> Any:
+    def chat_threads_get(self, *, thread_id: str, params: dict[str, Any] | None = None) -> ChatThread:
         """chat.threads.get — GET /api/v1/chat/threads/{thread_id}"""
-        return self._request("GET", f"/api/v1/chat/threads/{thread_id}", params=params)
+        return ChatThread.model_validate(self._request("GET", f"/api/v1/chat/threads/{thread_id}", params=params))
 
     def chat_threads_list(self, *, params: dict[str, Any] | None = None) -> Any:
         """chat.threads.list — GET /api/v1/chat/threads"""
         return self._request("GET", "/api/v1/chat/threads", params=params)
 
-    def chat_turn(self, *, thread_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def chat_turn(self, *, thread_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> ChatTurnResult:
         """chat.turn — POST /api/v1/chat/threads/{thread_id}/turns"""
-        return self._request("POST", f"/api/v1/chat/threads/{thread_id}/turns", params=params, json=json)
+        return ChatTurnResult.model_validate(self._request("POST", f"/api/v1/chat/threads/{thread_id}/turns", params=params, json=json))
 
-    def devices_desired_state(self, *, device_id: str, params: dict[str, Any] | None = None) -> Any:
+    def devices_desired_state(self, *, device_id: str, params: dict[str, Any] | None = None) -> DesiredState:
         """devices.desired_state — GET /api/v1/devices/{device_id}/desired-state"""
-        return self._request("GET", f"/api/v1/devices/{device_id}/desired-state", params=params)
+        return DesiredState.model_validate(self._request("GET", f"/api/v1/devices/{device_id}/desired-state", params=params))
 
     def devices_observed_state(self, *, device_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
         """devices.observed_state — POST /api/v1/devices/{device_id}/observed-state"""
         return self._request("POST", f"/api/v1/devices/{device_id}/observed-state", params=params, json=json)
 
-    def devices_sync(self, *, device_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def devices_sync(self, *, device_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> DeviceSyncResponse:
         """devices.sync — POST /api/v1/devices/{device_id}/sync"""
-        return self._request("POST", f"/api/v1/devices/{device_id}/sync", params=params, json=json)
+        return DeviceSyncResponse.model_validate(self._request("POST", f"/api/v1/devices/{device_id}/sync", params=params, json=json))
 
     def federation_heartbeat(self, *, round_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
         """federation.heartbeat — POST /api/v1/federation/rounds/{round_id}/heartbeat"""
@@ -97,9 +115,9 @@ class OctomilApiClient:
         """federation.offers — GET /api/v1/federation/rounds/offers"""
         return self._request("GET", "/api/v1/federation/rounds/offers", params=params)
 
-    def federation_plan(self, *, plan_id: str, params: dict[str, Any] | None = None) -> Any:
+    def federation_plan(self, *, plan_id: str, params: dict[str, Any] | None = None) -> TrainingPlan:
         """federation.plan — GET /api/v1/federation/plans/{plan_id}"""
-        return self._request("GET", f"/api/v1/federation/plans/{plan_id}", params=params)
+        return TrainingPlan.model_validate(self._request("GET", f"/api/v1/federation/plans/{plan_id}", params=params))
 
     def federation_upload_complete(self, *, round_id: str, upload_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
         """federation.upload_complete — POST /api/v1/federation/rounds/{round_id}/updates/{upload_id}/complete"""
@@ -113,29 +131,29 @@ class OctomilApiClient:
         """monitoring.alerts.delete — DELETE /api/v1/monitoring/alerts/{rule_id}"""
         return self._request("DELETE", f"/api/v1/monitoring/alerts/{rule_id}", params=params)
 
-    def monitoring_alerts_get(self, *, rule_id: str, params: dict[str, Any] | None = None) -> Any:
+    def monitoring_alerts_get(self, *, rule_id: str, params: dict[str, Any] | None = None) -> AlertRuleResponse:
         """monitoring.alerts.get — GET /api/v1/monitoring/alerts/{rule_id}"""
-        return self._request("GET", f"/api/v1/monitoring/alerts/{rule_id}", params=params)
+        return AlertRuleResponse.model_validate(self._request("GET", f"/api/v1/monitoring/alerts/{rule_id}", params=params))
 
-    def monitoring_alerts_update(self, *, rule_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def monitoring_alerts_update(self, *, rule_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> AlertRuleResponse:
         """monitoring.alerts.update — PATCH /api/v1/monitoring/alerts/{rule_id}"""
-        return self._request("PATCH", f"/api/v1/monitoring/alerts/{rule_id}", params=params, json=json)
+        return AlertRuleResponse.model_validate(self._request("PATCH", f"/api/v1/monitoring/alerts/{rule_id}", params=params, json=json))
 
-    def responses_create(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def responses_create(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Response:
         """responses.create — POST /v1/responses"""
-        return self._request("POST", "/v1/responses", params=params, json=json)
+        return Response.model_validate(self._request("POST", "/v1/responses", params=params, json=json))
 
     def responses_stream(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
         """responses.stream — POST /v1/responses"""
         return self._request("POST", "/v1/responses", params=params, json=json)
 
-    def settings_billing_create_checkout_session(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def settings_billing_create_checkout_session(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> CheckoutResponse:
         """settings.billing.create_checkout_session — POST /api/v1/settings/billing/checkout"""
-        return self._request("POST", "/api/v1/settings/billing/checkout", params=params, json=json)
+        return CheckoutResponse.model_validate(self._request("POST", "/api/v1/settings/billing/checkout", params=params, json=json))
 
-    def settings_billing_create_portal_session(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def settings_billing_create_portal_session(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> PortalResponse:
         """settings.billing.create_portal_session — POST /api/v1/settings/billing/portal"""
-        return self._request("POST", "/api/v1/settings/billing/portal", params=params, json=json)
+        return PortalResponse.model_validate(self._request("POST", "/api/v1/settings/billing/portal", params=params, json=json))
 
     def settings_billing_update(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
         """settings.billing.update — PATCH /api/v1/settings/billing"""
@@ -145,25 +163,25 @@ class OctomilApiClient:
         """settings.integrations.delete — DELETE /api/v1/settings/integrations/{integration_id}"""
         return self._request("DELETE", f"/api/v1/settings/integrations/{integration_id}", params=params)
 
-    def settings_integrations_get(self, *, integration_id: str, params: dict[str, Any] | None = None) -> Any:
+    def settings_integrations_get(self, *, integration_id: str, params: dict[str, Any] | None = None) -> IntegrationDetailResponse:
         """settings.integrations.get — GET /api/v1/settings/integrations/{integration_id}"""
-        return self._request("GET", f"/api/v1/settings/integrations/{integration_id}", params=params)
+        return IntegrationDetailResponse.model_validate(self._request("GET", f"/api/v1/settings/integrations/{integration_id}", params=params))
 
-    def settings_integrations_update(self, *, integration_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def settings_integrations_update(self, *, integration_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> IntegrationDetailResponse:
         """settings.integrations.update — PATCH /api/v1/settings/integrations/{integration_id}"""
-        return self._request("PATCH", f"/api/v1/settings/integrations/{integration_id}", params=params, json=json)
+        return IntegrationDetailResponse.model_validate(self._request("PATCH", f"/api/v1/settings/integrations/{integration_id}", params=params, json=json))
 
-    def settings_integrations_validate(self, *, integration_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def settings_integrations_validate(self, *, integration_id: str, params: dict[str, Any] | None = None, json: Any | None = None) -> IntegrationTestResponse:
         """settings.integrations.validate — POST /api/v1/settings/integrations/{integration_id}/validate"""
-        return self._request("POST", f"/api/v1/settings/integrations/{integration_id}/validate", params=params, json=json)
+        return IntegrationTestResponse.model_validate(self._request("POST", f"/api/v1/settings/integrations/{integration_id}/validate", params=params, json=json))
 
-    def settings_usage_limits_get(self, *, params: dict[str, Any] | None = None) -> Any:
+    def settings_usage_limits_get(self, *, params: dict[str, Any] | None = None) -> UsageLimitsResponse:
         """settings.usage_limits.get — GET /api/v1/settings/usage-limits"""
-        return self._request("GET", "/api/v1/settings/usage-limits", params=params)
+        return UsageLimitsResponse.model_validate(self._request("GET", "/api/v1/settings/usage-limits", params=params))
 
-    def settings_usage_limits_update(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
+    def settings_usage_limits_update(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> UsageLimitsResponse:
         """settings.usage_limits.update — PUT /api/v1/settings/usage-limits"""
-        return self._request("PUT", "/api/v1/settings/usage-limits", params=params, json=json)
+        return UsageLimitsResponse.model_validate(self._request("PUT", "/api/v1/settings/usage-limits", params=params, json=json))
 
     def telemetry_batch(self, *, params: dict[str, Any] | None = None, json: Any | None = None) -> Any:
         """telemetry.batch — POST /api/v1/telemetry/batches"""
