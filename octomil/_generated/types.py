@@ -2333,7 +2333,7 @@ class RuntimeBenchmarkSubmissionResponseSchema(BaseModel):
         extra="forbid",
     )
     id: str = Field(..., description="Server-generated benchmark submission identifier.")
-    accepted: Literal[True] = Field(..., description="True when the submission passed validation and was stored.")
+    accepted: bool = Field(..., description="True when the submission passed validation and was stored.")
     created_at: datetime = Field(..., description="ISO 8601 timestamp when the server accepted the submission.")
 
 
