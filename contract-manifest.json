@@ -29,8 +29,7 @@
     "telemetry.batch",
     "text.predictions.create",
     "training.create_job",
-    "training.job_complete",
-    "training.job_status"
+    "training.job_complete"
   ],
   "coverage": {
     "errorCodes": "all",
