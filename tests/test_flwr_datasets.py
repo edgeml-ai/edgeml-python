@@ -23,7 +23,13 @@ except ImportError:
 
 @unittest.skipUnless(HAS_FLWR_DATASETS, "flwr-datasets not installed")
 class NonIIDPartitioningTests(unittest.TestCase):
-    """Demonstrate non-IID partitioning strategies relevant to FL."""
+    """Demonstrate non-IID partitioning strategies relevant to FL.
+
+    Dataset ids must be fully namespaced (``namespace/name``). Newer
+    huggingface_hub rejects bare ids like ``cifar10``/``mnist`` in ``hf://``
+    URIs (HfUriError), so use the canonical mirrors ``uoft-cs/cifar10`` and
+    ``ylecun/mnist``.
+    """
 
     def test_dirichlet_partitioning_cifar10(self):
         """Dirichlet(alpha) partitioning creates label-skewed splits.
@@ -32,7 +38,7 @@ class NonIIDPartitioningTests(unittest.TestCase):
         classes, which is the classic non-IID scenario in FL literature.
         """
         fds = FederatedDataset(
-            dataset="cifar10",
+            dataset="uoft-cs/cifar10",
             partitioners={
                 "train": DirichletPartitioner(
                     num_partitions=5,
@@ -56,7 +62,7 @@ class NonIIDPartitioningTests(unittest.TestCase):
         client gets 2 shards of sorted data (so most clients see only 2 digits).
         """
         fds = FederatedDataset(
-            dataset="mnist",
+            dataset="ylecun/mnist",
             partitioners={
                 "train": ShardPartitioner(
                     num_partitions=10,
@@ -77,7 +83,7 @@ class NonIIDPartitioningTests(unittest.TestCase):
         """All partitions together should contain every sample exactly once."""
         num_partitions = 5
         fds = FederatedDataset(
-            dataset="cifar10",
+            dataset="uoft-cs/cifar10",
             partitioners={
                 "train": DirichletPartitioner(
                     num_partitions=num_partitions,
@@ -94,7 +100,7 @@ class NonIIDPartitioningTests(unittest.TestCase):
     def test_partition_to_pandas(self):
         """Partitions can be converted to pandas DataFrames for use with the SDK."""
         fds = FederatedDataset(
-            dataset="mnist",
+            dataset="ylecun/mnist",
             partitioners={
                 "train": DirichletPartitioner(
                     num_partitions=3,

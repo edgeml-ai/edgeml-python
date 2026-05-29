@@ -99,11 +99,13 @@ class OctomilError(Exception):
         code: OctomilErrorCode,
         message: str,
         cause: BaseException | None = None,
+        retry_after_ms: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.error_message = message
         self.cause = cause
+        self._retry_after_ms = retry_after_ms
 
     @property
     def _classification(self) -> ErrorClassification:
@@ -129,11 +131,36 @@ class OctomilError(Exception):
     def retryable(self) -> bool:
         return self.retry_class != RetryClass.NEVER
 
+    @property
+    def retry_after_ms(self) -> int | None:
+        """Milliseconds to wait before retrying.
+
+        Populated from a server-supplied ``Retry-After`` header or
+        response body hint when constructing from HTTP.  ``None``
+        when no hint is available.
+        """
+        return self._retry_after_ms
+
     @classmethod
-    def from_http_status(cls, status: int, message: str | None = None) -> OctomilError:
+    def from_http_status(
+        cls,
+        status: int,
+        message: str | None = None,
+        retry_after_ms: int | None = None,
+    ) -> OctomilError:
+        """Build an ``OctomilError`` from an HTTP status code.
+
+        Args:
+            status: The HTTP response status code.
+            message: Optional human-readable message.  Defaults to
+                ``"HTTP <status>"``.
+            retry_after_ms: Optional server-supplied retry delay in
+                milliseconds, e.g. derived from a ``Retry-After``
+                header on a 429 response.
+        """
         code = _HTTP_STATUS_MAP.get(status, OctomilErrorCode.UNKNOWN)
         msg = message or f"HTTP {status}"
-        return cls(code=code, message=msg)
+        return cls(code=code, message=msg, retry_after_ms=retry_after_ms)
 
     def __repr__(self) -> str:
         return f"OctomilError(code={self.code.value}, retryable={self.retryable}, message={self.error_message!r})"
