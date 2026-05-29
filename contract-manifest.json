@@ -1,0 +1,47 @@
+{
+  "sdk": "octomil-python",
+  "contractVersion": "1.29.0",
+  "methods": [
+    "artifacts.download_urls",
+    "artifacts.manifest",
+    "audio.speech.create",
+    "audio.transcriptions.create",
+    "capabilities.current",
+    "chat.threads.create",
+    "chat.threads.get",
+    "chat.threads.list",
+    "chat.turn",
+    "control.heartbeat",
+    "control.refresh",
+    "devices.desired_state",
+    "devices.observed_state",
+    "devices.sync",
+    "federation.heartbeat",
+    "federation.join",
+    "federation.offers",
+    "federation.plan",
+    "federation.upload_complete",
+    "federation.upload_initiate",
+    "models.load",
+    "models.status",
+    "responses.create",
+    "responses.stream",
+    "telemetry.batch",
+    "text.predictions.create",
+    "training.create_job",
+    "training.job_complete"
+  ],
+  "coverage": {
+    "errorCodes": "all",
+    "spanNames": "all",
+    "spanEvents": "all",
+    "resourceAttributes": "all"
+  },
+  "generatedSources": ["octomil/_generated"],
+  "conformanceTests": [
+    "tests/conformance/test_contract_control.py",
+    "tests/conformance/test_contract_enums.py",
+    "tests/conformance/test_contract_errors.py",
+    "tests/conformance/test_contract_telemetry.py"
+  ]
+}
