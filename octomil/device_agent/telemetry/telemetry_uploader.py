@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 import httpx
 
+from ..._generated.client import OctomilApiClient
 from .telemetry_store import TelemetryStore
 
 logger = logging.getLogger(__name__)
@@ -147,19 +148,18 @@ class TelemetryUploader:
             "events": trimmed,
         }
 
-        url = f"{self._api_base}/api/v1/telemetry/batches"
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Authorization": f"Bearer {self._api_key}"}
 
         try:
+            # Generated control-plane client (octomil-contracts client-gen):
+            # api.telemetry_batch -> POST /api/v1/telemetry/batches. The client
+            # raises httpx.HTTPStatusError on non-2xx (caught below) and returns
+            # the parsed JSON body.
             with httpx.Client(timeout=15.0) as client:
-                resp = client.post(url, json=envelope, headers=headers)
-                resp.raise_for_status()
+                api = OctomilApiClient(self._api_base, client=client, headers=headers)
+                body = api.telemetry_batch(json=envelope)
 
-            body = resp.json()
-            acked_seq = body.get("ackedThroughSeq")
+            acked_seq = (body or {}).get("ackedThroughSeq")
 
             event_ids = [e["event_id"] for e in trimmed]
             self._store.mark_sent(event_ids, batch_id)

@@ -46,7 +46,9 @@ class TestBatchCreation:
 
         captured: list[dict] = []
 
-        def _mock_post(url: str, json: dict, headers: dict) -> MagicMock:
+        def _mock_request(
+            method: str, url: str, *, params=None, json: dict | None = None, headers=None
+        ) -> MagicMock:
             captured.append(json)
             resp = MagicMock()
             resp.status_code = 200
@@ -56,7 +58,7 @@ class TestBatchCreation:
 
         with patch("httpx.Client") as mock_client_cls:
             mock_client = MagicMock()
-            mock_client.post = _mock_post
+            mock_client.request = _mock_request
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
             mock_client_cls.return_value = mock_client
@@ -80,7 +82,7 @@ class TestBatchCreation:
             resp.status_code = 200
             resp.raise_for_status = MagicMock()
             resp.json.return_value = {"ackedThroughSeq": 1}
-            mock_client.post.return_value = resp
+            mock_client.request.return_value = resp
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
             mock_client_cls.return_value = mock_client
@@ -101,7 +103,7 @@ class TestBatchCreation:
 
             uploader._upload_batch()
 
-            mock_client.post.assert_not_called()
+            mock_client.request.assert_not_called()
 
 
 class TestBackoff:
@@ -114,7 +116,7 @@ class TestBackoff:
             resp = MagicMock()
             resp.status_code = 500
             resp.raise_for_status.side_effect = httpx.HTTPStatusError("500", request=MagicMock(), response=resp)
-            mock_client.post.return_value = resp
+            mock_client.request.return_value = resp
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
             mock_client_cls.return_value = mock_client
