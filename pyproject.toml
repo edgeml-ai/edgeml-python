@@ -172,6 +172,9 @@ dev = [
   "fastapi>=0.100.0",
   "uvicorn[standard]>=0.20.0",
   "eth-account>=0.10.0",
+  # Transport-layer type generation from octomil-contracts OpenAPI spec.
+  # Exact pin — must match tools/sdkgen/matrix.yaml in octomil-contracts.
+  "datamodel-code-generator==0.27.0",
 ]
 binary = [
   "pyinstaller>=6.0.0",
@@ -203,6 +206,14 @@ warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
 strict_optional = true
+
+# Suppress mypy on generated files — datamodel-code-generator output may use
+# default-value patterns (e.g. `field: Enum | None = "literal"`) that fail
+# strict assignment checks. The generated file is validated via ruff and
+# the banner check instead.
+[[tool.mypy.overrides]]
+module = "octomil._generated.types"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
