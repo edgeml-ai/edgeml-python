@@ -1,11 +1,13 @@
 """Conformance pytest hook (Lane G PR3).
 
 Provides a session-scoped ``conformance_cache`` fixture that:
-    1. resolves the conformance artifact version from
+    1. honors ``CONTRACT_ROOT`` when CI has already unpacked a published
+       contract bundle,
+    2. otherwise resolves the conformance artifact version from
        ``octomil-python/CONFORMANCE_PIN``,
-    2. populates ``~/.cache/octomil-conformance/<version>/`` by invoking
+    3. populates ``~/.cache/octomil-conformance/<version>/`` by invoking
        ``scripts/fetch_contracts_dev.py`` if the cache is missing,
-    3. returns the cache path.
+    4. returns the cache path.
 
 When the fetch is soft-skipped (no local checkout + no GitHub access),
 the fixture returns ``None`` and tests SHOULD use the cache path's
@@ -50,6 +52,29 @@ def _cache_populated(version: str) -> bool:
     return (_cache_dir(version) / ".extracted-ok").is_file()
 
 
+def _contract_root_from_env() -> Optional[Path]:
+    raw = os.environ.get("CONTRACT_ROOT", "").strip()
+    if not raw:
+        return None
+
+    root = Path(raw)
+    if not root.is_dir():
+        sys.stderr.write(f"[conformance] CONTRACT_ROOT is not a directory: {root}\n")
+        return None
+
+    required = [
+        root / "conformance",
+        root / "scripts" / "generate_conformance.py",
+    ]
+    missing = [path for path in required if not path.exists()]
+    if missing:
+        joined = ", ".join(str(path) for path in missing)
+        sys.stderr.write(f"[conformance] CONTRACT_ROOT has unexpected layout; missing: {joined}\n")
+        return None
+
+    return root
+
+
 @pytest.fixture(scope="session")
 def conformance_cache() -> Optional[Path]:
     """Session-scoped fixture: cache path of the fetched conformance
@@ -59,6 +84,10 @@ def conformance_cache() -> Optional[Path]:
     The fetch is invoked exactly once per test session. ``--force``
     re-fetch is left to the operator running the script directly; the
     fixture is read-mostly."""
+    contract_root = _contract_root_from_env()
+    if contract_root is not None:
+        return contract_root
+
     version = _read_pin()
     if not version:
         return None
