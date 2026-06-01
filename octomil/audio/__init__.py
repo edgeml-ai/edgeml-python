@@ -282,8 +282,8 @@ class FacadeAudio:
         )
     """
 
-    def __init__(self, kernel: Any, *, cloud_allowed: bool = True) -> None:
-        self._speech = FacadeSpeech(kernel, cloud_allowed=cloud_allowed)
+    def __init__(self, kernel: Any, *, cloud_allowed: bool = True, telemetry_reporter: Any | None = None) -> None:
+        self._speech = FacadeSpeech(kernel, cloud_allowed=cloud_allowed, telemetry_reporter=telemetry_reporter)
         self._transcriptions = FacadeTranscriptions(kernel, cloud_allowed=cloud_allowed)
         self._voices = FacadeVoices(kernel)
         self._vad = FacadeVad()

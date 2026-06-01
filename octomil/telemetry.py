@@ -246,6 +246,20 @@ class TelemetryReporter:
     # Public reporting methods
     # ------------------------------------------------------------------
 
+    def track(self, name: str, attributes: dict[str, Any] | None = None) -> None:
+        """Emit a custom telemetry event.
+
+        This is the low-level bridge used by local-first SDK surfaces
+        (audio/embeddings) and by the public ``client.telemetry`` namespace.
+        Callers must pass only metadata; never raw prompts, input text, or
+        audio bytes.
+        """
+        self._enqueue(name=name, attributes=attributes or {})
+
+    def track_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
+        """Alias for :meth:`track` used by telemetry sink adapters."""
+        self.track(name, attributes)
+
     def report_inference_started(
         self,
         model_id: str,
