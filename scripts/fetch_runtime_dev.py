@@ -27,8 +27,8 @@ Resolution:
   * Prints the resolved dylib path.
 
 Supported platforms (v0.1.5+ manifest-driven):
-  - darwin-arm64  (chat, stt)
-  - linux-x86_64  (chat, stt)
+  - darwin-arm64  (chat, stt, tts when present)
+  - linux-x86_64  (chat, stt, tts when present)
   - android-arm64 (chat only — Phase 5a)
 
 Cache layout is flavor-keyed to prevent cross-flavor contamination:
@@ -37,9 +37,9 @@ Cache layout is flavor-keyed to prevent cross-flavor contamination:
     ~/.cache/octomil-runtime/<version>/<flavor>/lib/.extracted-ok
     ~/.cache/octomil-runtime/<version>/<flavor>/include/octomil/runtime.h
 
-Fetching ``--flavor chat`` and ``--flavor stt`` for the same version
-produces independent cache slices. ``--force`` is per-flavor: only the
-requested flavor's slice is cleared; other flavors remain intact.
+Fetching ``--flavor chat``, ``--flavor stt``, and ``--flavor tts`` for the
+same version produces independent cache slices. ``--force`` is per-flavor:
+only the requested flavor's slice is cleared; other flavors remain intact.
 
 Once extracted, the cffi loader picks the dylib up automatically
 via ``octomil.runtime.native.loader._fetched_dylib_candidates()``;
@@ -67,7 +67,7 @@ DEFAULT_VERSION = "v0.1.16"  # v0.1.16: runtime release pin (manifest-driven, MA
 CACHE_ROOT = Path.home() / ".cache" / "octomil-runtime"
 MANIFEST_ASSET_NAME = "MANIFEST.json"
 
-VALID_FLAVORS = ("chat", "stt")
+VALID_FLAVORS = ("chat", "stt", "tts")
 
 
 def _gh_token() -> str | None:
@@ -462,9 +462,10 @@ def main() -> int:
         default="chat",
         help=(
             "runtime flavor to fetch: 'chat' (default) ships llama.cpp-based "
-            "chat + embeddings; 'stt' ships whisper.cpp-based speech-to-text. "
+            "chat + embeddings; 'stt' ships whisper.cpp-based speech-to-text; "
+            "'tts' ships native sherpa-onnx speech synthesis. "
             "Phase 5a: chat is available on all platforms; stt is darwin-arm64 / "
-            "linux-x86_64 only."
+            "linux-x86_64 only; tts is available when the release manifest lists it."
         ),
     )
     p.add_argument(

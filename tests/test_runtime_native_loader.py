@@ -1470,11 +1470,11 @@ def test_open_session_translates_unicode_encode_error():
 
 
 def test_fetched_dylib_candidates_new_flavor_keyed_layout(monkeypatch, tmp_path: Path):
-    """New layout: <version>/<flavor>/lib/ — both chat and stt discovered."""
+    """New layout: <version>/<flavor>/lib/ — all release flavors discovered."""
     import octomil.runtime.native.loader as loader
 
     version = "v0.1.5"
-    for flavor in ("chat", "stt"):
+    for flavor in ("chat", "stt", "tts"):
         lib = tmp_path / version / flavor / "lib"
         lib.mkdir(parents=True)
         (lib / "liboctomil-runtime.dylib").write_bytes(b"\x00")
@@ -1486,6 +1486,7 @@ def test_fetched_dylib_candidates_new_flavor_keyed_layout(monkeypatch, tmp_path:
     # Both flavors must appear.
     assert any("chat" in n for n in names), f"chat not found in {names}"
     assert any("stt" in n for n in names), f"stt not found in {names}"
+    assert any("tts" in n for n in names), f"tts not found in {names}"
 
 
 def test_fetched_dylib_candidates_legacy_layout(monkeypatch, tmp_path: Path):
@@ -1597,7 +1598,7 @@ def test_fetched_dylib_candidates_new_layout_without_sentinel_is_skipped(monkeyp
 
 
 def test_both_flavors_cached_default_resolves_chat(monkeypatch, tmp_path: Path):
-    """Both chat and stt cached for same version → default loader picks chat.
+    """All release flavors cached for same version → default loader picks chat.
 
     This is the core regression: before the fix, reversed() iteration
     caused stt (lexicographically last) to win silently, breaking
@@ -1605,7 +1606,7 @@ def test_both_flavors_cached_default_resolves_chat(monkeypatch, tmp_path: Path):
     import octomil.runtime.native.loader as loader
 
     version = "v0.1.5"
-    for flavor in ("chat", "stt"):
+    for flavor in ("chat", "stt", "tts"):
         lib = tmp_path / version / flavor / "lib"
         lib.mkdir(parents=True)
         (lib / "liboctomil-runtime.dylib").write_bytes(b"\x00")
@@ -1619,7 +1620,7 @@ def test_both_flavors_cached_default_resolves_chat(monkeypatch, tmp_path: Path):
 
     # Candidates list: chat must be first.
     candidates = loader._fetched_dylib_candidates()
-    assert len(candidates) == 2
+    assert len(candidates) == 3
     assert "chat" in str(candidates[0]), f"chat must be first candidate when both flavors present; got {candidates}"
 
     # Resolver must pick chat.
@@ -1654,6 +1655,33 @@ def test_env_flavor_stt_selects_stt(monkeypatch, tmp_path: Path):
     assert "stt" in str(resolved), f"_resolve_dylib must pick stt when OCTOMIL_RUNTIME_FLAVOR=stt; got {resolved}"
 
 
+def test_env_flavor_tts_selects_tts(monkeypatch, tmp_path: Path):
+    """OCTOMIL_RUNTIME_FLAVOR=tts → loader resolves tts even when chat/stt are present."""
+    import octomil.runtime.native.loader as loader
+
+    version = "v0.1.5"
+    for flavor in ("chat", "stt", "tts"):
+        lib = tmp_path / version / flavor / "lib"
+        lib.mkdir(parents=True)
+        (lib / "liboctomil-runtime.dylib").write_bytes(b"\x00")
+        (lib / loader._EXTRACTION_SENTINEL).write_text(f"{version}\n{flavor}\n")
+
+    monkeypatch.setattr(loader, "_FETCH_CACHE_ROOT", tmp_path)
+    monkeypatch.setenv(loader._ENV_FLAVOR, "tts")
+    monkeypatch.delenv("OCTOMIL_RUNTIME_DYLIB", raising=False)
+    monkeypatch.setattr(loader, "_FFI", None)
+    monkeypatch.setattr(loader, "_LIB", None)
+
+    candidates = loader._fetched_dylib_candidates()
+    assert all(
+        "tts" in str(c) for c in candidates
+    ), f"with OCTOMIL_RUNTIME_FLAVOR=tts only tts candidates expected; got {candidates}"
+    assert len(candidates) == 1
+
+    resolved = loader._resolve_dylib()
+    assert "tts" in str(resolved), f"_resolve_dylib must pick tts when OCTOMIL_RUNTIME_FLAVOR=tts; got {resolved}"
+
+
 def test_env_flavor_invalid_raises(monkeypatch, tmp_path: Path):
     """OCTOMIL_RUNTIME_FLAVOR=<invalid> → ImportError with clear message."""
     import octomil.runtime.native.loader as loader
@@ -1673,6 +1701,7 @@ def test_env_flavor_invalid_raises(monkeypatch, tmp_path: Path):
     # Error message must name valid values.
     assert "chat" in str(exc_info.value)
     assert "stt" in str(exc_info.value)
+    assert "tts" in str(exc_info.value)
 
 
 def test_env_flavor_override_applies_to_new_layout_legacy_unaffected(monkeypatch, tmp_path: Path):

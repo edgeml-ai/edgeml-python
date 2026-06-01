@@ -2971,8 +2971,8 @@ class ExecutionKernel:
     def _sherpa_tts_runtime_loadable(model: str) -> bool:
         """Return True iff native ``audio.tts.batch`` is advertised now."""
         try:
-            from octomil.runtime.native.loader import NativeRuntime
             from octomil.runtime.native.tts_batch_backend import NativeTtsBatchBackend, runtime_advertises_tts_batch
+            from octomil.runtime.native.tts_stream_backend import open_runtime_for_tts
         except Exception as exc:
             logger.warning(
                 "Native TTS batch module failed to import (%r). The runtime is unavailable in this Python interpreter.",
@@ -2983,7 +2983,7 @@ class ExecutionKernel:
             return False
         runtime = None
         try:
-            runtime = NativeRuntime.open()
+            runtime = open_runtime_for_tts()
             return runtime_advertises_tts_batch(runtime)
         except Exception as exc:
             logger.warning("native audio.tts.batch availability probe for %r raised %r", model, exc)
@@ -2999,9 +2999,8 @@ class ExecutionKernel:
     def _native_tts_stream_runtime_loadable(model: str) -> bool:
         """Return True iff native ``audio.tts.stream`` is advertised now."""
         try:
-            from octomil.runtime.native.loader import NativeRuntime
             from octomil.runtime.native.tts_batch_backend import NativeTtsBatchBackend
-            from octomil.runtime.native.tts_stream_backend import runtime_advertises_tts_stream
+            from octomil.runtime.native.tts_stream_backend import open_runtime_for_tts, runtime_advertises_tts_stream
         except Exception as exc:
             logger.warning(
                 "Native TTS stream module failed to import (%r). The runtime is unavailable in this Python interpreter.",
@@ -3012,7 +3011,7 @@ class ExecutionKernel:
             return False
         runtime = None
         try:
-            runtime = NativeRuntime.open()
+            runtime = open_runtime_for_tts()
             return runtime_advertises_tts_stream(runtime)
         except Exception as exc:
             logger.warning("native audio.tts.stream availability probe for %r raised %r", model, exc)

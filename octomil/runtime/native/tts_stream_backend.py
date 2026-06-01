@@ -88,6 +88,9 @@ logger = logging.getLogger(__name__)
 _BACKEND_NAME = "native-sherpa-onnx-tts-stream"
 _DEFAULT_DEADLINE_MS = 300_000  # 5 minutes — same shape as native STT.
 _TTS_MODEL_ENV: str = "OCTOMIL_SHERPA_TTS_MODEL"
+_RUNTIME_DYLIB_ENV: str = "OCTOMIL_RUNTIME_DYLIB"
+_RUNTIME_FLAVOR_ENV: str = "OCTOMIL_RUNTIME_FLAVOR"
+_TTS_RUNTIME_FALLBACK_FLAVORS: tuple[str, ...] = ("tts", "stt")
 
 # v0.1.9 — canonical metric name for the progressive first-audio-chunk
 # timing. Emitted by the runtime as OCT_EVENT_METRIC with this name when
@@ -155,6 +158,46 @@ def _runtime_advertises_tts_capability(rt: NativeRuntime, capability: str) -> bo
 
 # Public alias for planner / kernel imports — same pattern as STT.
 runtime_advertises_tts_stream = _runtime_advertises_tts_stream
+
+
+def open_runtime_for_tts() -> NativeRuntime:
+    """Open a TTS-capable dev-cache flavor by default.
+
+    Operator overrides remain authoritative:
+    ``OCTOMIL_RUNTIME_DYLIB`` pins an exact dylib, and
+    ``OCTOMIL_RUNTIME_FLAVOR`` pins an exact cached flavor. When neither
+    is set and the native loader has not already bound a dylib in this
+    process, prefer the dedicated ``tts`` flavor and fall back to ``stt``
+    for older releases where TTS still rode the STT artifact.
+    """
+    if os.environ.get(_RUNTIME_DYLIB_ENV) or os.environ.get(_RUNTIME_FLAVOR_ENV):
+        return NativeRuntime.open()
+
+    # The cffi loader is a process singleton. If some earlier native
+    # capability already loaded a dylib, use that binding rather than
+    # pretending an env-var tweak can swap it underneath live handles.
+    from . import loader as _loader
+
+    if getattr(_loader, "_LIB", None) is not None:
+        return NativeRuntime.open()
+
+    last_error: ImportError | None = None
+    for flavor in _TTS_RUNTIME_FALLBACK_FLAVORS:
+        previous = os.environ.get(_RUNTIME_FLAVOR_ENV)
+        os.environ[_RUNTIME_FLAVOR_ENV] = flavor
+        try:
+            return NativeRuntime.open()
+        except ImportError as exc:
+            last_error = exc
+        finally:
+            if previous is None:
+                os.environ.pop(_RUNTIME_FLAVOR_ENV, None)
+            else:
+                os.environ[_RUNTIME_FLAVOR_ENV] = previous
+
+    if last_error is not None:
+        raise last_error
+    return NativeRuntime.open()
 
 
 def _runtime_status_to_sdk_error(
@@ -271,7 +314,7 @@ class NativeTtsStreamBackend:
             self._prepared_model_dir = str(Path(model_path).parent)
 
         try:
-            self._runtime = NativeRuntime.open()
+            self._runtime = open_runtime_for_tts()
         except NativeRuntimeError as exc:
             raise _runtime_status_to_sdk_error(
                 exc.status,
@@ -891,4 +934,5 @@ __all__ = [
     "TtsFrontendCache",
     "build_frontend_cache_key",
     "runtime_advertises_tts_stream",
+    "open_runtime_for_tts",
 ]

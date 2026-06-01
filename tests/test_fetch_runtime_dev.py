@@ -2,7 +2,7 @@
 
 Covers:
 - ``_platform_key()`` host detection.
-- Manifest-driven asset resolution (happy path, both flavors).
+- Manifest-driven asset resolution (happy path, release flavors).
 - Legacy fallback when MANIFEST.json is absent from the asset dict.
 - Error path: requested flavor not in manifest.
 - Error path: platform not in manifest (non-darwin legacy).
@@ -82,10 +82,12 @@ def _fake_manifest(version: str = "v0.1.5") -> dict:
             "darwin-arm64": {
                 "chat": f"liboctomil-runtime-{version}-chat-darwin-arm64.tar.gz",
                 "stt": f"liboctomil-runtime-{version}-stt-darwin-arm64.tar.gz",
+                "tts": f"liboctomil-runtime-{version}-tts-darwin-arm64.tar.gz",
             },
             "linux-x86_64": {
                 "chat": f"liboctomil-runtime-{version}-chat-linux-x86_64.tar.gz",
                 "stt": f"liboctomil-runtime-{version}-stt-linux-x86_64.tar.gz",
+                "tts": f"liboctomil-runtime-{version}-tts-linux-x86_64.tar.gz",
             },
             "android-arm64": {
                 "chat": f"liboctomil-runtime-{version}-chat-android-arm64.tar.gz",
@@ -124,11 +126,25 @@ def test_manifest_selects_stt_for_darwin() -> None:
     assert name == "liboctomil-runtime-v0.1.5-stt-darwin-arm64.tar.gz"
 
 
+def test_manifest_selects_tts_for_darwin() -> None:
+    m = _fake_manifest()
+    assets = _fake_assets(m)
+    name = frd._resolve_bin_asset_name(m, assets, "darwin-arm64", "tts", "v0.1.5")
+    assert name == "liboctomil-runtime-v0.1.5-tts-darwin-arm64.tar.gz"
+
+
 def test_manifest_selects_chat_for_linux() -> None:
     m = _fake_manifest()
     assets = _fake_assets(m)
     name = frd._resolve_bin_asset_name(m, assets, "linux-x86_64", "chat", "v0.1.5")
     assert name == "liboctomil-runtime-v0.1.5-chat-linux-x86_64.tar.gz"
+
+
+def test_manifest_selects_tts_for_linux() -> None:
+    m = _fake_manifest()
+    assets = _fake_assets(m)
+    name = frd._resolve_bin_asset_name(m, assets, "linux-x86_64", "tts", "v0.1.5")
+    assert name == "liboctomil-runtime-v0.1.5-tts-linux-x86_64.tar.gz"
 
 
 def test_manifest_android_chat_only() -> None:
