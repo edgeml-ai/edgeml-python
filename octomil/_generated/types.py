@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 
@@ -44,12 +44,12 @@ class AlertRuleResponse(BaseModel):
     alert_type: AlertType
     severity: Severity
     metric_name: str
-    threshold_value: float | None = None
-    threshold_duration_minutes: int | None = None
+    threshold_value: Optional[float] = None
+    threshold_duration_minutes: Optional[int] = None
     enabled: bool
-    notify_channels: List[str] | None = None
-    created_at: str | None = None
-    updated_at: str | None = None
+    notify_channels: Optional[List[str]] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class KeyType(Enum):
@@ -72,19 +72,19 @@ class ApiKeyResponse(BaseModel):
     org_id: str
     name: str
     key_type: KeyType
-    prefix: str | None = None
+    prefix: Optional[str] = None
     scopes: Dict[str, bool]
     is_active: bool
-    environment: Environment | None = None
-    app_id: str | None = None
-    allowed_app_ids: List[str] | None = None
-    allowed_origins: List[str] | None = None
-    rate_limit_rpm: int | None = None
-    federation_id: str | None = None
-    model_id: str | None = None
-    last_used_at: datetime | None = None
-    revoked_at: datetime | None = None
-    created_at: datetime | None = None
+    environment: Optional[Environment] = None
+    app_id: Optional[str] = None
+    allowed_app_ids: Optional[List[str]] = None
+    allowed_origins: Optional[List[str]] = None
+    rate_limit_rpm: Optional[int] = None
+    federation_id: Optional[str] = None
+    model_id: Optional[str] = None
+    last_used_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
 
 class Status(Enum):
@@ -168,8 +168,8 @@ class AuthConfigResponse(BaseModel):
     apple_enabled: bool = Field(..., description="Derived from server env vars; read-only from SDK.")
     github_enabled: bool = Field(..., description="Derived from server env vars; read-only from SDK.")
     passkeys_enabled: bool
-    sso_provider: str | None = None
-    sso_domain: str | None = None
+    sso_provider: Optional[str] = None
+    sso_domain: Optional[str] = None
     scim_enabled: bool
 
 
@@ -177,17 +177,17 @@ class Invoice(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str | None = None
-    number: str | None = None
-    status: str | None = None
-    amount_due: int | None = Field(None, description="Minor currency units (cents).")
-    amount_paid: int | None = None
-    currency: str | None = Field(None, description="ISO 4217 currency code.")
-    hosted_invoice_url: str | None = None
-    invoice_pdf: str | None = None
-    created: int | None = Field(None, description="Unix epoch timestamp.")
-    period_start: int | None = None
-    period_end: int | None = None
+    id: Optional[str] = None
+    number: Optional[str] = None
+    status: Optional[str] = None
+    amount_due: Optional[int] = Field(None, description="Minor currency units (cents).")
+    amount_paid: Optional[int] = None
+    currency: Optional[str] = Field(None, description="ISO 4217 currency code.")
+    hosted_invoice_url: Optional[str] = None
+    invoice_pdf: Optional[str] = None
+    created: Optional[int] = Field(None, description="Unix epoch timestamp.")
+    period_start: Optional[int] = None
+    period_end: Optional[int] = None
 
 
 class BillingInvoicesResponse(BaseModel):
@@ -226,9 +226,9 @@ class BillingResponse(BaseModel):
     org_id: str
     plan: Plan
     status: Status2
-    billing_interval: BillingInterval | None = None
-    stripe_customer_id: str | None = None
-    current_period_end: datetime | None = None
+    billing_interval: Optional[BillingInterval] = None
+    stripe_customer_id: Optional[str] = None
+    current_period_end: Optional[datetime] = None
 
 
 class BillingSupportContextResponse(BaseModel):
@@ -238,10 +238,10 @@ class BillingSupportContextResponse(BaseModel):
     org_id: str
     plan: Plan
     status: str
-    billing_interval: str | None = None
-    stripe_customer_id: str | None = None
-    stripe_subscription_id: str | None = None
-    latest_invoice: Dict[str, Any] | None = Field(
+    billing_interval: Optional[str] = None
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    latest_invoice: Optional[Dict[str, Any]] = Field(
         None,
         description="Latest Stripe invoice summary. Null if no customer or no invoices.",
     )
@@ -283,10 +283,10 @@ class CloudPolicyResponse(BaseModel):
     cloud_credential_policy: CloudCredentialPolicy = Field(
         ..., description="Which credential sources are permitted for cloud inference."
     )
-    cloud_allowed_providers: List[str] | None = Field(
+    cloud_allowed_providers: Optional[List[str]] = Field(
         None, description="Allowlist of provider identifiers. Null means all allowed."
     )
-    cloud_fallback_model: str | None = Field(None, description="Default cloud model id used when falling back.")
+    cloud_fallback_model: Optional[str] = Field(None, description="Default cloud model id used when falling back.")
 
 
 class CloudTargetResponse(BaseModel):
@@ -296,12 +296,12 @@ class CloudTargetResponse(BaseModel):
     target_id: str
     provider: str
     connection_type: str
-    connection_id: str | None = None
-    status: str | None = "active"
-    routing_priority: int | None = 0
-    routing_weight: int | None = 1
-    rpm_limit: int | None = Field(0, ge=0)
-    tpm_limit: int | None = Field(0, ge=0)
+    connection_id: Optional[str] = None
+    status: Optional[str] = "active"
+    routing_priority: Optional[int] = 0
+    routing_weight: Optional[int] = 1
+    rpm_limit: Optional[int] = Field(0, ge=0)
+    tpm_limit: Optional[int] = Field(0, ge=0)
 
 
 class ConnectionModelsResponse(BaseModel):
@@ -329,14 +329,14 @@ class ConnectionResponse(BaseModel):
     connection_type: ConnectionType
     status: str
     label: str
-    base_url: str | None = None
-    last_used_at: datetime | None = None
-    last_error: str | None = None
+    base_url: Optional[str] = None
+    last_used_at: Optional[datetime] = None
+    last_error: Optional[str] = None
     error_count: int = Field(..., ge=0)
     created_at: datetime
-    verification_status: str | None = None
-    verification_latency_ms: float | None = None
-    last_verified_at: datetime | None = None
+    verification_status: Optional[str] = None
+    verification_latency_ms: Optional[float] = None
+    last_verified_at: Optional[datetime] = None
 
 
 class CreateApiKeyRequest(BaseModel):
@@ -345,8 +345,8 @@ class CreateApiKeyRequest(BaseModel):
     )
     name: str = Field(..., max_length=255, min_length=1)
     scopes: List[str] = Field(..., min_length=1)
-    expires_in_days: int | None = Field(None, ge=1)
-    app_id: str | None = None
+    expires_in_days: Optional[int] = Field(None, ge=1)
+    app_id: Optional[str] = None
 
 
 class CreateApiKeyResponse(BaseModel):
@@ -358,12 +358,12 @@ class CreateApiKeyResponse(BaseModel):
     name: str
     prefix: str
     scopes: Dict[str, bool]
-    app_id: str | None = None
-    federation_id: str | None = None
-    model_id: str | None = None
-    last_used_at: str | None = None
-    revoked_at: str | None = None
-    created_at: datetime | None = None
+    app_id: Optional[str] = None
+    federation_id: Optional[str] = None
+    model_id: Optional[str] = None
+    last_used_at: Optional[str] = None
+    revoked_at: Optional[str] = None
+    created_at: Optional[datetime] = None
     api_key: str = Field(..., description="Full raw API key. Store immediately — not retrievable again.")
 
 
@@ -378,7 +378,7 @@ class CreateAppKeyRequest(BaseModel):
     )
     name: str = Field(..., max_length=255, min_length=1)
     app_id: str = Field(..., max_length=36, min_length=1)
-    environment: Environment1 | None = "live"
+    environment: Optional[Environment1] = "live"
 
 
 class CreateAppKeyResponse(BaseModel):
@@ -403,12 +403,12 @@ class CreateConnectionRequest(BaseModel):
         description="Provider identifier, e.g. 'openai', 'anthropic', 'azure_openai'.",
     )
     connection_type: ConnectionType = Field(..., description="Only 'byok' is currently accepted by the server.")
-    api_key: str | None = Field(
+    api_key: Optional[str] = Field(
         None,
         description="Raw API key for BYOK connections. Stored encrypted; never returned.",
     )
-    label: str | None = "default"
-    base_url: str | None = None
+    label: Optional[str] = "default"
+    base_url: Optional[str] = None
 
 
 class CreateCredentialRequest(BaseModel):
@@ -420,8 +420,8 @@ class CreateCredentialRequest(BaseModel):
         description="Provider identifier, e.g. 'openai', 'anthropic', 'azure_openai'.",
     )
     api_key: str = Field(..., description="Raw API key. Stored encrypted; never returned.")
-    label: str | None = "default"
-    base_url: str | None = None
+    label: Optional[str] = "default"
+    base_url: Optional[str] = None
 
 
 class IntegrationType(Enum):
@@ -437,7 +437,7 @@ class CreateIntegrationRequest(BaseModel):
     )
     name: str = Field(..., min_length=1)
     integration_type: IntegrationType
-    config: Dict[str, Any] | None = Field(
+    config: Optional[Dict[str, Any]] = Field(
         None,
         description="Provider-specific config. Use PATCH after creation to set individual fields.",
     )
@@ -452,9 +452,9 @@ class CreateLocalRuntimeRequest(BaseModel):
         ...,
         description="Base URL for the local runtime, e.g. 'http://localhost:11434'.",
     )
-    model: str | None = ""
-    protocol: str | None = "openai_compatible"
-    routing_priority: int | None = 0
+    model: Optional[str] = ""
+    protocol: Optional[str] = "openai_compatible"
+    routing_priority: Optional[int] = 0
 
 
 class CreatePublishableKeyRequest(BaseModel):
@@ -462,11 +462,11 @@ class CreatePublishableKeyRequest(BaseModel):
         extra="forbid",
     )
     name: str = Field(..., max_length=255, min_length=1)
-    environment: Environment1 | None = "live"
-    allowed_app_ids: List[str] | None = None
-    allowed_origins: List[str] | None = None
-    scopes: List[str] | None = None
-    rate_limit_rpm: int | None = Field(None, ge=1, le=10000)
+    environment: Optional[Environment1] = "live"
+    allowed_app_ids: Optional[List[str]] = None
+    allowed_origins: Optional[List[str]] = None
+    scopes: Optional[List[str]] = None
+    rate_limit_rpm: Optional[int] = Field(None, ge=1, le=10000)
 
 
 class CreatePublishableKeyResponse(BaseModel):
@@ -479,8 +479,8 @@ class CreatePublishableKeyResponse(BaseModel):
     name: str
     environment: Environment1
     scopes: List[str]
-    allowed_app_ids: List[str] | None = None
-    allowed_origins: List[str] | None = None
+    allowed_app_ids: Optional[List[str]] = None
+    allowed_origins: Optional[List[str]] = None
     rate_limit_rpm: int
 
 
@@ -490,14 +490,14 @@ class CreateSessionResponse(BaseModel):
     )
     session_id: str
     model: str
-    model_ref: str | None = None
-    model_name: str | None = None
-    model_version: str | None = None
+    model_ref: Optional[str] = None
+    model_name: Optional[str] = None
+    model_version: Optional[str] = None
     use_case: str
     binding_key: str
-    device_id: str | None = None
-    deployment_id: str | None = None
-    deployment_key: str | None = None
+    device_id: Optional[str] = None
+    deployment_id: Optional[str] = None
+    deployment_key: Optional[str] = None
     tools: List[Dict[str, Any]]
     instructions: str
 
@@ -513,11 +513,11 @@ class CredentialResponse(BaseModel):
     )
     label: str
     is_active: bool
-    base_url: str | None = None
-    last_used_at: datetime | None = None
-    last_error: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    base_url: Optional[str] = None
+    last_used_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class Code(Enum):
@@ -630,8 +630,8 @@ class Error(BaseModel):
     )
     code: Code
     message: str
-    details: Dict[str, Any] | None = None
-    request_id: str | None = None
+    details: Optional[Dict[str, Any]] = None
+    request_id: Optional[str] = None
 
 
 class ErrorEnvelope(BaseModel):
@@ -654,16 +654,16 @@ class Target(BaseModel):
     target_id: str
     target_type: str
     provider: str
-    cooldown_remaining: float | None = 0.0
-    rpm: int | None = 0
-    tpm: int | None = 0
-    inflight: int | None = 0
-    successes: int | None = 0
-    failures: int | None = 0
-    failure_rate: float | None = 0.0
-    last_verified_at: datetime | None = None
-    verification_latency_ms: float | None = None
-    last_verification_error: str | None = None
+    cooldown_remaining: Optional[float] = 0.0
+    rpm: Optional[int] = 0
+    tpm: Optional[int] = 0
+    inflight: Optional[int] = 0
+    successes: Optional[int] = 0
+    failures: Optional[int] = 0
+    failure_rate: Optional[float] = 0.0
+    last_verified_at: Optional[datetime] = None
+    verification_latency_ms: Optional[float] = None
+    last_verification_error: Optional[str] = None
 
 
 class ExecutionHealthResponse(BaseModel):
@@ -684,17 +684,17 @@ class Status3(Enum):
 
 
 class Variant(BaseModel):
-    id: str | None = None
-    name: str | None = None
-    model_version: str | None = None
-    traffic_allocation: float | None = None
-    is_control: bool | None = None
+    id: Optional[str] = None
+    name: Optional[str] = None
+    model_version: Optional[str] = None
+    traffic_allocation: Optional[float] = None
+    is_control: Optional[bool] = None
 
 
 class TargetGroup(BaseModel):
     id: str
     name: str
-    group_type: str | None = None
+    group_type: Optional[str] = None
 
 
 class Experiment(BaseModel):
@@ -703,7 +703,7 @@ class Experiment(BaseModel):
     )
     id: str = Field(..., description="Experiment UUID.")
     name: str
-    description: str | None = None
+    description: Optional[str] = None
     model_id: str = Field(
         ...,
         description="Internal Model registry UUID (see workspace memory `Model Registries`).",
@@ -718,51 +718,51 @@ class Experiment(BaseModel):
         ge=0.0,
         le=100.0,
     )
-    started_at: datetime | None = None
-    ended_at: datetime | None = None
-    min_sample_size: int | None = None
-    confidence_level: float | None = None
-    primary_metric: str | None = None
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    min_sample_size: Optional[int] = None
+    confidence_level: Optional[float] = None
+    primary_metric: Optional[str] = None
     experiment_type: str = Field(
         ...,
         description='e.g. `"version"` (compare model versions), `"variant"` (compare variants).',
     )
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-    variants: List[Variant] | None = Field(
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    variants: Optional[List[Variant]] = Field(
         None,
         description="Per-variant traffic allocation. Present when include_variants=true (the default).",
     )
-    target_groups: List[TargetGroup] | None = Field(
+    target_groups: Optional[List[TargetGroup]] = Field(
         None,
         description="Device groups the experiment targets. Empty array when none configured.",
     )
 
 
 class ExperimentAnalyticsConfidenceInterval(BaseModel):
-    lower: float | None = None
-    upper: float | None = None
-    confidence_level: float | None = None
-    mean: float | None = None
-    margin_of_error: float | None = None
+    lower: Optional[float] = None
+    upper: Optional[float] = None
+    confidence_level: Optional[float] = None
+    mean: Optional[float] = None
+    margin_of_error: Optional[float] = None
 
 
 class ExperimentAnalyticsSignificanceResult(BaseModel):
     is_significant: bool
     p_value: float
-    t_statistic: float | None = None
-    significance_level: float | None = None
-    confidence_level: float | None = None
-    control_mean: float | None = None
-    treatment_mean: float | None = None
-    relative_difference: float | None = None
-    absolute_difference: float | None = None
-    effect_size: float | None = None
-    effect_magnitude: str | None = None
-    control_n: int | None = None
-    treatment_n: int | None = None
-    degrees_of_freedom: float | None = None
-    is_sufficient_sample: bool | None = None
+    t_statistic: Optional[float] = None
+    significance_level: Optional[float] = None
+    confidence_level: Optional[float] = None
+    control_mean: Optional[float] = None
+    treatment_mean: Optional[float] = None
+    relative_difference: Optional[float] = None
+    absolute_difference: Optional[float] = None
+    effect_size: Optional[float] = None
+    effect_magnitude: Optional[str] = None
+    control_n: Optional[int] = None
+    treatment_n: Optional[int] = None
+    degrees_of_freedom: Optional[float] = None
+    is_sufficient_sample: Optional[bool] = None
 
 
 class ExperimentAnalyticsVariantAnalytics(BaseModel):
@@ -771,9 +771,9 @@ class ExperimentAnalyticsVariantAnalytics(BaseModel):
     is_control: bool
     sample_count: int
     unique_devices: int
-    mean: float | None = None
-    std_dev: float | None = None
-    confidence_interval: ExperimentAnalyticsConfidenceInterval | None = None
+    mean: Optional[float] = None
+    std_dev: Optional[float] = None
+    confidence_interval: Optional[ExperimentAnalyticsConfidenceInterval] = None
 
 
 class Status5(Enum):
@@ -785,8 +785,8 @@ class Guardrail(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    metric_name: str | None = None
-    status: Status5 | None = Field(None, description="pass = guardrail held; violation = threshold breached.")
+    metric_name: Optional[str] = None
+    status: Optional[Status5] = Field(None, description="pass = guardrail held; violation = threshold breached.")
 
 
 class ExperimentGuardrailsResult(BaseModel):
@@ -817,7 +817,7 @@ class NormalityControl(BaseModel):
     model_config = ConfigDict(
         extra="allow",
     )
-    is_normal: bool | None = None
+    is_normal: Optional[bool] = None
 
 
 class NormalityTreatment(NormalityControl):
@@ -835,15 +835,15 @@ class ExperimentNonparametric(BaseModel):
     )
     experiment_id: str
     metric: str
-    mann_whitney: Dict[str, Any] | None = Field(
+    mann_whitney: Optional[Dict[str, Any]] = Field(
         None,
         description="Mann-Whitney U test output from StatisticalAnalyzer.mann_whitney_test(). Shape is analyzer-defined; treat all sub-fields as optional.",
     )
-    normality_control: NormalityControl | None = Field(
+    normality_control: Optional[NormalityControl] = Field(
         None,
         description="Normality test output for the control group from StatisticalAnalyzer.test_normality().",
     )
-    normality_treatment: NormalityTreatment | None = Field(
+    normality_treatment: Optional[NormalityTreatment] = Field(
         None, description="Normality test output for the treatment group."
     )
     recommended_test: RecommendedTest = Field(
@@ -900,7 +900,7 @@ class TargetGroup1(BaseModel):
     )
     id: str
     name: str
-    group_type: str | None = None
+    group_type: Optional[str] = None
 
 
 class ExperimentTargetGroups(BaseModel):
@@ -968,32 +968,32 @@ class Incident(BaseModel):
     )
     id: str = Field(..., description="Incident UUID.")
     org_id: str
-    alert_rule_id: str | None = Field(
+    alert_rule_id: Optional[str] = Field(
         None,
         description="Source alert rule ID if the incident was auto-created; null for manually-created.",
     )
     title: str
-    description: str | None = None
+    description: Optional[str] = None
     severity: Severity1 = Field(
         ...,
         description='Conventional values match IncidentSeverity (info|warning|error|critical). `"medium"` is included because the server\'s IncidentCreateRequest defaults to it and the DB stores arbitrary strings (the SAEnum column uses `create_type=False`); a generated SDK would otherwise reject the default create response. Future server-side enum tightening should remove `"medium"` from this list.',
     )
     status: Status6
-    metric_name: str | None = None
-    metric_value: str | None = None
-    resource_type: str | None = None
-    resource_id: str | None = None
-    assigned_to: str | None = Field(None, description="User ID the incident is assigned to.")
-    acknowledged_at: datetime | None = None
-    acknowledged_by: str | None = None
-    resolved_at: datetime | None = None
-    resolved_by: str | None = None
-    resolution_notes: str | None = None
-    closed_at: datetime | None = None
-    closed_by: str | None = None
-    incident_metadata: Dict[str, Any] | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    metric_name: Optional[str] = None
+    metric_value: Optional[str] = None
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    assigned_to: Optional[str] = Field(None, description="User ID the incident is assigned to.")
+    acknowledged_at: Optional[datetime] = None
+    acknowledged_by: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    resolved_by: Optional[str] = None
+    resolution_notes: Optional[str] = None
+    closed_at: Optional[datetime] = None
+    closed_by: Optional[str] = None
+    incident_metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class IncidentListResponse(RootModel[List[Incident]]):
@@ -1012,19 +1012,19 @@ class IntegrationDetailResponse(BaseModel):
     name: str
     integration_type: IntegrationType
     enabled: bool
-    webhook_url: str | None = None
-    webhook_events: str | None = None
-    slack_workspace_id: str | None = None
-    slack_channel_id: str | None = None
-    email_recipients: str | None = None
-    email_from: str | None = None
-    siem_format: str | None = None
-    siem_endpoint: str | None = None
-    notify_on_deploy: bool | None = None
-    notify_on_incident: bool | None = None
-    notify_on_approval: bool | None = None
-    created_at: str | None = None
-    updated_at: str | None = None
+    webhook_url: Optional[str] = None
+    webhook_events: Optional[str] = None
+    slack_workspace_id: Optional[str] = None
+    slack_channel_id: Optional[str] = None
+    email_recipients: Optional[str] = None
+    email_from: Optional[str] = None
+    siem_format: Optional[str] = None
+    siem_endpoint: Optional[str] = None
+    notify_on_deploy: Optional[bool] = None
+    notify_on_incident: Optional[bool] = None
+    notify_on_approval: Optional[bool] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 class IntegrationResponse(BaseModel):
@@ -1035,7 +1035,7 @@ class IntegrationResponse(BaseModel):
     name: str
     integration_type: IntegrationType
     enabled: bool
-    created_at: datetime | None = None
+    created_at: Optional[datetime] = None
 
 
 class IntegrationTestResponse(BaseModel):
@@ -1068,12 +1068,12 @@ class Job(BaseModel):
     progress_pct: int = Field(..., ge=0, le=100)
     attempts: int = Field(..., ge=0)
     max_attempts: int = Field(..., ge=1)
-    payload: Dict[str, Any] | None = None
-    result: Dict[str, Any] | None = None
-    error_message: str | None = None
-    scheduled_at: datetime | None = None
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
+    payload: Optional[Dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -1085,9 +1085,9 @@ class JobsOverview(BaseModel):
     queue_overview: Dict[str, Any]
     job_types: Dict[str, int]
     automation: Dict[str, Any]
-    active_rollout_items: List | None = None
-    running_experiment_items: List | None = None
-    failed_integration_items: List | None = None
+    active_rollout_items: Optional[List] = None
+    running_experiment_items: Optional[List] = None
+    failed_integration_items: Optional[List] = None
     recent_jobs: List[Dict[str, Any]]
 
 
@@ -1107,10 +1107,10 @@ class LocalTargetResponse(BaseModel):
     protocol: str = Field(..., description="e.g. 'openai_compatible'")
     status: Status8
     routing_priority: int
-    is_env_fallback: bool | None = False
-    last_verified_at: datetime | None = None
-    verification_latency_ms: float | None = None
-    last_verification_error: str | None = None
+    is_env_fallback: Optional[bool] = False
+    last_verified_at: Optional[datetime] = None
+    verification_latency_ms: Optional[float] = None
+    last_verification_error: Optional[str] = None
 
 
 class Role(Enum):
@@ -1126,10 +1126,10 @@ class Message(BaseModel):
     id: str
     thread_id: str
     role: Role
-    content: str | None = None
-    tool_calls: List[Dict[str, Any]] | None = None
-    tool_call_id: str | None = None
-    metrics: Dict[str, Any] | None = None
+    content: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_call_id: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
     created_at: datetime
 
 
@@ -1167,7 +1167,7 @@ class PoliciesResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    serving_policy: Dict[str, Any] | None = Field(
+    serving_policy: Optional[Dict[str, Any]] = Field(
         None,
         description="Open-shape serving policy object. See ServingPolicy domain type.",
     )
@@ -1206,10 +1206,10 @@ class ReconcileCheckoutResponse(BaseModel):
     org_id: str
     plan: Plan
     status: Status2
-    billing_interval: BillingInterval | None = None
-    stripe_customer_id: str | None = None
-    stripe_subscription_id: str | None = None
-    current_period_end: datetime | None = None
+    billing_interval: Optional[BillingInterval] = None
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    current_period_end: Optional[datetime] = None
 
 
 class Status10(Enum):
@@ -1234,10 +1234,10 @@ class Step(BaseModel):
     id: str
     step_index: int = Field(..., ge=0)
     step_type: StepType
-    tool_name: str | None = None
-    tool_call_id: str | None = None
+    tool_name: Optional[str] = None
+    tool_call_id: Optional[str] = None
     status: str
-    error_code: str | None = None
+    error_code: Optional[str] = None
     latency_ms: int = Field(..., ge=0)
 
 
@@ -1246,8 +1246,8 @@ class TestConnectionResponse(BaseModel):
         extra="forbid",
     )
     success: bool
-    error: str | None = None
-    latency_ms: float | None = None
+    error: Optional[str] = None
+    latency_ms: Optional[float] = None
 
 
 class Thread(BaseModel):
@@ -1256,36 +1256,36 @@ class Thread(BaseModel):
     )
     id: str
     agent_type: str
-    model: str | None = None
-    title: str | None = None
-    metadata: Dict[str, Any] | None = None
+    model: Optional[str] = None
+    title: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
-    messages: List[Message] | None = None
+    messages: Optional[List[Message]] = None
 
 
 class UpdateAlertRuleRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    name: str | None = None
-    severity: Severity | None = None
-    metric_name: str | None = None
-    threshold_value: float | None = None
-    threshold_duration_minutes: int | None = None
-    enabled: bool | None = None
-    notify_channels: List[str] | None = None
+    name: Optional[str] = None
+    severity: Optional[Severity] = None
+    metric_name: Optional[str] = None
+    threshold_value: Optional[float] = None
+    threshold_duration_minutes: Optional[int] = None
+    enabled: Optional[bool] = None
+    notify_channels: Optional[List[str]] = None
 
 
 class UpdateAuthConfigRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    identity_mode: IdentityMode | None = None
-    email_password_enabled: bool | None = None
-    sso_provider: str | None = None
-    sso_domain: str | None = None
-    scim_enabled: bool | None = None
+    identity_mode: Optional[IdentityMode] = None
+    email_password_enabled: Optional[bool] = None
+    sso_provider: Optional[str] = None
+    sso_domain: Optional[str] = None
+    scim_enabled: Optional[bool] = None
 
 
 class UpdateBillingRequest(BaseModel):
@@ -1307,49 +1307,49 @@ class UpdateCloudPolicyRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    cloud_fallback_enabled: bool | None = None
-    cloud_credential_policy: CloudCredentialPolicy1 | None = None
-    cloud_allowed_providers: List[str] | None = None
-    cloud_fallback_model: str | None = None
+    cloud_fallback_enabled: Optional[bool] = None
+    cloud_credential_policy: Optional[CloudCredentialPolicy1] = None
+    cloud_allowed_providers: Optional[List[str]] = None
+    cloud_fallback_model: Optional[str] = None
 
 
 class UpdateConnectionRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    api_key: str | None = None
-    label: str | None = None
-    base_url: str | None = None
-    status: str | None = None
+    api_key: Optional[str] = None
+    label: Optional[str] = None
+    base_url: Optional[str] = None
+    status: Optional[str] = None
 
 
 class UpdateCredentialRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    api_key: str | None = Field(None, description="New raw API key. Stored encrypted; never returned.")
-    label: str | None = None
-    base_url: str | None = None
-    is_active: bool | None = None
+    api_key: Optional[str] = Field(None, description="New raw API key. Stored encrypted; never returned.")
+    label: Optional[str] = None
+    base_url: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class UpdateIntegrationRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    name: str | None = None
-    enabled: bool | None = None
-    webhook_url: str | None = None
-    webhook_events: str | None = None
-    slack_workspace_id: str | None = None
-    slack_channel_id: str | None = None
-    email_recipients: str | None = None
-    email_from: str | None = None
-    siem_format: str | None = None
-    siem_endpoint: str | None = None
-    notify_on_deploy: bool | None = None
-    notify_on_incident: bool | None = None
-    notify_on_approval: bool | None = None
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    webhook_url: Optional[str] = None
+    webhook_events: Optional[str] = None
+    slack_workspace_id: Optional[str] = None
+    slack_channel_id: Optional[str] = None
+    email_recipients: Optional[str] = None
+    email_from: Optional[str] = None
+    siem_format: Optional[str] = None
+    siem_endpoint: Optional[str] = None
+    notify_on_deploy: Optional[bool] = None
+    notify_on_incident: Optional[bool] = None
+    notify_on_approval: Optional[bool] = None
 
 
 class Status11(Enum):
@@ -1362,21 +1362,21 @@ class UpdateLocalRuntimeRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    label: str | None = None
-    endpoint: str | None = None
-    model: str | None = None
-    protocol: str | None = None
-    status: Status11 | None = None
-    routing_priority: int | None = None
+    label: Optional[str] = None
+    endpoint: Optional[str] = None
+    model: Optional[str] = None
+    protocol: Optional[str] = None
+    status: Optional[Status11] = None
+    routing_priority: Optional[int] = None
 
 
 class UpdatePoliciesRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    serving_policy: Dict[str, Any] | None = None
-    telemetry_enabled: bool | None = None
-    privacy_mode: PrivacyMode | None = None
+    serving_policy: Optional[Dict[str, Any]] = None
+    telemetry_enabled: Optional[bool] = None
+    privacy_mode: Optional[PrivacyMode] = None
 
 
 class CloudRoutingStrategy(Enum):
@@ -1390,8 +1390,8 @@ class UpdateRoutingRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    cloud_routing_strategy: CloudRoutingStrategy | None = None
-    cloud_cooldown_seconds: int | None = Field(None, ge=0)
+    cloud_routing_strategy: Optional[CloudRoutingStrategy] = None
+    cloud_cooldown_seconds: Optional[int] = Field(None, ge=0)
 
 
 class UpdateRoutingResponse(BaseModel):
@@ -1412,14 +1412,14 @@ class UpdateSettingsRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    audit_retention_days: int | None = Field(None, ge=1)
-    require_mfa_for_admin: bool | None = None
-    require_admin_approval: bool | None = None
-    auto_rollback_enabled: bool | None = None
-    protect_production: bool | None = None
-    identity_mode: IdentityMode | None = None
-    device_battery_threshold: int | None = Field(None, ge=0, le=100)
-    device_network_policy: DeviceNetworkPolicy | None = None
+    audit_retention_days: Optional[int] = Field(None, ge=1)
+    require_mfa_for_admin: Optional[bool] = None
+    require_admin_approval: Optional[bool] = None
+    auto_rollback_enabled: Optional[bool] = None
+    protect_production: Optional[bool] = None
+    identity_mode: Optional[IdentityMode] = None
+    device_battery_threshold: Optional[int] = Field(None, ge=0, le=100)
+    device_network_policy: Optional[DeviceNetworkPolicy] = None
 
 
 class Limit(BaseModel):
@@ -1465,8 +1465,8 @@ class Adapter(BaseModel):
     )
     artifactId: str = Field(..., description="ArtifactId of the adapter artifact.")
     adapterType: AdapterType = Field(..., description="Adapter architecture type.")
-    priority: int | None = Field(None, description="Application priority; lower value applied first.", ge=0)
-    activationState: str | None = Field(None, description="AdapterActivationState enum value.")
+    priority: Optional[int] = Field(None, description="Application priority; lower value applied first.", ge=0)
+    activationState: Optional[str] = Field(None, description="AdapterActivationState enum value.")
 
 
 class ActiveBinding(BaseModel):
@@ -1475,7 +1475,7 @@ class ActiveBinding(BaseModel):
     )
     bindingId: str = Field(..., description="Opaque unique identifier for this binding configuration.")
     baseModelArtifactId: str = Field(..., description="ArtifactId of the base model for this binding.")
-    adapters: List[Adapter] | None = Field(
+    adapters: Optional[List[Adapter]] = Field(
         None,
         description="Ordered list of adapter artifacts applied on top of the base model.",
     )
@@ -1483,7 +1483,7 @@ class ActiveBinding(BaseModel):
         ...,
         description="ISO 8601 timestamp when this binding was last resolved by the server.",
     )
-    label: str | None = Field(
+    label: Optional[str] = Field(
         None,
         description="Human-readable label for this binding (e.g. experiment name or rollout group).",
     )
@@ -1496,13 +1496,13 @@ class ActiveModelPointer(BaseModel):
     modelId: str = Field(..., description="Model variant identifier (matches catalog ModelVariant.id).")
     version: str = Field(..., description="Model version string.")
     artifactId: str = Field(..., description="ArtifactId of the artifact currently loaded in the runtime.")
-    format: str | None = Field(None, description="ArtifactFormat enum value for the active artifact.")
+    format: Optional[str] = Field(None, description="ArtifactFormat enum value for the active artifact.")
     activatedAt: datetime = Field(..., description="ISO 8601 timestamp when this model was promoted to active.")
-    previousArtifactId: str | None = Field(
+    previousArtifactId: Optional[str] = Field(
         None,
         description="ArtifactId of the model this version replaced, if any. Used for rollback.",
     )
-    isFallback: bool | None = Field(
+    isFallback: Optional[bool] = Field(
         False,
         description="True if this pointer represents a rollback to a previous version rather than a forward activation.",
     )
@@ -1535,7 +1535,7 @@ class ArtifactManifest(BaseModel):
     version: str = Field(..., description="Model version string.")
     format: str = Field(..., description="ArtifactFormat enum value (e.g. coreml, tflite, gguf).")
     totalBytes: int = Field(..., description="Total size of the complete artifact in bytes.", ge=1)
-    sha256: str | None = Field(
+    sha256: Optional[str] = Field(
         None,
         description="SHA-256 hex digest of the complete assembled artifact.",
         pattern="^[a-fA-F0-9]{64}$",
@@ -1545,24 +1545,24 @@ class ArtifactManifest(BaseModel):
         description="Ordered list of chunk descriptors. Download in order and concatenate.",
         min_length=1,
     )
-    cdnBaseUrl: AnyUrl | None = Field(
+    cdnBaseUrl: Optional[AnyUrl] = Field(
         None,
         description="Base URL for signed chunk downloads. Combined with chunk path to form the download URL.",
     )
-    urlExpiresAt: datetime | None = Field(
+    urlExpiresAt: Optional[datetime] = Field(
         None,
         description="Expiry time for any pre-signed URLs embedded in this manifest.",
     )
-    entrypoint: str | None = Field(None, description="Primary file to load within the artifact.")
-    engineCompatibility: List[str] | None = Field(
+    entrypoint: Optional[str] = Field(None, description="Primary file to load within the artifact.")
+    engineCompatibility: Optional[List[str]] = Field(
         None,
         description="RuntimeExecutor values this artifact supports (e.g. llamacpp, mlx).",
     )
-    isAdapter: bool | None = Field(
+    isAdapter: Optional[bool] = Field(
         False,
         description="True if this artifact is a LoRA adapter rather than a full base model.",
     )
-    baseModelArtifactId: str | None = Field(
+    baseModelArtifactId: Optional[str] = Field(
         None,
         description="For adapters: the artifactId of the base model this adapter targets.",
     )
@@ -1592,15 +1592,15 @@ class AudioSpeechRequest(BaseModel):
         max_length=4096,
         min_length=1,
     )
-    voice: str | None = Field(
+    voice: Optional[str] = Field(
         None,
         description="Voice id. Pass-through to the routed locality: cloud accepts provider voices ('alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer' for OpenAI), local accepts model-specific voices (e.g. Kokoro 'af_bella', 'am_adam'). Mismatches raise voice_not_supported_for_locality. Defaults to the model's locality-appropriate first voice when omitted.",
     )
-    response_format: ResponseFormat | None = Field(
+    response_format: Optional[ResponseFormat] = Field(
         "wav",
         description="Output audio format. 'wav' is supported on every locality. mp3/ogg/opus/flac/aac/pcm depend on the routed locality: cloud providers cover all, local sherpa-onnx is wav-only until local transcoding ships (see PR 6 in the implementation plan).",
     )
-    speed: float | None = Field(
+    speed: Optional[float] = Field(
         1.0,
         description="Playback speed multiplier. Bounds match OpenAI audio.speech.create.",
         ge=0.25,
@@ -1618,15 +1618,15 @@ class Route(BaseModel):
         extra="forbid",
     )
     locality: Locality = Field(..., description="Where the synthesis ran.")
-    engine: str | None = Field(
+    engine: Optional[str] = Field(
         None,
         description="Engine id. 'sherpa-onnx' for on-device, null or provider name for cloud.",
     )
-    policy: str | None = Field(
+    policy: Optional[str] = Field(
         None,
         description="Resolved routing policy preset (e.g. 'local_only', 'cloud_only', 'auto', 'local_first').",
     )
-    fallback_used: bool | None = Field(
+    fallback_used: Optional[bool] = Field(
         False,
         description="True when the primary locality failed and the request succeeded via fallback (e.g. local failed, cloud_first cloud succeeded).",
     )
@@ -1658,38 +1658,38 @@ class AudioSpeechResult(BaseModel):
         ...,
         description="Resolved model id (after app ref resolution). For @app/<slug>/tts requests this is the underlying model the app maps to.",
     )
-    provider: str | None = Field(
+    provider: Optional[str] = Field(
         None,
         description="Upstream provider key when cloud execution was selected ('openai', 'elevenlabs', ...). Null when execution was local.",
     )
-    voice: str | None = Field(
+    voice: Optional[str] = Field(
         None,
         description="Voice actually used. May echo the caller's voice or be the locality default when the caller omitted it.",
     )
-    sample_rate: int | None = Field(
+    sample_rate: Optional[int] = Field(
         None,
         description="Sample rate of the audio in Hz, when known. Local sherpa returns the model's native rate (typically 24000 for Kokoro, 22050 for Piper). Cloud providers may not surface this.",
     )
-    duration_ms: int | None = Field(
+    duration_ms: Optional[int] = Field(
         None,
         description="Audio duration in milliseconds, when computable. Local execution always populates this; cloud execution may leave it null.",
         ge=0,
     )
-    latency_ms: float | None = Field(
+    latency_ms: Optional[float] = Field(
         None,
         description="End-to-end latency of the synthesis call in milliseconds, measured from request start to bytes received.",
         ge=0.0,
     )
-    route: Route | None = Field(
+    route: Optional[Route] = Field(
         None,
         description="Routing metadata. No user content (input text, raw audio bytes, file paths, provider request ids).",
     )
-    billed_units: int | None = Field(
+    billed_units: Optional[int] = Field(
         None,
         description="Generic billing unit count for cloud execution. Pairs with unit_kind. Null on local.",
         ge=0,
     )
-    unit_kind: UnitKind | None = Field(
+    unit_kind: Optional[UnitKind] = Field(
         None,
         description="Unit kind for billed_units. 'characters' for OpenAI tts-1 / tts-1-hd, 'milliseconds' for per-minute billed providers. Null on local.",
     )
@@ -1747,12 +1747,14 @@ class CandidateGateSchema(BaseModel):
         ...,
         description="Whether the candidate must pass this gate to be selected. If false, gate failure is advisory only.",
     )
-    threshold_number: float | None = Field(
+    threshold_number: Optional[float] = Field(
         None,
         description="Numeric threshold for the gate (e.g. min tok/s, max TTFT ms, min bytes).",
     )
-    threshold_string: str | None = Field(None, description="String threshold (e.g. modality name, format identifier).")
-    window_seconds: int | None = Field(
+    threshold_string: Optional[str] = Field(
+        None, description="String threshold (e.g. modality name, format identifier)."
+    )
+    window_seconds: Optional[int] = Field(
         None,
         description="Time window for historical metrics (e.g. benchmark freshness in seconds).",
         ge=0,
@@ -1773,7 +1775,7 @@ class CandidateGateSchema(BaseModel):
         ...,
         description="Whether failure of this gate can trigger fallback to the next candidate. May be suppressed by routing policy.",
     )
-    blocking_default: bool | None = Field(
+    blocking_default: Optional[bool] = Field(
         None,
         description="Default value for 'required' when the server does not specify. Used by SDKs for inference of gate severity.",
     )
@@ -1801,21 +1803,21 @@ class ChatThread(BaseModel):
         extra="forbid",
     )
     id: str = Field(..., description="Unique thread identifier.", pattern="^thread_")
-    title: str | None = Field(None, description="Optional display title for the thread.")
+    title: Optional[str] = Field(None, description="Optional display title for the thread.")
     model: str = Field(..., description="Model used for inference in this thread.")
     createdAt: datetime = Field(..., description="ISO 8601 creation timestamp.")
     updatedAt: datetime = Field(..., description="ISO 8601 last-updated timestamp.")
-    metadata: Dict[str, Any] | None = Field(None, description="Arbitrary key-value metadata.")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Arbitrary key-value metadata.")
 
 
 class Config(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    maxTokens: int | None = None
-    temperature: float | None = Field(None, ge=0.0, le=2.0)
-    topP: float | None = Field(None, ge=0.0, le=1.0)
-    stop: List[str] | None = None
+    maxTokens: Optional[int] = None
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    topP: Optional[float] = Field(None, ge=0.0, le=1.0)
+    stop: Optional[List[str]] = None
 
 
 class MediaType(Enum):
@@ -1830,9 +1832,9 @@ class ContentPartInputAudio1(BaseModel):
     )
     type: Literal["input_audio"]
     assetId: str
-    url: AnyUrl | None = None
-    data: str | None = None
-    mediaType: MediaType | None = None
+    url: Optional[AnyUrl] = None
+    data: Optional[str] = None
+    mediaType: Optional[MediaType] = None
 
 
 class ContentPartInputAudio2(BaseModel):
@@ -1840,9 +1842,9 @@ class ContentPartInputAudio2(BaseModel):
         extra="forbid",
     )
     type: Literal["input_audio"]
-    assetId: str | None = None
+    assetId: Optional[str] = None
     url: AnyUrl
-    data: str | None = None
+    data: Optional[str] = None
     mediaType: MediaType
 
 
@@ -1851,14 +1853,14 @@ class ContentPartInputAudio3(BaseModel):
         extra="forbid",
     )
     type: Literal["input_audio"]
-    assetId: str | None = None
-    url: AnyUrl | None = None
+    assetId: Optional[str] = None
+    url: Optional[AnyUrl] = None
     data: str
     mediaType: MediaType
 
 
-class ContentPartInputAudio(RootModel[ContentPartInputAudio1 | ContentPartInputAudio2 | ContentPartInputAudio3]):
-    root: ContentPartInputAudio1 | ContentPartInputAudio2 | ContentPartInputAudio3
+class ContentPartInputAudio(RootModel[Union[ContentPartInputAudio1, ContentPartInputAudio2, ContentPartInputAudio3]]):
+    root: Union[ContentPartInputAudio1, ContentPartInputAudio2, ContentPartInputAudio3]
 
 
 class MediaType3(Enum):
@@ -1880,14 +1882,14 @@ class ContentPartInputImage1(BaseModel):
     )
     type: Literal["input_image"]
     assetId: str = Field(..., description="Asset service reference (preferred for persisted messages)")
-    url: AnyUrl | None = None
-    data: str | None = Field(
+    url: Optional[AnyUrl] = None
+    data: Optional[str] = Field(
         None,
         description="Base64 offline fallback, ~10MB max. Do not use for persisted chat history.",
         max_length=13981014,
     )
-    mediaType: MediaType3 | None = None
-    detail: Detail | None = Field("auto", description="Vision model routing hint")
+    mediaType: Optional[MediaType3] = None
+    detail: Optional[Detail] = Field("auto", description="Vision model routing hint")
 
 
 class ContentPartInputImage2(BaseModel):
@@ -1895,15 +1897,15 @@ class ContentPartInputImage2(BaseModel):
         extra="forbid",
     )
     type: Literal["input_image"]
-    assetId: str | None = Field(None, description="Asset service reference (preferred for persisted messages)")
+    assetId: Optional[str] = Field(None, description="Asset service reference (preferred for persisted messages)")
     url: AnyUrl
-    data: str | None = Field(
+    data: Optional[str] = Field(
         None,
         description="Base64 offline fallback, ~10MB max. Do not use for persisted chat history.",
         max_length=13981014,
     )
     mediaType: MediaType3
-    detail: Detail | None = Field("auto", description="Vision model routing hint")
+    detail: Optional[Detail] = Field("auto", description="Vision model routing hint")
 
 
 class ContentPartInputImage3(BaseModel):
@@ -1911,19 +1913,19 @@ class ContentPartInputImage3(BaseModel):
         extra="forbid",
     )
     type: Literal["input_image"]
-    assetId: str | None = Field(None, description="Asset service reference (preferred for persisted messages)")
-    url: AnyUrl | None = None
+    assetId: Optional[str] = Field(None, description="Asset service reference (preferred for persisted messages)")
+    url: Optional[AnyUrl] = None
     data: str = Field(
         ...,
         description="Base64 offline fallback, ~10MB max. Do not use for persisted chat history.",
         max_length=13981014,
     )
     mediaType: MediaType3
-    detail: Detail | None = Field("auto", description="Vision model routing hint")
+    detail: Optional[Detail] = Field("auto", description="Vision model routing hint")
 
 
-class ContentPartInputImage(RootModel[ContentPartInputImage1 | ContentPartInputImage2 | ContentPartInputImage3]):
-    root: ContentPartInputImage1 | ContentPartInputImage2 | ContentPartInputImage3
+class ContentPartInputImage(RootModel[Union[ContentPartInputImage1, ContentPartInputImage2, ContentPartInputImage3]]):
+    root: Union[ContentPartInputImage1, ContentPartInputImage2, ContentPartInputImage3]
 
 
 class ContentPartInputText(BaseModel):
@@ -1945,10 +1947,10 @@ class ContentPartInputVideo1(BaseModel):
     )
     type: Literal["input_video"]
     assetId: str
-    url: AnyUrl | None = None
-    data: str | None = None
-    mediaType: MediaType6 | None = None
-    maxFrames: int | None = Field(None, description="Runtime hint for frame extraction")
+    url: Optional[AnyUrl] = None
+    data: Optional[str] = None
+    mediaType: Optional[MediaType6] = None
+    maxFrames: Optional[int] = Field(None, description="Runtime hint for frame extraction")
 
 
 class ContentPartInputVideo2(BaseModel):
@@ -1956,11 +1958,11 @@ class ContentPartInputVideo2(BaseModel):
         extra="forbid",
     )
     type: Literal["input_video"]
-    assetId: str | None = None
+    assetId: Optional[str] = None
     url: AnyUrl
-    data: str | None = None
+    data: Optional[str] = None
     mediaType: MediaType6
-    maxFrames: int | None = Field(None, description="Runtime hint for frame extraction")
+    maxFrames: Optional[int] = Field(None, description="Runtime hint for frame extraction")
 
 
 class ContentPartInputVideo3(BaseModel):
@@ -1968,23 +1970,23 @@ class ContentPartInputVideo3(BaseModel):
         extra="forbid",
     )
     type: Literal["input_video"]
-    assetId: str | None = None
-    url: AnyUrl | None = None
+    assetId: Optional[str] = None
+    url: Optional[AnyUrl] = None
     data: str
     mediaType: MediaType6
-    maxFrames: int | None = Field(None, description="Runtime hint for frame extraction")
+    maxFrames: Optional[int] = Field(None, description="Runtime hint for frame extraction")
 
 
-class ContentPartInputVideo(RootModel[ContentPartInputVideo1 | ContentPartInputVideo2 | ContentPartInputVideo3]):
-    root: ContentPartInputVideo1 | ContentPartInputVideo2 | ContentPartInputVideo3
+class ContentPartInputVideo(RootModel[Union[ContentPartInputVideo1, ContentPartInputVideo2, ContentPartInputVideo3]]):
+    root: Union[ContentPartInputVideo1, ContentPartInputVideo2, ContentPartInputVideo3]
 
 
 class EnginePolicy(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    allowed: List[str] | None = Field(None, description="RuntimeExecutor values this model may use.")
-    forced: str | None = Field(
+    allowed: Optional[List[str]] = Field(None, description="RuntimeExecutor values this model may use.")
+    forced: Optional[str] = Field(
         None,
         description="If set, override engine selection and always use this executor.",
     )
@@ -1996,20 +1998,22 @@ class DesiredModelEntry(BaseModel):
     )
     modelId: str = Field(..., description="Model variant identifier.")
     desiredVersion: str = Field(..., description="Target model version the device should converge to.")
-    currentChannel: str | None = Field(None, description="Release channel for this model (e.g. stable, beta, canary).")
-    deliveryMode: str | None = Field(
+    currentChannel: Optional[str] = Field(
+        None, description="Release channel for this model (e.g. stable, beta, canary)."
+    )
+    deliveryMode: Optional[str] = Field(
         None,
         description="DeliveryMode enum value — how the model is delivered to the device.",
     )
-    activationPolicy: str | None = Field(
+    activationPolicy: Optional[str] = Field(
         None,
         description="ActivationPolicy enum value — when to activate a newly staged artifact.",
     )
-    enginePolicy: EnginePolicy | None = Field(None, description="Engine constraints for runtime executor selection.")
-    artifactManifest: ArtifactManifest | None = Field(
+    enginePolicy: Optional[EnginePolicy] = Field(None, description="Engine constraints for runtime executor selection.")
+    artifactManifest: Optional[ArtifactManifest] = Field(
         None, description="Download manifest for the target artifact version."
     )
-    rolloutId: str | None = Field(None, description="Opaque identifier for the rollout this entry belongs to.")
+    rolloutId: Optional[str] = Field(None, description="Opaque identifier for the rollout this entry belongs to.")
 
 
 class FederationOffer(BaseModel):
@@ -2037,13 +2041,13 @@ class DeviceRuntimeProfileSchemaInstalledRuntime(BaseModel):
         ...,
         description="Canonical engine identifier (e.g. 'coreml', 'mlx-lm', 'llama.cpp', 'onnxruntime').",
     )
-    version: str | None = Field(None, description="Engine version string, if known.")
-    available: bool | None = Field(True, description="Whether the engine is currently usable.")
-    accelerator: str | None = Field(
+    version: Optional[str] = Field(None, description="Engine version string, if known.")
+    available: Optional[bool] = Field(True, description="Whether the engine is currently usable.")
+    accelerator: Optional[str] = Field(
         None,
         description="Hardware accelerator used by this engine (e.g. 'metal', 'ane', 'cuda').",
     )
-    metadata: Dict[str, Any] | None = Field(None, description="Arbitrary metadata about the engine installation.")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Arbitrary metadata about the engine installation.")
 
 
 class ModelInventoryItem(BaseModel):
@@ -2052,7 +2056,7 @@ class ModelInventoryItem(BaseModel):
     )
     modelId: str
     version: str
-    artifactId: str | None = None
+    artifactId: Optional[str] = None
     status: str = Field(..., description="ArtifactStatus enum value.")
 
 
@@ -2086,14 +2090,14 @@ class Model(BaseModel):
         extra="forbid",
     )
     modelId: str = Field(..., description="Model variant identifier.")
-    installedVersion: str | None = Field(None, description="Version of the model artifact currently on disk.")
-    activeVersion: str | None = Field(
+    installedVersion: Optional[str] = Field(None, description="Version of the model artifact currently on disk.")
+    activeVersion: Optional[str] = Field(
         None,
         description="Version currently loaded and serving inference. Null if not active.",
     )
     status: str = Field(..., description="ArtifactStatus enum value.")
-    health: Health | None = Field(None, description="Current health of this model on-device.")
-    lastError: str | None = Field(
+    health: Optional[Health] = Field(None, description="Current health of this model on-device.")
+    lastError: Optional[str] = Field(
         None,
         description="Most recent error message if status indicates failure. Null otherwise.",
     )
@@ -2114,24 +2118,24 @@ class ObservedState(BaseModel):
     schemaVersion: str = Field(..., description="Contract schema version this payload conforms to.")
     deviceId: str = Field(..., description="Opaque device identifier.")
     reportedAt: datetime = Field(..., description="ISO 8601 timestamp when this snapshot was captured on-device.")
-    activeModelPointer: ActiveModelPointer | None = Field(
+    activeModelPointer: Optional[ActiveModelPointer] = Field(
         None,
         description="Currently active base model pointer. Null if no model is active.",
     )
-    activeBinding: ActiveBinding | None = Field(
+    activeBinding: Optional[ActiveBinding] = Field(
         None,
         description="Currently active serving binding. Null if no binding is active.",
     )
-    models: List[Model] | None = Field(
+    models: Optional[List[Model]] = Field(
         None,
         description="Per-model observed state with installed version, active version, status, and health.",
     )
-    federationParticipations: List[FederationParticipation] | None = Field(
+    federationParticipations: Optional[List[FederationParticipation]] = Field(
         None, description="Current participation state for any active federated rounds."
     )
-    sdkVersion: str | None = Field(None, description="Version of the Octomil SDK running on-device.")
-    osVersion: str | None = Field(None, description="Host OS version string.")
-    availableStorageBytes: int | None = Field(
+    sdkVersion: Optional[str] = Field(None, description="Version of the Octomil SDK running on-device.")
+    osVersion: Optional[str] = Field(None, description="Host OS version string.")
+    availableStorageBytes: Optional[int] = Field(
         None,
         description="Free storage available on the device at time of report.",
         ge=0,
@@ -2142,9 +2146,11 @@ class Download(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    requireWifi: bool | None = Field(True, description="Restrict artifact downloads to Wi-Fi connections only.")
-    requireCharging: bool | None = Field(False, description="Restrict artifact downloads to when device is charging.")
-    maxConcurrentChunks: int | None = Field(
+    requireWifi: Optional[bool] = Field(True, description="Restrict artifact downloads to Wi-Fi connections only.")
+    requireCharging: Optional[bool] = Field(
+        False, description="Restrict artifact downloads to when device is charging."
+    )
+    maxConcurrentChunks: Optional[int] = Field(
         4,
         description="Maximum number of chunk download requests in flight simultaneously.",
         ge=1,
@@ -2155,19 +2161,19 @@ class Federation(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    enabled: bool | None = Field(
+    enabled: Optional[bool] = Field(
         True,
         description="Whether this device is eligible to participate in federated rounds.",
     )
-    requireWifi: bool | None = Field(True, description="Require Wi-Fi for upload of training updates.")
-    requireCharging: bool | None = Field(True, description="Require charging state for local training execution.")
-    minBatteryLevel: float | None = Field(
+    requireWifi: Optional[bool] = Field(True, description="Require Wi-Fi for upload of training updates.")
+    requireCharging: Optional[bool] = Field(True, description="Require charging state for local training execution.")
+    minBatteryLevel: Optional[float] = Field(
         None,
         description="Minimum battery level fraction required to start local training.",
         ge=0.0,
         le=1.0,
     )
-    maxWallTimeSeconds: int | None = Field(
+    maxWallTimeSeconds: Optional[int] = Field(
         None,
         description="Hard cap on wall-clock time for a single round's local training.",
         ge=60,
@@ -2178,12 +2184,12 @@ class Telemetry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    enabled: bool | None = Field(True, description="Whether telemetry upload is enabled for this device.")
-    requireWifi: bool | None = Field(False, description="Restrict telemetry uploads to Wi-Fi.")
-    uploadIntervalSeconds: int | None = Field(
+    enabled: Optional[bool] = Field(True, description="Whether telemetry upload is enabled for this device.")
+    requireWifi: Optional[bool] = Field(False, description="Restrict telemetry uploads to Wi-Fi.")
+    uploadIntervalSeconds: Optional[int] = Field(
         300, description="Target interval between telemetry batch uploads.", ge=30
     )
-    maxBatchSize: int | None = Field(500, description="Maximum number of events per uploaded batch.", ge=1)
+    maxBatchSize: Optional[int] = Field(500, description="Maximum number of events per uploaded batch.", ge=1)
 
 
 class PreferredProvider(Enum):
@@ -2208,20 +2214,20 @@ class CloudFallback(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    enabled: bool | None = Field(
+    enabled: Optional[bool] = Field(
         True,
         description="Whether cloud fallback is permitted when on-device inference fails.",
     )
-    preferredProvider: PreferredProvider | None = Field(
+    preferredProvider: Optional[PreferredProvider] = Field(
         None,
         description="Cloud provider for fallback. Must be a CloudProvider enum value. Defaults to 'octomil'.",
     )
-    providerOrder: List[PreferredProvider] | None = Field(
+    providerOrder: Optional[List[PreferredProvider]] = Field(
         None,
         description="Ordered fallback chain. First provider with valid credentials is used. When omitted, only preferredProvider is attempted.",
         min_length=1,
     )
-    credentialPolicy: CredentialPolicy | None = Field(
+    credentialPolicy: Optional[CredentialPolicy] = Field(
         "byok_and_managed",
         description="How cloud credentials are resolved. 'byok_and_managed' tries org BYOK first, then Octomil-managed. 'byok_only' requires org-provided credentials. 'managed_only' uses only Octomil-managed pool. 'disabled' blocks all cloud inference.",
     )
@@ -2235,10 +2241,10 @@ class PolicyConfig(BaseModel):
         ...,
         description="Monotonic version string for this policy config. Devices must apply the latest version.",
     )
-    download: Download | None = Field(None, description="Artifact download constraints.")
-    federation: Federation | None = Field(None, description="Federated learning eligibility constraints.")
-    telemetry: Telemetry | None = Field(None, description="Telemetry upload behaviour.")
-    cloudFallback: CloudFallback | None = Field(None, description="Cloud inference fallback policy.")
+    download: Optional[Download] = Field(None, description="Artifact download constraints.")
+    federation: Optional[Federation] = Field(None, description="Federated learning eligibility constraints.")
+    telemetry: Optional[Telemetry] = Field(None, description="Telemetry upload behaviour.")
+    cloudFallback: Optional[CloudFallback] = Field(None, description="Cloud inference fallback policy.")
 
 
 class FinishReason(Enum):
@@ -2284,8 +2290,8 @@ class ResponseUsage(BaseModel):
 
 class ResponseRequestContentBlock(BaseModel):
     role: Role1
-    content: Any | None = None
-    toolCallId: str | None = None
+    content: Optional[Any] = None
+    toolCallId: Optional[str] = None
 
 
 class ResponseRequestResponseFormat1(Enum):
@@ -2298,15 +2304,15 @@ class ResponseRequestResponseFormat2(BaseModel):
     schema_: Dict[str, Any] = Field(..., alias="schema")
 
 
-class ResponseRequestResponseFormat(RootModel[ResponseRequestResponseFormat1 | ResponseRequestResponseFormat2]):
-    root: ResponseRequestResponseFormat1 | ResponseRequestResponseFormat2
+class ResponseRequestResponseFormat(RootModel[Union[ResponseRequestResponseFormat1, ResponseRequestResponseFormat2]]):
+    root: Union[ResponseRequestResponseFormat1, ResponseRequestResponseFormat2]
 
 
 class ResponseRequestToolDef(BaseModel):
     name: str
-    description: str | None = None
-    parameters: Dict[str, Any] | None = None
-    input_schema: Dict[str, Any] | None = None
+    description: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+    input_schema: Optional[Dict[str, Any]] = None
 
 
 class ResponseStreamEventTextDeltaEvent(BaseModel):
@@ -2323,9 +2329,9 @@ class ResponseStreamEventToolCallDeltaEvent(BaseModel):
     )
     type: Literal["tool_call_delta"]
     index: int = Field(..., ge=0)
-    id: str | None = None
-    name: str | None = None
-    argumentsDelta: str | None = None
+    id: Optional[str] = None
+    name: Optional[str] = None
+    argumentsDelta: Optional[str] = None
 
 
 class RuntimeBenchmarkSubmissionResponseSchema(BaseModel):
@@ -2372,22 +2378,22 @@ class RuntimePlanResponseSchemaModelResolution(BaseModel):
     )
     original_ref: str = Field(..., description="The original model reference supplied by the caller.")
     resolved_model: str = Field(..., description="The concrete model selected for runtime planning.")
-    deployment_id: str | None = Field(
+    deployment_id: Optional[str] = Field(
         None,
         description="Deployment identifier when the ref resolved through a deployment.",
     )
-    deployment_key: str | None = Field(None, description="Human-readable or external deployment key when available.")
-    experiment_id: str | None = Field(
+    deployment_key: Optional[str] = Field(None, description="Human-readable or external deployment key when available.")
+    experiment_id: Optional[str] = Field(
         None,
         description="Experiment identifier when the ref resolved through an experiment.",
     )
-    variant_id: str | None = Field(None, description="Experiment or catalog variant identifier when available.")
-    variant_name: str | None = Field(None, description="Experiment variant name when available.")
-    capability: str | None = Field(
+    variant_id: Optional[str] = Field(None, description="Experiment or catalog variant identifier when available.")
+    variant_name: Optional[str] = Field(None, description="Experiment variant name when available.")
+    capability: Optional[str] = Field(
         None,
         description="Resolved capability when it differs from or clarifies the request capability.",
     )
-    routing_policy: str | None = Field(
+    routing_policy: Optional[str] = Field(
         None,
         description="Routing policy supplied by the resolved deployment, experiment, or capability default when present.",
     )
@@ -2398,8 +2404,8 @@ class DownloadUrl(BaseModel):
         extra="forbid",
     )
     url: AnyUrl
-    expires_at: datetime | None = None
-    headers: Dict[str, str] | None = Field(
+    expires_at: Optional[datetime] = None
+    headers: Optional[Dict[str, str]] = Field(
         None,
         description="Optional request headers (e.g. signed-URL auth) the SDK must send with the GET. No bearer leaks: server-issued only.",
     )
@@ -2410,26 +2416,26 @@ class RuntimePlanResponseSchemaRuntimeArtifactPlan(BaseModel):
         extra="forbid",
     )
     model_id: str = Field(..., description="Model identifier.")
-    artifact_id: str | None = Field(None, description="Server-assigned artifact ID.")
-    model_version: str | None = Field(None, description="Model version string.")
-    format: str | None = Field(
+    artifact_id: Optional[str] = Field(None, description="Server-assigned artifact ID.")
+    model_version: Optional[str] = Field(None, description="Model version string.")
+    format: Optional[str] = Field(
         None,
         description="Model format (e.g. 'gguf', 'safetensors', 'mlmodelc', 'onnx').",
     )
-    quantization: str | None = Field(None, description="Quantization level (e.g. 'q4_k_m', 'int8', 'f16').")
-    uri: AnyUrl | None = Field(None, description="Download URI for the artifact.")
-    digest: str | None = Field(None, description="Content digest (e.g. SHA-256 hex).")
-    size_bytes: int | None = Field(None, description="Artifact size in bytes.", ge=0)
-    min_ram_bytes: int | None = Field(None, description="Minimum RAM required in bytes to run this artifact.", ge=0)
-    required_files: List[str] | None = Field(
+    quantization: Optional[str] = Field(None, description="Quantization level (e.g. 'q4_k_m', 'int8', 'f16').")
+    uri: Optional[AnyUrl] = Field(None, description="Download URI for the artifact.")
+    digest: Optional[str] = Field(None, description="Content digest (e.g. SHA-256 hex).")
+    size_bytes: Optional[int] = Field(None, description="Artifact size in bytes.", ge=0)
+    min_ram_bytes: Optional[int] = Field(None, description="Minimum RAM required in bytes to run this artifact.", ge=0)
+    required_files: Optional[List[str]] = Field(
         None,
         description="Relative paths the prepare adapter must stage before the runtime can load. e.g. ['model.onnx','tokens.txt','voices.bin','espeak-ng-data/']. Trailing slash marks a directory bundle.",
     )
-    download_urls: List[DownloadUrl] | None = Field(
+    download_urls: Optional[List[DownloadUrl]] = Field(
         None,
         description="One or more download endpoints for the artifact. Multi-URL supports CDN/origin failover and parallel chunk fetches. Hosted_gateway candidates leave this empty.",
     )
-    manifest_uri: AnyUrl | None = Field(
+    manifest_uri: Optional[AnyUrl] = Field(
         None,
         description="Optional URI to an artifact manifest describing per-file digests, chunk layouts, and total assembled size. When present, the SDK fetches this before downloading and uses it to drive chunked, resumable downloads with per-chunk verification.",
     )
@@ -2457,14 +2463,14 @@ class RuntimePlanResponseSchemaRuntimeCandidatePlan(BaseModel):
         extra="forbid",
     )
     locality: Locality1 = Field(..., description="Where this candidate would run inference.")
-    engine: str | None = Field(
+    engine: Optional[str] = Field(
         None,
         description="Canonical engine identifier (e.g. 'mlx-lm', 'llama.cpp', 'cloud').",
     )
-    engine_version_constraint: str | None = Field(
+    engine_version_constraint: Optional[str] = Field(
         None, description="Semver constraint on engine version (e.g. '>=0.18.0')."
     )
-    artifact: RuntimePlanResponseSchemaRuntimeArtifactPlan | None = Field(
+    artifact: Optional[RuntimePlanResponseSchemaRuntimeArtifactPlan] = Field(
         None, description="Recommended model artifact to download or use."
     )
     priority: int = Field(..., description="Candidate priority. Lower is higher priority.", ge=0)
@@ -2475,23 +2481,23 @@ class RuntimePlanResponseSchemaRuntimeCandidatePlan(BaseModel):
         le=1.0,
     )
     reason: str = Field(..., description="Human-readable reason for this recommendation.")
-    benchmark_required: bool | None = Field(
+    benchmark_required: Optional[bool] = Field(
         False,
         description="Whether a local benchmark is required before the SDK should use this candidate.",
     )
-    gates: List[CandidateGateSchema] | None = Field(
+    gates: Optional[List[CandidateGateSchema]] = Field(
         None,
         description="Gate requirements the SDK must evaluate per-request before selecting this candidate. Gates are checked in the attempt loop; failure of a required gate causes the attempt to fail and fallback to the next candidate.",
     )
-    delivery_mode: DeliveryMode | None = Field(
+    delivery_mode: Optional[DeliveryMode] = Field(
         None,
         description="How the SDK should reach this candidate. 'hosted_gateway' = call api.octomil.com /v1 routes; 'sdk_runtime' = run on-device with a prepared local runtime + artifact; 'external_endpoint' = caller-supplied OpenAI-compatible URL.",
     )
-    prepare_required: bool | None = Field(
+    prepare_required: Optional[bool] = Field(
         False,
         description="Whether the SDK must prepare (install runtime + stage artifacts) before this candidate can serve a request. Always false for hosted_gateway. Typically true for sdk_runtime when the artifact is not yet staged.",
     )
-    prepare_policy: PreparePolicy | None = Field(
+    prepare_policy: Optional[PreparePolicy] = Field(
         "lazy",
         description="When the SDK is allowed to prepare this candidate. 'lazy' = at first .create() request; 'explicit_only' = only via client.prepare()/initialize(warm=...); 'disabled' = never prepare (e.g. hosted_gateway).",
     )
@@ -2514,9 +2520,9 @@ class Event(BaseModel):
     )
     timestamp: datetime = Field(..., description="ISO 8601 timestamp when the event occurred.")
     telemetryClass: TelemetryClass = Field(..., description="TelemetryClass enum value governing upload priority.")
-    traceId: str | None = Field(None, description="OTLP trace ID if this event is attached to a span.")
-    spanId: str | None = Field(None, description="OTLP span ID if this event is a span event.")
-    attributes: Dict[str, str | float | bool] | None = Field(
+    traceId: Optional[str] = Field(None, description="OTLP trace ID if this event is attached to a span.")
+    spanId: Optional[str] = Field(None, description="OTLP span ID if this event is a span event.")
+    attributes: Optional[Dict[str, Union[str, float, bool]]] = Field(
         None, description="Arbitrary key-value attributes for this event."
     )
 
@@ -2530,7 +2536,7 @@ class TelemetryBatch(BaseModel):
         description="Unique identifier for this batch, used for deduplication on the server.",
     )
     deviceId: str = Field(..., description="Opaque device identifier.")
-    sdkVersion: str | None = Field(None, description="Version of the Octomil SDK that generated this batch.")
+    sdkVersion: Optional[str] = Field(None, description="Version of the Octomil SDK that generated this batch.")
     capturedAt: datetime = Field(..., description="ISO 8601 timestamp when this batch was assembled on-device.")
     events: List[Event] = Field(..., description="List of telemetry events in this batch.", min_length=1)
 
@@ -2542,9 +2548,9 @@ class Hyperparameters(BaseModel):
     epochs: int = Field(..., description="Number of local training epochs.", ge=1)
     batchSize: int = Field(..., description="Mini-batch size for local SGD.", ge=1)
     learningRate: float = Field(..., description="Initial learning rate.", gt=0.0)
-    maxGradNorm: float | None = Field(None, description="Gradient clipping norm bound for DP.", gt=0.0)
-    weightDecay: float | None = Field(None, ge=0.0)
-    warmupSteps: int | None = Field(None, ge=0)
+    maxGradNorm: Optional[float] = Field(None, description="Gradient clipping norm bound for DP.", gt=0.0)
+    weightDecay: Optional[float] = Field(None, ge=0.0)
+    warmupSteps: Optional[int] = Field(None, ge=0)
 
 
 class Mechanism(Enum):
@@ -2558,20 +2564,22 @@ class PrivacyConfig(BaseModel):
         extra="forbid",
     )
     mechanism: Mechanism = Field(..., description="DP noise mechanism to apply.")
-    epsilon: float | None = Field(None, description="Privacy budget epsilon.", gt=0.0)
-    delta: float | None = Field(None, description="Privacy budget delta.", gt=0.0)
-    noiseMultiplier: float | None = Field(None, gt=0.0)
-    clipNorm: float | None = Field(None, description="L2 sensitivity bound for clipping.", gt=0.0)
-    secureAggregation: bool | None = Field(False, description="Whether secure aggregation is required for this round.")
+    epsilon: Optional[float] = Field(None, description="Privacy budget epsilon.", gt=0.0)
+    delta: Optional[float] = Field(None, description="Privacy budget delta.", gt=0.0)
+    noiseMultiplier: Optional[float] = Field(None, gt=0.0)
+    clipNorm: Optional[float] = Field(None, description="L2 sensitivity bound for clipping.", gt=0.0)
+    secureAggregation: Optional[bool] = Field(
+        False, description="Whether secure aggregation is required for this round."
+    )
 
 
 class DataConfig(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    datasetKey: str | None = Field(None, description="SDK-registered dataset key to train on.")
-    maxSamples: int | None = Field(None, description="Maximum number of local samples to use.", ge=1)
-    minSamples: int | None = Field(None, description="Minimum required samples; device aborts if below this.", ge=1)
+    datasetKey: Optional[str] = Field(None, description="SDK-registered dataset key to train on.")
+    maxSamples: Optional[int] = Field(None, description="Maximum number of local samples to use.", ge=1)
+    minSamples: Optional[int] = Field(None, description="Minimum required samples; device aborts if below this.", ge=1)
 
 
 class TrainingPlan(BaseModel):
@@ -2585,11 +2593,11 @@ class TrainingPlan(BaseModel):
         ...,
         description="ArtifactId of the base model to train. Device must have this artifact staged.",
     )
-    adapterArtifactId: str | None = Field(None, description="ArtifactId of an adapter to fine-tune, if applicable.")
+    adapterArtifactId: Optional[str] = Field(None, description="ArtifactId of an adapter to fine-tune, if applicable.")
     hyperparameters: Hyperparameters = Field(..., description="Local training hyperparameters.")
     privacyConfig: PrivacyConfig = Field(..., description="Differential privacy configuration.")
-    dataConfig: DataConfig | None = Field(None, description="Local data selection constraints.")
-    executionWindowSeconds: int | None = Field(
+    dataConfig: Optional[DataConfig] = Field(None, description="Local data selection constraints.")
+    executionWindowSeconds: Optional[int] = Field(
         None,
         description="Maximum wall-clock seconds allowed for local training.",
         ge=60,
@@ -2607,7 +2615,7 @@ class ApiKeyScopesResponse(BaseModel):
     scopes: Dict[str, Scopes]
     org_key: ApiKeyScopesResponseKeyTypeScopesResponse
     publishable_key: ApiKeyScopesResponseKeyTypeScopesResponse
-    app_key: ApiKeyScopesResponseKeyTypeScopesResponse | None = None
+    app_key: Optional[ApiKeyScopesResponseKeyTypeScopesResponse] = None
     templates: Dict[str, Templates]
 
 
@@ -2634,18 +2642,18 @@ class ExperimentAnalytics(BaseModel):
     )
     total_events: int
     total_devices: int
-    started_at: datetime | None = None
+    started_at: Optional[datetime] = None
     variants: List[ExperimentAnalyticsVariantAnalytics] = Field(..., description="Per-variant analytics summary.")
-    significance_result: ExperimentAnalyticsSignificanceResult | None = Field(
+    significance_result: Optional[ExperimentAnalyticsSignificanceResult] = Field(
         None,
         description="Welch t-test result. Null when either variant has fewer than 2 observations.",
     )
-    statistical_power: float | None = Field(
+    statistical_power: Optional[float] = Field(
         None,
         description="Observed statistical power. Null when significance_result is null.",
     )
-    recommendation: str | None = None
-    warnings: List[str] | None = None
+    recommendation: Optional[str] = None
+    warnings: Optional[List[str]] = None
 
 
 class Run(BaseModel):
@@ -2658,13 +2666,13 @@ class Run(BaseModel):
     model: str
     status: Status10
     query: str = Field(..., max_length=2000)
-    summary: str | None = None
-    confidence: float | None = Field(None, ge=0.0, le=1.0)
-    error: str | None = None
-    steps: List[Step] | None = None
-    pending_approvals: List[ApprovalRequest] | None = None
+    summary: Optional[str] = None
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    error: Optional[str] = None
+    steps: Optional[List[Step]] = None
+    pending_approvals: Optional[List[ApprovalRequest]] = None
     created_at: datetime
-    completed_at: datetime | None = None
+    completed_at: Optional[datetime] = None
 
 
 class AppResolutionSchema(BaseModel):
@@ -2672,7 +2680,7 @@ class AppResolutionSchema(BaseModel):
         extra="forbid",
     )
     app_id: str = Field(..., description="Server-assigned application identifier (UUID).")
-    app_slug: str | None = Field(None, description="Human-readable app slug used in the @app/ reference.")
+    app_slug: Optional[str] = Field(None, description="Human-readable app slug used in the @app/ reference.")
     capability: str = Field(
         ...,
         description="Resolved capability (e.g. 'chat', 'embeddings', 'transcription').",
@@ -2685,37 +2693,49 @@ class AppResolutionSchema(BaseModel):
         ...,
         description="Concrete model name resolved from the app's deployment (e.g. 'gemma3-1b').",
     )
-    selected_model_variant_id: str | None = Field(
+    selected_model_variant_id: Optional[str] = Field(
         None, description="Catalog model variant identifier for the selected model."
     )
-    selected_model_version: str | None = Field(None, description="Version string of the selected model.")
-    artifact_candidates: List[RuntimePlanResponseSchemaRuntimeArtifactPlan] | None = Field(
+    selected_model_version: Optional[str] = Field(None, description="Version string of the selected model.")
+    artifact_candidates: Optional[List[RuntimePlanResponseSchemaRuntimeArtifactPlan]] = Field(
         None,
         description="Available artifact options for the resolved model, filtered for the requesting device.",
     )
-    preferred_engines: List[str] | None = Field(
+    preferred_engines: Optional[List[str]] = Field(
         None,
         description="Ordered list of preferred engine identifiers for this device and capability.",
     )
-    fallback_policy: str | None = Field(
+    fallback_policy: Optional[str] = Field(
         None,
         description="Fallback locality ('cloud') or null if no fallback is permitted (e.g. private/local_only).",
     )
-    plan_ttl_seconds: int | None = Field(
+    plan_ttl_seconds: Optional[int] = Field(
         604800,
         description="How long this resolution is valid, in seconds. Default: 604800 (7 days).",
         ge=0,
     )
-    public_client_allowed: bool | None = Field(
+    public_client_allowed: Optional[bool] = Field(
         False,
         description="Per-app capability flag. True when the operator has explicitly enabled public-client (browser publishable / mobile bundle) calls against the hosted gateway for this app. Default false. Private/local_only routing keeps this false even if the flag is on. Server-side enforcement still requires the request key to carry cloud:inference:public.",
     )
 
 
 class ContentPart(
-    RootModel[ContentPartInputText | ContentPartInputImage | ContentPartInputAudio | ContentPartInputVideo]
+    RootModel[
+        Union[
+            ContentPartInputText,
+            ContentPartInputImage,
+            ContentPartInputAudio,
+            ContentPartInputVideo,
+        ]
+    ]
 ):
-    root: ContentPartInputText | ContentPartInputImage | ContentPartInputAudio | ContentPartInputVideo = Field(
+    root: Union[
+        ContentPartInputText,
+        ContentPartInputImage,
+        ContentPartInputAudio,
+        ContentPartInputVideo,
+    ] = Field(
         ...,
         description="Typed content part for multimodal messages. Each media part requires exactly one source (assetId, url, or data).",
     )
@@ -2735,22 +2755,22 @@ class DesiredState(BaseModel):
         ...,
         description="The target serving binding (base model + adapters) for this device.",
     )
-    syncRevision: str | None = Field(None, description="Monotonic revision for change detection.")
-    rolloutId: str | None = Field(
+    syncRevision: Optional[str] = Field(None, description="Monotonic revision for change detection.")
+    rolloutId: Optional[str] = Field(
         None,
         description="Opaque identifier for the active rollout targeting this device.",
     )
-    models: List[DesiredModelEntry] | None = Field(
+    models: Optional[List[DesiredModelEntry]] = Field(
         None,
         description="Per-model desired state entries with delivery mode, activation policy, and engine constraints.",
     )
-    policyConfig: PolicyConfig | None = Field(
+    policyConfig: Optional[PolicyConfig] = Field(
         None, description="Device-specific policy overrides. Absent means use defaults."
     )
-    federationOffers: List[FederationOffer] | None = Field(
+    federationOffers: Optional[List[FederationOffer]] = Field(
         None, description="Active federated round offers the device should evaluate."
     )
-    gcEligibleArtifactIds: List[str] | None = Field(
+    gcEligibleArtifactIds: Optional[List[str]] = Field(
         None,
         description="Artifact IDs the server considers safe to evict from local storage.",
     )
@@ -2767,21 +2787,22 @@ class DeviceRuntimeProfileSchema(BaseModel):
         description="Operating system platform (e.g. 'Darwin', 'Linux', 'iOS', 'macOS').",
     )
     arch: str = Field(..., description="CPU architecture (e.g. 'arm64', 'x86_64').")
-    os_version: str | None = Field(None, description="OS version string.")
-    chip: str | None = Field(
+    os_version: Optional[str] = Field(None, description="OS version string.")
+    chip: Optional[str] = Field(
         None,
         description="Chip/SoC identifier (e.g. 'Apple M2', 'A17 Pro', 'Snapdragon 8 Gen 3').",
     )
-    ram_total_bytes: int | None = Field(None, description="Total system RAM in bytes.", ge=0)
-    gpu_core_count: int | None = Field(None, description="Number of GPU cores, if known.", ge=0)
-    accelerators: List[str] | None = Field(
+    ram_total_bytes: Optional[int] = Field(None, description="Total system RAM in bytes.", ge=0)
+    gpu_core_count: Optional[int] = Field(None, description="Number of GPU cores, if known.", ge=0)
+    accelerators: Optional[List[str]] = Field(
         None,
         description="Available hardware accelerators (e.g. 'metal', 'cuda', 'ane', 'nnapi', 'webgpu').",
     )
-    installed_runtimes: List[DeviceRuntimeProfileSchemaInstalledRuntime] | None = Field(
-        None, description="Locally-installed inference engines detected on this device."
+    installed_runtimes: Optional[List[DeviceRuntimeProfileSchemaInstalledRuntime]] = Field(
+        None,
+        description="Locally-installed inference engines detected on this device.",
     )
-    supported_gate_codes: List[Code1] | None = Field(
+    supported_gate_codes: Optional[List[Code1]] = Field(
         None,
         description="Device-environment gate codes this SDK can evaluate. Absent or empty = device-environment gates stripped, no candidate suppression. Non-empty = server may suppress local candidates with required unsupported device-environment gates.",
     )
@@ -2797,27 +2818,27 @@ class DeviceSyncRequest(BaseModel):
     )
     deviceId: str = Field(..., description="Opaque device identifier.")
     requestedAt: datetime = Field(..., description="ISO 8601 timestamp when the SDK initiated this sync.")
-    knownStateVersion: str | None = Field(
+    knownStateVersion: Optional[str] = Field(
         None,
         description="Last applied desired state syncRevision. Server may short-circuit if unchanged.",
     )
-    sdkVersion: str | None = Field(None, description="Version of the Octomil SDK.")
-    platform: str | None = Field(
+    sdkVersion: Optional[str] = Field(None, description="Version of the Octomil SDK.")
+    platform: Optional[str] = Field(
         None,
         description="DevicePlatform enum value (ios, android, python, browser, node).",
     )
-    appId: str | None = Field(None, description="Application identifier registered with Octomil.")
-    appVersion: str | None = Field(None, description="Version of the host application.")
-    modelInventory: List[ModelInventoryItem] | None = Field(
+    appId: Optional[str] = Field(None, description="Application identifier registered with Octomil.")
+    appVersion: Optional[str] = Field(None, description="Version of the host application.")
+    modelInventory: Optional[List[ModelInventoryItem]] = Field(
         None, description="Installed model artifacts and their statuses."
     )
-    activeVersions: List[ActiveVersion] | None = Field(
+    activeVersions: Optional[List[ActiveVersion]] = Field(
         None, description="Models currently loaded and serving inference."
     )
-    observedState: ObservedState | None = Field(
+    observedState: Optional[ObservedState] = Field(
         None, description="Full observed state snapshot, inlined for single round-trip."
     )
-    availableStorageBytes: int | None = Field(None, description="Free storage available on the device.", ge=0)
+    availableStorageBytes: Optional[int] = Field(None, description="Free storage available on the device.", ge=0)
 
 
 class DeviceSyncResponse(BaseModel):
@@ -2834,19 +2855,19 @@ class DeviceSyncResponse(BaseModel):
         ...,
         description="False if the knownStateVersion matched and no update is needed.",
     )
-    desiredState: DesiredState | None = Field(
+    desiredState: Optional[DesiredState] = Field(
         None, description="Full desired state. Absent when stateChanged is false."
     )
-    nextPollIntervalSeconds: int | None = Field(
+    nextPollIntervalSeconds: Optional[int] = Field(
         None,
         description="Server hint for how often the device should sync (seconds).",
         ge=1,
     )
-    serverTimestamp: datetime | None = Field(None, description="Current server time for clock skew correction.")
+    serverTimestamp: Optional[datetime] = Field(None, description="Current server time for clock skew correction.")
 
 
-class ResponseOutputItem(RootModel[ResponseTextOutput | ResponseToolCallOutput]):
-    root: ResponseTextOutput | ResponseToolCallOutput
+class ResponseOutputItem(RootModel[Union[ResponseTextOutput, ResponseToolCallOutput]]):
+    root: Union[ResponseTextOutput, ResponseToolCallOutput]
 
 
 class ResponseRequest(BaseModel):
@@ -2854,26 +2875,26 @@ class ResponseRequest(BaseModel):
         extra="forbid",
     )
     model: str
-    input: str | List[ResponseRequestContentBlock]
-    tools: List[ResponseRequestToolDef] | None = None
-    instructions: str | None = None
-    previousResponseId: str | None = None
-    maxOutputTokens: int | None = Field(None, ge=1)
-    temperature: float | None = Field(None, ge=0.0, le=2.0)
-    topP: float | None = Field(None, ge=0.0, le=1.0)
-    stop: List[str] | None = None
-    responseFormat: ResponseRequestResponseFormat | None = None
-    metadata: Dict[str, Any] | None = None
+    input: Union[str, List[ResponseRequestContentBlock]]
+    tools: Optional[List[ResponseRequestToolDef]] = None
+    instructions: Optional[str] = None
+    previousResponseId: Optional[str] = None
+    maxOutputTokens: Optional[int] = Field(None, ge=1)
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    topP: Optional[float] = Field(None, ge=0.0, le=1.0)
+    stop: Optional[List[str]] = None
+    responseFormat: Optional[ResponseRequestResponseFormat] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class RuntimeBenchmarkSubmissionSchema(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    source: Source1 | None = Field("planner", description="Where this benchmark originated.")
+    source: Optional[Source1] = Field("planner", description="Where this benchmark originated.")
     model: str = Field(..., description="Model identifier that was benchmarked.")
-    model_version: str | None = Field(None, description="Model version string, if known.")
-    artifact_digest: str | None = Field(
+    model_version: Optional[str] = Field(None, description="Model version string, if known.")
+    artifact_digest: Optional[str] = Field(
         None,
         description="Content digest of the artifact that was benchmarked (e.g. SHA-256 hex).",
     )
@@ -2885,22 +2906,24 @@ class RuntimeBenchmarkSubmissionSchema(BaseModel):
         ...,
         description="Canonical engine identifier used for the benchmark (e.g. 'mlx-lm', 'llama.cpp').",
     )
-    engine_version: str | None = Field(None, description="Engine version string, if known.")
-    quantization: str | None = Field(None, description="Quantization level used (e.g. 'q4_k_m', 'int8').")
+    engine_version: Optional[str] = Field(None, description="Engine version string, if known.")
+    quantization: Optional[str] = Field(None, description="Quantization level used (e.g. 'q4_k_m', 'int8').")
     device: DeviceRuntimeProfileSchema = Field(
         ...,
         description="Device runtime profile describing the hardware where the benchmark ran.",
     )
-    benchmark_tokens: int | None = Field(None, description="Number of tokens generated during the benchmark run.", ge=0)
-    ttft_ms: float | None = Field(None, description="Time to first token in milliseconds.", ge=0.0)
-    tokens_per_second: float | None = Field(
+    benchmark_tokens: Optional[int] = Field(
+        None, description="Number of tokens generated during the benchmark run.", ge=0
+    )
+    ttft_ms: Optional[float] = Field(None, description="Time to first token in milliseconds.", ge=0.0)
+    tokens_per_second: Optional[float] = Field(
         None, description="Token generation throughput in tokens per second.", ge=0.0
     )
-    latency_ms: float | None = Field(None, description="Total inference latency in milliseconds.", ge=0.0)
-    peak_memory_bytes: int | None = Field(None, description="Peak memory usage during inference in bytes.", ge=0)
+    latency_ms: Optional[float] = Field(None, description="Total inference latency in milliseconds.", ge=0.0)
+    peak_memory_bytes: Optional[int] = Field(None, description="Peak memory usage during inference in bytes.", ge=0)
     success: bool = Field(..., description="Whether the benchmark run completed successfully.")
-    error_code: str | None = Field(None, description="Error code if the benchmark failed.")
-    metadata: Dict[str, Any] | None = Field(
+    error_code: Optional[str] = Field(None, description="Error code if the benchmark failed.")
+    metadata: Optional[Dict[str, Any]] = Field(
         None,
         description="Arbitrary metadata. Must NOT contain keys related to prompts, responses, audio, transcripts, or file paths.",
     )
@@ -2915,16 +2938,16 @@ class RuntimePlanRequestSchema(BaseModel):
         description="Model identifier to plan for (e.g. 'gemma-3-1b', 'smollm2-135m').",
     )
     capability: Capability = Field(..., description="Inference capability the plan should target.")
-    routing_policy: RoutingPolicy | None = Field(
+    routing_policy: Optional[RoutingPolicy] = Field(
         None,
         description="Routing policy controlling how candidates are prioritized and filtered. Defaults to local_first on the server. The auto value is retained for older SDK compatibility and is resolved by the server.",
     )
-    app_id: str | None = Field(None, description="Application identifier registered with Octomil.")
-    app_slug: str | None = Field(
+    app_id: Optional[str] = Field(None, description="Application identifier registered with Octomil.")
+    app_slug: Optional[str] = Field(
         None,
         description="Application slug for @app/{slug}/{capability} resolution. When present, the server resolves the app's configured model and routing policy.",
     )
-    org_id: str | None = Field(
+    org_id: Optional[str] = Field(
         None,
         description="Organization identifier. May also be derived from auth context on the server.",
     )
@@ -2932,7 +2955,7 @@ class RuntimePlanRequestSchema(BaseModel):
         ...,
         description="Device runtime profile describing the hardware and installed engines.",
     )
-    allow_cloud_fallback: bool | None = Field(
+    allow_cloud_fallback: Optional[bool] = Field(
         None,
         description="When true (or omitted), cloud candidates may appear in fallback_candidates under local_first policy. Set to false to suppress cloud fallback entirely.",
     )
@@ -2942,7 +2965,7 @@ class RuntimePlanResponseSchema(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    plan_schema_version: int | None = Field(
+    plan_schema_version: Optional[int] = Field(
         2,
         description="Schema version of the plan response. Version 2 introduces gate_class, evaluation_phase, fallback_eligible on CandidateGate.",
         ge=1,
@@ -2956,32 +2979,32 @@ class RuntimePlanResponseSchema(BaseModel):
     candidates: List[RuntimePlanResponseSchemaRuntimeCandidatePlan] = Field(
         ..., description="Ordered engine candidates (highest priority first)."
     )
-    fallback_candidates: List[RuntimePlanResponseSchemaRuntimeCandidatePlan] | None = Field(
+    fallback_candidates: Optional[List[RuntimePlanResponseSchemaRuntimeCandidatePlan]] = Field(
         None, description="Fallback candidates if primary candidates all fail."
     )
-    plan_ttl_seconds: int | None = Field(
+    plan_ttl_seconds: Optional[int] = Field(
         604800,
         description="How long this plan is valid, in seconds. Default: 604800 (7 days).",
         ge=0,
     )
-    fallback_allowed: bool | None = Field(
+    fallback_allowed: Optional[bool] = Field(
         True,
         description="Whether the SDK is allowed to fall back to cloud inference if all local candidates fail. Private/local_only policies set this to false.",
     )
-    public_client_allowed: bool | None = Field(
+    public_client_allowed: Optional[bool] = Field(
         False,
         description="Whether public clients (browser publishable keys, mobile bundle keys) are allowed to dispatch this plan against the hosted gateway. Default false. Server flips true only when the app capability has 'Allow public clients' enabled AND the routing policy is not Private/local_only AND the request key carries the cloud:inference:public scope. Server-key callers ignore this field.",
     )
     server_generated_at: datetime = Field(..., description="ISO 8601 timestamp of when the server generated this plan.")
-    plan_correlation_id: str | None = Field(
+    plan_correlation_id: Optional[str] = Field(
         None,
         description="Opaque server-generated ID for correlating the plan with SDK route events and monitoring records.",
     )
-    app_resolution: AppResolutionSchema | None = Field(
+    app_resolution: Optional[AppResolutionSchema] = Field(
         None,
         description="Resolved application context when the request used an @app/{slug}/{capability} model ref or explicit app_slug. Null for plain model requests.",
     )
-    resolution: RuntimePlanResponseSchemaModelResolution | None = Field(
+    resolution: Optional[RuntimePlanResponseSchemaModelResolution] = Field(
         None,
         description="General model-reference resolution metadata for plain, capability-default, deployment, and experiment refs. App refs use app_resolution.",
     )
@@ -2994,11 +3017,13 @@ class ChatMessage(BaseModel):
     id: str = Field(..., description="Unique message identifier.", pattern="^msg_")
     threadId: str = Field(..., description="Parent thread identifier.", pattern="^thread_")
     role: Role1 = Field(..., description="Message author role.")
-    content: str | None = Field(None, description="Text content of the message.")
-    toolCalls: List[ResponseToolCall] | None = Field(None, description="Tool calls emitted by the assistant.")
-    toolCallId: str | None = Field(None, description="For role=tool, the ID of the tool call being responded to.")
-    metrics: ChatMessageGenerationMetrics | None = Field(None, description="Optional generation performance metrics.")
-    contentParts: List[ContentPart] | None = Field(
+    content: Optional[str] = Field(None, description="Text content of the message.")
+    toolCalls: Optional[List[ResponseToolCall]] = Field(None, description="Tool calls emitted by the assistant.")
+    toolCallId: Optional[str] = Field(None, description="For role=tool, the ID of the tool call being responded to.")
+    metrics: Optional[ChatMessageGenerationMetrics] = Field(
+        None, description="Optional generation performance metrics."
+    )
+    contentParts: Optional[List[ContentPart]] = Field(
         None,
         description="Typed content parts (canonical when present). content field becomes derived shorthand: concatenation of all InputText parts joined by newline, null if no text parts. Both present with conflicting values is invalid. Assistant messages use content only (output parts reserved for future).",
     )
@@ -3011,11 +3036,11 @@ class ChatTurnRequest(BaseModel):
     )
     threadId: str = Field(..., description="Thread to append the turn to.", pattern="^thread_")
     input: str = Field(..., description="User message text.")
-    inputParts: List[ContentPart] | None = Field(
+    inputParts: Optional[List[ContentPart]] = Field(
         None,
         description="Typed input parts (transitional — mirrors contentParts on messages). When present, takes precedence over input string.",
     )
-    config: Config | None = Field(None, description="Optional generation configuration.")
+    config: Optional[Config] = Field(None, description="Optional generation configuration.")
 
 
 class ChatTurnResult(BaseModel):
@@ -3034,7 +3059,7 @@ class Response(BaseModel):
     model: str
     output: List[ResponseOutputItem]
     finishReason: FinishReason
-    usage: ResponseUsage | None = None
+    usage: Optional[ResponseUsage] = None
 
 
 class ResponseStreamEventDoneEvent(BaseModel):
@@ -3046,6 +3071,16 @@ class ResponseStreamEventDoneEvent(BaseModel):
 
 
 class ResponseStreamEvent(
-    RootModel[ResponseStreamEventTextDeltaEvent | ResponseStreamEventToolCallDeltaEvent | ResponseStreamEventDoneEvent]
+    RootModel[
+        Union[
+            ResponseStreamEventTextDeltaEvent,
+            ResponseStreamEventToolCallDeltaEvent,
+            ResponseStreamEventDoneEvent,
+        ]
+    ]
 ):
-    root: ResponseStreamEventTextDeltaEvent | ResponseStreamEventToolCallDeltaEvent | ResponseStreamEventDoneEvent
+    root: Union[
+        ResponseStreamEventTextDeltaEvent,
+        ResponseStreamEventToolCallDeltaEvent,
+        ResponseStreamEventDoneEvent,
+    ]
