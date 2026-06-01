@@ -230,6 +230,8 @@ class NativeTtsStreamBackend:
         # again. Lets tests assert that a "hit" produces a different
         # observable code path from a "miss".
         self._last_text_was_normalized_from_cache: bool = False
+        self._active_session: Any | None = None
+        self._active_session_lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -337,6 +339,7 @@ class NativeTtsStreamBackend:
     def close(self) -> None:
         # v0.1.11 Lane C — clear frontend cache on close (lifecycle contract).
         self._frontend_cache.clear()
+        self.cancel_active_synthesis()
         if self._model is not None:
             close_model = getattr(self._model, "close", None)
             try:
@@ -399,6 +402,36 @@ class NativeTtsStreamBackend:
             )
         return v
 
+    def cancel_active_synthesis(self) -> bool:
+        """Cancel the currently draining TTS session, if any.
+
+        The scheduler calls this from the event-loop thread when a
+        higher-priority request preempts a lower-priority synthesis. The
+        native session's cancel method is documented as cross-thread safe.
+        """
+        with self._active_session_lock:
+            sess = self._active_session
+        if sess is None:
+            return False
+        cancel = getattr(sess, "cancel", None)
+        if not callable(cancel):
+            return False
+        try:
+            cancel()
+        except Exception:  # noqa: BLE001
+            logger.debug("NativeTtsStreamBackend.cancel_active_synthesis failed", exc_info=True)
+            return False
+        return True
+
+    def _set_active_session(self, sess: Any) -> None:
+        with self._active_session_lock:
+            self._active_session = sess
+
+    def _clear_active_session(self, sess: Any) -> None:
+        with self._active_session_lock:
+            if self._active_session is sess:
+                self._active_session = None
+
     # ------------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------------
@@ -410,6 +443,7 @@ class NativeTtsStreamBackend:
         deadline_ms: int | None = None,
         speed: float = 1.0,
         language: str = "en-US",
+        cancel_event: threading.Event | None = None,
     ) -> Iterator[TtsAudioChunk]:
         """Yields sentence-bounded chunks progressively during synthesis.
 
@@ -543,12 +577,14 @@ class NativeTtsStreamBackend:
                 "native TTS-stream backend failed to open session",
                 last_error=getattr(exc, "last_error", ""),
             ) from exc
+        self._set_active_session(sess)
 
         # Defer numpy import to the first call — keeps module import
         # cheap and matches the STT backend pattern.
         try:
             import numpy as _np  # type: ignore[import-not-found]
         except ImportError as exc:
+            self._clear_active_session(sess)
             sess.close()
             raise OctomilError(
                 code=OctomilErrorCode.RUNTIME_UNAVAILABLE,
@@ -556,6 +592,17 @@ class NativeTtsStreamBackend:
                     "native TTS-stream: numpy is required to surface PCM chunks as float32 arrays; pip install numpy"
                 ),
             ) from exc
+
+        if cancel_event is not None and cancel_event.is_set():
+            try:
+                sess.cancel()
+            finally:
+                self._clear_active_session(sess)
+                sess.close()
+            raise OctomilError(
+                code=OctomilErrorCode.CANCELLED,
+                message="native TTS synthesis cancelled before text submission",
+            )
 
         # Codex r2 P2 fix: send_text MUST be synchronous (i.e. inside
         # the request scope, BEFORE any StreamingResponse begins) so
@@ -565,6 +612,7 @@ class NativeTtsStreamBackend:
         try:
             sess.send_text(text_to_send)
         except NativeRuntimeError as exc:
+            self._clear_active_session(sess)
             sess.close()
             raise _runtime_status_to_sdk_error(
                 exc.status,
@@ -597,6 +645,7 @@ class NativeTtsStreamBackend:
             np_module=_np,
             resolved_deadline_ms=resolved_deadline_ms,
             cache_hit=cached_value is not None,
+            cancel_event=cancel_event,
         )
 
     async def synthesize_stream(
@@ -649,6 +698,7 @@ class NativeTtsStreamBackend:
         np_module: Any,
         resolved_deadline_ms: int,
         cache_hit: bool = False,
+        cancel_event: threading.Event | None = None,
     ) -> Iterator[TtsAudioChunk]:
         """Inner generator — split out so :meth:`synthesize_with_chunks`
         can do *synchronous* validation (voice / text / deadline / model)
@@ -677,6 +727,15 @@ class NativeTtsStreamBackend:
             deadline_seconds = resolved_deadline_ms / 1000.0
             deadline = time.monotonic() + deadline_seconds
             while time.monotonic() < deadline:
+                if cancel_event is not None and cancel_event.is_set():
+                    try:
+                        sess.cancel()
+                    except Exception:  # noqa: BLE001
+                        logger.debug("NativeTtsStreamBackend._drain cancel failed", exc_info=True)
+                    raise OctomilError(
+                        code=OctomilErrorCode.CANCELLED,
+                        message="native TTS synthesis cancelled by higher-priority request",
+                    )
                 try:
                     ev = sess.poll_event(timeout_ms=200)
                 except NativeRuntimeError as exc:
@@ -796,6 +855,7 @@ class NativeTtsStreamBackend:
                 verbose_meta,
             )
         finally:
+            self._clear_active_session(sess)
             sess.close()
 
 

@@ -10,6 +10,7 @@ errors, and the HTTP route's metadata-headers + non-empty body shape.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from typing import AsyncIterator, Optional
 from unittest.mock import MagicMock, patch
@@ -1203,6 +1204,124 @@ async def test_private_kokoro_artifact_with_private_voice_in_voices_txt_is_accep
         assert response.route.locality == "on_device"
         # The fake backend reports the requested voice.
         assert response.voice == private_voice
+
+
+@pytest.mark.asyncio
+async def test_foreground_create_preempts_speculative_create():
+    """FR-4 regression: foreground create() must not sit behind a
+    speculative create() for the full utterance when the backend exposes
+    cooperative cancellation.
+    """
+    from octomil.config.local import ResolvedExecutionDefaults
+    from octomil.errors import OctomilError, OctomilErrorCode
+    from octomil.execution.kernel import ExecutionKernel
+
+    class PreemptibleCreateBackend(FakeStreamingBackend):
+        def __init__(self) -> None:
+            super().__init__(chunk_delay_s=0.001)
+            self.started_speculative = threading.Event()
+            self.cancelled_speculative = threading.Event()
+
+        def synthesize(
+            self,
+            text: str,
+            voice: Optional[str] = None,
+            speed: float = 1.0,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> dict:
+            if text == "speculative":
+                self.started_speculative.set()
+                for _ in range(200):
+                    if cancel_event is not None and cancel_event.is_set():
+                        self.cancelled_speculative.set()
+                        raise OctomilError(
+                            code=OctomilErrorCode.CANCELLED,
+                            message="speculative synthesis cancelled",
+                        )
+                    time.sleep(0.005)
+                raise AssertionError("speculative create was not preempted")
+            return super().synthesize(text, voice, speed)
+
+    backend = PreemptibleCreateBackend()
+    kernel = ExecutionKernel.__new__(ExecutionKernel)
+    kernel._config_set = MagicMock()
+    kernel._tts_scheduler = None
+
+    defaults = ResolvedExecutionDefaults(
+        model="kokoro-82m",
+        policy_preset="local_only",
+        inline_policy=None,
+        cloud_profile=None,
+    )
+
+    common_patches = [
+        patch.object(kernel, "_resolve", return_value=defaults),
+        patch("octomil.execution.kernel._resolve_planner_selection", return_value=None),
+        patch("octomil.execution.kernel._resolve_routing_policy"),
+        patch.object(kernel, "_sherpa_tts_runtime_loadable", return_value=True),
+        patch.object(kernel, "_resolve_local_tts_backend", return_value=backend),
+        patch.object(kernel, "_validate_local_voice", return_value=None),
+        patch(
+            "octomil.execution.kernel._select_locality_for_capability",
+            return_value=("on_device", False),
+        ),
+    ]
+
+    with contextlib_ExitStack() as st:
+        for p in common_patches:
+            st.enter_context(p)
+
+        speculative_task = asyncio.create_task(
+            kernel.synthesize_speech(
+                model="kokoro-82m",
+                input="speculative",
+                priority="speculative",
+            )
+        )
+        assert await asyncio.to_thread(backend.started_speculative.wait, 2.0)
+
+        foreground = await asyncio.wait_for(
+            kernel.synthesize_speech(
+                model="kokoro-82m",
+                input="foreground",
+                priority="foreground",
+            ),
+            timeout=1.0,
+        )
+
+        with pytest.raises(OctomilError) as exc:
+            await asyncio.wait_for(speculative_task, timeout=1.0)
+
+    assert exc.value.code == OctomilErrorCode.CANCELLED
+    assert backend.cancelled_speculative.is_set()
+    assert foreground.audio_bytes
+    assert kernel.tts_scheduler.stats.speculative_cancellations == 1
+
+
+def test_backend_synthesize_helper_forwards_cancel_event_to_kwargs_backend():
+    from octomil.execution.kernel import _call_backend_synthesize
+
+    class KwargsBackend:
+        def __init__(self) -> None:
+            self.kwargs: dict = {}
+
+        def synthesize(self, text: str, voice: Optional[str], speed: float, **kwargs) -> dict:
+            self.kwargs = kwargs
+            return {"audio_bytes": b"", "content_type": "audio/wav", "format": "wav"}
+
+    backend = KwargsBackend()
+    cancel_event = threading.Event()
+
+    _call_backend_synthesize(backend, "hello", None, 1.0, cancel_event)
+
+    assert backend.kwargs["cancel_event"] is cancel_event
+
+
+def test_call_accepts_keyword_returns_false_for_opaque_callable():
+    from octomil.execution.kernel import _call_accepts_keyword
+
+    assert _call_accepts_keyword(object(), "cancel_event") is False
 
 
 # Lightweight import — keeps the patch-stack assembly above readable

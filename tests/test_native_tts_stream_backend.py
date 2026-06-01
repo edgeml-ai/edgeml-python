@@ -28,6 +28,7 @@ from typing import Any
 import pytest
 
 from octomil.errors import OctomilError, OctomilErrorCode
+from octomil.runtime.native.loader import OCT_STATUS_INVALID_INPUT, NativeRuntimeError
 from octomil.runtime.native.tts_stream_backend import (
     NativeTtsStreamBackend,
     TtsAudioChunk,
@@ -252,6 +253,110 @@ class TestNativeTtsStreamBackendInputValidation:
         with pytest.raises(OctomilError) as excinfo:
             list(backend.synthesize_with_chunks("hello", deadline_ms=0))
         assert excinfo.value.code == OctomilErrorCode.INVALID_INPUT
+
+
+class _FakeCancelableTtsSession:
+    def __init__(self) -> None:
+        self.cancel_calls = 0
+        self.closed = False
+
+    def cancel(self) -> int:
+        self.cancel_calls += 1
+        return 0
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeSendTextFailingTtsSession(_FakeCancelableTtsSession):
+    def send_text(self, text: str) -> None:
+        raise NativeRuntimeError(OCT_STATUS_INVALID_INPUT, "send_text failed")
+
+
+class TestNativeTtsStreamBackendCancellation:
+    def test_cancel_active_synthesis_uses_current_session_and_clears_it(self) -> None:
+        backend = NativeTtsStreamBackend()
+        session = _FakeCancelableTtsSession()
+
+        backend._set_active_session(session)
+
+        assert backend.cancel_active_synthesis() is True
+        assert session.cancel_calls == 1
+
+        backend._clear_active_session(session)
+
+        assert backend.cancel_active_synthesis() is False
+
+    def test_cancel_active_synthesis_returns_false_without_cancel_hook(self) -> None:
+        backend = NativeTtsStreamBackend()
+        session = object()
+
+        backend._set_active_session(session)
+
+        assert backend.cancel_active_synthesis() is False
+
+        backend._clear_active_session(session)
+
+    def test_cancel_event_before_text_submission_closes_session_and_raises_cancelled(self) -> None:
+        import threading
+
+        session = _FakeCancelableTtsSession()
+        backend = NativeTtsStreamBackend()
+        backend._runtime = types.SimpleNamespace(  # type: ignore[assignment]
+            open_session=lambda **kw: session,
+            last_error=lambda: "",
+        )
+        backend._model = object()
+        cancel_event = threading.Event()
+        cancel_event.set()
+
+        with pytest.raises(OctomilError) as excinfo:
+            list(backend.synthesize_with_chunks("hello", cancel_event=cancel_event))
+
+        assert excinfo.value.code == OctomilErrorCode.CANCELLED
+        assert session.cancel_calls == 1
+        assert session.closed is True
+        assert backend.cancel_active_synthesis() is False
+
+    def test_send_text_failure_clears_active_session_and_closes(self) -> None:
+        session = _FakeSendTextFailingTtsSession()
+        backend = NativeTtsStreamBackend()
+        backend._runtime = types.SimpleNamespace(  # type: ignore[assignment]
+            open_session=lambda **kw: session,
+            last_error=lambda: "bad text",
+        )
+        backend._model = object()
+
+        with pytest.raises(OctomilError) as excinfo:
+            list(backend.synthesize_with_chunks("hello"))
+
+        assert excinfo.value.code == OctomilErrorCode.INVALID_INPUT
+        assert session.closed is True
+        assert backend.cancel_active_synthesis() is False
+
+    def test_drain_cancel_event_cancels_closes_and_clears_active_session(self) -> None:
+        import threading
+
+        session = _FakeCancelableTtsSession()
+        backend = NativeTtsStreamBackend()
+        backend._set_active_session(session)
+        cancel_event = threading.Event()
+        cancel_event.set()
+
+        with pytest.raises(OctomilError) as excinfo:
+            list(
+                backend._drain(
+                    sess=session,
+                    np_module=types.SimpleNamespace(),
+                    resolved_deadline_ms=1000,
+                    cancel_event=cancel_event,
+                )
+            )
+
+        assert excinfo.value.code == OctomilErrorCode.CANCELLED
+        assert session.cancel_calls == 1
+        assert session.closed is True
+        assert backend.cancel_active_synthesis() is False
 
 
 # ---------------------------------------------------------------------------
