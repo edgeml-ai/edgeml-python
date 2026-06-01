@@ -91,7 +91,7 @@ def test_prepare_then_synthesize_uses_native_batch_backend(tmp_path, monkeypatch
     policy='private')`` on the same kernel, the speech path must use
     ``NativeTtsBatchBackend`` and its native capability gate. Prepare
     may still write bytes to disk, but the dispatch path should not
-    thread that artifact dir into a legacy Sherpa backend."""
+    thread that artifact dir into a Python sherpa backend."""
     from octomil.config.local import ResolvedExecutionDefaults
     from octomil.execution.kernel import ExecutionKernel
     from octomil.runtime.lifecycle.durable_download import DownloadResult
@@ -211,7 +211,7 @@ def test_prepare_then_synthesize_uses_native_batch_backend(tmp_path, monkeypatch
             )
 
         # Native backend was used, and the prepared artifact dir was
-        # not threaded into a legacy Sherpa backend path.
+        # not threaded into a Python sherpa backend path.
         assert fake_backend.load_model.called
         fake_backend.load_model.assert_called_once_with(model)
         fake_backend.synthesize.assert_called_once()

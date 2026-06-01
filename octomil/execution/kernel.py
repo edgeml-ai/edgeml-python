@@ -2287,14 +2287,14 @@ class ExecutionKernel:
                     sample_rate=None,
                 )
 
-            from octomil.runtime.engines.sherpa.engine import _default_voice as _engine_default_voice
+            from octomil.runtime.engines.sherpa.catalog import _default_voice as _catalog_default_voice
 
             # P2 fix: only mark a default when it's actually present
             # in the resolved catalog. Otherwise fall back to the
             # bundle's first speaker so default_voice and the flagged
             # VoiceInfo always agree — synthesis with voice=None will
             # use that exact id.
-            model_default = (_engine_default_voice(runtime_model) or "").strip()
+            model_default = (_catalog_default_voice(runtime_model) or "").strip()
             resolved_lower = {name.lower() for name in resolved.voices}
             if model_default and model_default.lower() in resolved_lower:
                 effective_default = model_default
@@ -3093,8 +3093,8 @@ class ExecutionKernel:
         return manager.can_prepare(candidate)
 
     def _can_prepare_local_tts(self, model: str, selection: Optional[Any]) -> bool:
-        """Return True iff sherpa-onnx is importable, the model id is known,
-        and ``PrepareManager.can_prepare`` confirms the planner candidate
+        """Return True iff the model id is known and
+        ``PrepareManager.can_prepare`` confirms the planner candidate
         has enough metadata to succeed (digest + download_urls + a
         non-disabled policy + at most one required file).
 
@@ -3108,9 +3108,9 @@ class ExecutionKernel:
         if candidate is None or not getattr(candidate, "prepare_required", False):
             return False
         try:
-            from octomil.runtime.engines.sherpa import is_sherpa_tts_runtime_available
+            from octomil.runtime.engines.sherpa import is_sherpa_tts_model
 
-            if not is_sherpa_tts_runtime_available(model):
+            if not is_sherpa_tts_model(model):
                 return False
         except Exception:
             return False
@@ -3665,13 +3665,12 @@ class ExecutionKernel:
 
         self._warmed_backends.clear()
         release_planner_selection_cache()
-        # Best-effort: voice catalog cache lives in the sherpa engine
-        # module which only imports successfully when [tts] is
-        # installed. Skipping on ImportError matches the rest of the
-        # kernel's "sherpa-onnx may be unavailable on stripped
-        # embedded Pythons" posture.
+        # Best-effort: the sherpa catalog helper owns the voice-catalog
+        # cache used by list/preflight paths. It has no Python
+        # sherpa_onnx dependency; keep the guard so cache clearing never
+        # becomes a release-path failure.
         try:
-            from octomil.runtime.engines.sherpa.engine import (
+            from octomil.runtime.engines.sherpa.catalog import (
                 release_voice_catalog_cache,
             )
         except Exception:  # pragma: no cover — best-effort import

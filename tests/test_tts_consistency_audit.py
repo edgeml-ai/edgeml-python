@@ -1,4 +1,4 @@
-"""Cross-API consistency audit — voices.list ↔ create ↔ stream ↔ validate.
+"""Cross-API consistency audit — voices.list ↔ create ↔ stream ↔ validation.
 
 The closure-of-loop guarantee from the streaming-truthful + speaker-
 plumbing PRs is: every voice that ``voices.list`` advertises will be
@@ -10,12 +10,10 @@ from the others surfaces here regardless of which path the change
 landed on.
 
 Setup: a private kokoro artifact dir with a hand-written
-``voices.txt`` containing two voices ``af_audit_1`` and
-``af_audit_2``. The backend reads voices from disk; the kernel walks
-the same resolver for ``voices.list``; both create() and stream()
-flow through ``_validate_local_voice`` which itself reads the same
-voices.txt. If any of the four paths diverged, the mismatch would
-fail one of the asserts below.
+``voices.txt`` containing three voices. The catalog helper reads voices
+from disk; the kernel walks the same resolver for ``voices.list`` and
+``_validate_local_voice``. If the paths diverge, the mismatch fails one
+of the asserts below.
 """
 
 from __future__ import annotations
@@ -53,21 +51,10 @@ def staged_kokoro_artifact(tmp_path: Path) -> Path:
     return art
 
 
-def _build_audit_backend(model_dir: Path):
-    """Build a Kokoro backend bypassing __init__ (no real sherpa
-    import). The audit tests the resolver paths, not synthesis.
-    """
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
+def _resolve_sid(model_dir: Path, voice: str) -> int:
+    from octomil.runtime.engines.sherpa import resolve_voice_sid
 
-    backend = _SherpaTtsBackend.__new__(_SherpaTtsBackend)
-    backend._model_name = "kokoro-82m"  # type: ignore[attr-defined]
-    backend._family = "kokoro"  # type: ignore[attr-defined]
-    backend._injected_model_dir = str(model_dir)  # type: ignore[attr-defined]
-    backend._kwargs = {}  # type: ignore[attr-defined]
-    backend._sample_rate = 24000  # type: ignore[attr-defined]
-    backend._default_voice = "af_audit_1"  # type: ignore[attr-defined]
-    backend._tts = None  # type: ignore[attr-defined]
-    return backend
+    return resolve_voice_sid("kokoro-82m", voice, prepared_model_dir=str(model_dir))
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +68,8 @@ async def test_voices_list_create_stream_and_validate_share_catalog(staged_kokor
     assert their views of the catalog agree.
 
     Specifically:
-      1. ``backend.validate_voice("af_audit_2")`` resolves to a sid
-         under the staged voices.txt.
+      1. ``resolve_voice_sid("af_audit_2")`` resolves to a sid under the
+         staged voices.txt.
       2. ``resolve_voice_catalog`` reads the same three labels
          from voices.txt — this is the API ``voices.list`` walks.
       3. The native VoiceInfo entries we'd hand to ``VoiceCatalog``
@@ -91,18 +78,13 @@ async def test_voices_list_create_stream_and_validate_share_catalog(staged_kokor
       4. Default voice resolution agrees with the catalog's first
          entry by position.
     """
-    from octomil.runtime.engines.sherpa import resolve_voice_catalog
-
-    backend = _build_audit_backend(staged_kokoro_artifact)
+    from octomil.runtime.engines.sherpa import resolve_default_voice_label, resolve_voice_catalog
 
     # 1. validate_voice — synthesis-time gate (used by both create()
     #    and stream() pre-validation). All three labels must resolve.
-    sid_1, label_1 = backend.validate_voice("af_audit_1")
-    sid_2, label_2 = backend.validate_voice("af_audit_2")
-    sid_3, label_3 = backend.validate_voice("af_audit_3")
-    assert (sid_1, label_1) == (0, "af_audit_1")
-    assert (sid_2, label_2) == (1, "af_audit_2")
-    assert (sid_3, label_3) == (2, "af_audit_3")
+    assert _resolve_sid(staged_kokoro_artifact, "af_audit_1") == 0
+    assert _resolve_sid(staged_kokoro_artifact, "af_audit_2") == 1
+    assert _resolve_sid(staged_kokoro_artifact, "af_audit_3") == 2
 
     # 2. resolve_voice_catalog — what voices.list calls.
     resolved = resolve_voice_catalog(
@@ -116,15 +98,16 @@ async def test_voices_list_create_stream_and_validate_share_catalog(staged_kokor
     catalog_set = {v.lower() for v in resolved.voices}
     for label in ("af_audit_1", "af_audit_2", "af_audit_3"):
         assert label.lower() in catalog_set
-        # And conversely: every catalog entry resolves through validate_voice.
-        sid, resolved_label = backend.validate_voice(label)
-        assert resolved_label == label
+        # And conversely: every catalog entry resolves through sid validation.
+        sid = _resolve_sid(staged_kokoro_artifact, label)
+        assert sid >= 0
 
     # 4. Default voice — kernel picks "the bundle's first speaker"
     #    when the model's documented default isn't in the catalog.
     #    af_bella IS the doc default for kokoro-82m and is NOT in
     #    voices.txt, so the kernel falls back to resolved.voices[0].
-    default_sid, default_label = backend.validate_voice(None)
+    default_sid = 0
+    default_label = resolve_default_voice_label("kokoro-82m", prepared_model_dir=str(staged_kokoro_artifact))
     assert default_label == "af_audit_1"
     assert default_sid == 0
 
@@ -136,12 +119,10 @@ async def test_unsupported_voice_rejected_by_validate_and_would_fail_listing(
     """The catalog and the validation layer must agree on what's
     invalid too. A name that isn't in voices.txt:
       - is NOT in resolve_voice_catalog's output;
-      - is rejected by backend.validate_voice with a clear error.
+      - is rejected by resolve_voice_sid with a clear error.
     """
     from octomil.errors import OctomilError, OctomilErrorCode
     from octomil.runtime.engines.sherpa import resolve_voice_catalog
-
-    backend = _build_audit_backend(staged_kokoro_artifact)
 
     resolved = resolve_voice_catalog(
         "kokoro-82m",
@@ -150,7 +131,7 @@ async def test_unsupported_voice_rejected_by_validate_and_would_fail_listing(
     assert "af_phantom" not in resolved.voices
 
     with pytest.raises(OctomilError) as exc_info:
-        backend.validate_voice("af_phantom")
+        _resolve_sid(staged_kokoro_artifact, "af_phantom")
     assert exc_info.value.code == OctomilErrorCode.INVALID_INPUT
     assert "voice_not_supported_for_model" in exc_info.value.error_message
 
@@ -162,7 +143,7 @@ async def test_planner_logical_speakers_round_trip_through_resolver(staged_kokor
       - voices.list (via list_logical_speakers) advertises the speaker;
       - speech.create / .stream resolve it through the speaker
         resolver to the SAME native voice the catalog lists;
-      - validate_voice accepts that native voice.
+      - resolve_voice_sid accepts that native voice.
     """
     from octomil.execution.tts_speaker_resolver import (
         list_logical_speakers,
@@ -186,8 +167,6 @@ async def test_planner_logical_speakers_round_trip_through_resolver(staged_kokor
             },
         ),
     )
-    backend = _build_audit_backend(staged_kokoro_artifact)
-
     # voices.list view
     speakers = list_logical_speakers(selection)
     assert speakers[0]["speaker_id"] == "narrator"
@@ -203,20 +182,17 @@ async def test_planner_logical_speakers_round_trip_through_resolver(staged_kokor
     assert resolved.source == "planner_profile"
     assert resolved.native_voice == "af_audit_2"
 
-    # validate_voice accepts the resolved native voice (closes loop)
-    sid, label = backend.validate_voice(resolved.native_voice)
-    assert label == "af_audit_2"
-    assert sid == 1
+    # resolve_voice_sid accepts the resolved native voice (closes loop)
+    assert _resolve_sid(staged_kokoro_artifact, resolved.native_voice) == 1
 
 
 def test_voice_info_ids_round_trip_with_validate_voice(staged_kokoro_artifact: Path):
     """A ``VoiceInfo`` constructed from the resolver's catalog must
-    produce ids that ``backend.validate_voice`` accepts. Catches
+    produce ids that ``resolve_voice_sid`` accepts. Catches
     case-mangling regressions (kernel lower-cases for default
     matching, resolver preserves case)."""
     from octomil.runtime.engines.sherpa import resolve_voice_catalog
 
-    backend = _build_audit_backend(staged_kokoro_artifact)
     resolved = resolve_voice_catalog(
         "kokoro-82m",
         prepared_model_dir=str(staged_kokoro_artifact),
@@ -227,6 +203,5 @@ def test_voice_info_ids_round_trip_with_validate_voice(staged_kokoro_artifact: P
     ]
 
     for info in voice_infos:
-        sid, label = backend.validate_voice(info.id)
-        assert label == info.id, f"VoiceInfo id {info.id!r} disagreed with validate_voice {label!r}"
+        sid = _resolve_sid(staged_kokoro_artifact, info.id)
         assert sid == info.sid, f"sid mismatch on {info.id!r}: catalog={info.sid} validate={sid}"

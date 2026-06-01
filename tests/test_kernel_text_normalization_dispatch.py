@@ -221,36 +221,3 @@ async def test_unknown_explicit_profile_falls_back_to_auto():
     # to auto → backend declared espeak_compat → normalize.
     result = _normalize_text_for_backend(backend, raw, "future_codec_v3")
     assert result == "I owe him 1200 dollars."
-
-
-# ---------------------------------------------------------------------------
-# Sherpa backend declares the right profile per family
-# ---------------------------------------------------------------------------
-
-
-def test_sherpa_kokoro_declares_espeak_compat_profile():
-    """Sanity check on the engine.py side of the wiring."""
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    backend = _SherpaTtsBackend.__new__(_SherpaTtsBackend)
-    backend._family = "kokoro"
-    assert backend.text_normalization_profile() == "espeak_compat"
-
-
-def test_sherpa_piper_declares_espeak_compat_profile():
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    backend = _SherpaTtsBackend.__new__(_SherpaTtsBackend)
-    backend._family = "vits"
-    assert backend.text_normalization_profile() == "espeak_compat"
-
-
-def test_sherpa_pocket_declares_none_profile():
-    """Pocket has its own LM-based text frontend; SDK-side
-    normalization would be a regression. Kokoro/Piper espeak rules
-    must NOT apply."""
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    backend = _SherpaTtsBackend.__new__(_SherpaTtsBackend)
-    backend._family = "pocket"
-    assert backend.text_normalization_profile() == "none"

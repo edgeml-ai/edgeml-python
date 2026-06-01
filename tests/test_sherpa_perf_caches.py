@@ -1,13 +1,8 @@
-"""Cross-model perf knobs in ``octomil.runtime.engines.sherpa.engine``.
+"""Cross-model catalog cache knobs in ``octomil.runtime.engines.sherpa.catalog``.
 
 Pins:
   - voice catalog cache (process-lifetime; cleared via the public
     release hook).
-  - default ONNX-Runtime thread count for sherpa-onnx TTS (cores
-    capped at 4, env-overridable).
-
-Both apply uniformly to Kokoro / Piper / Pocket via the shared
-sherpa-onnx code path, hence the cross-model framing.
 """
 
 from __future__ import annotations
@@ -16,9 +11,8 @@ from unittest.mock import patch
 
 import pytest
 
-from octomil.runtime.engines.sherpa.engine import (
+from octomil.runtime.engines.sherpa.catalog import (
     _VOICE_CATALOG_CACHE,
-    _default_sherpa_num_threads,
     release_voice_catalog_cache,
     resolve_voice_catalog,
 )
@@ -182,54 +176,3 @@ def test_release_warmed_backends_clears_voice_catalog_cache(tmp_path):
     kernel.release_warmed_backends()
 
     assert _VOICE_CATALOG_CACHE == {}
-
-
-# ---------------------------------------------------------------------------
-# Default ONNX Runtime thread count
-# ---------------------------------------------------------------------------
-
-
-def test_default_num_threads_caps_at_four_on_high_core_machines(monkeypatch):
-    """16-core box must NOT default to 16 threads — diminishing
-    returns above 4 + thrash on shared CI runners."""
-    monkeypatch.delenv("OCTOMIL_SHERPA_NUM_THREADS", raising=False)
-    with patch("octomil.runtime.engines.sherpa.engine.os.cpu_count", return_value=16):
-        assert _default_sherpa_num_threads() == 4
-
-
-def test_default_num_threads_uses_actual_core_count_below_cap(monkeypatch):
-    """3-core machine: default = 3, not 4 (don't oversubscribe)."""
-    monkeypatch.delenv("OCTOMIL_SHERPA_NUM_THREADS", raising=False)
-    with patch("octomil.runtime.engines.sherpa.engine.os.cpu_count", return_value=3):
-        assert _default_sherpa_num_threads() == 3
-
-
-def test_default_num_threads_floors_at_one(monkeypatch):
-    monkeypatch.delenv("OCTOMIL_SHERPA_NUM_THREADS", raising=False)
-    with patch("octomil.runtime.engines.sherpa.engine.os.cpu_count", return_value=None):
-        # cpu_count -> None => fall through to 2 (legacy default).
-        result = _default_sherpa_num_threads()
-        assert result >= 1
-
-
-def test_octomil_sherpa_num_threads_env_overrides_default(monkeypatch):
-    monkeypatch.setenv("OCTOMIL_SHERPA_NUM_THREADS", "8")
-    with patch("octomil.runtime.engines.sherpa.engine.os.cpu_count", return_value=2):
-        # env override wins even when cores < env value.
-        assert _default_sherpa_num_threads() == 8
-
-
-def test_octomil_sherpa_num_threads_env_invalid_falls_back_to_default(monkeypatch):
-    """Garbage env value must NOT crash dispatch — fall back to
-    the cores-capped-at-4 default."""
-    monkeypatch.setenv("OCTOMIL_SHERPA_NUM_THREADS", "not-a-number")
-    with patch("octomil.runtime.engines.sherpa.engine.os.cpu_count", return_value=8):
-        assert _default_sherpa_num_threads() == 4
-
-
-def test_octomil_sherpa_num_threads_env_zero_floors_to_one(monkeypatch):
-    """``num_threads=0`` is a configuration footgun (means 'all
-    cores' in some libraries, undefined in ONNX Runtime). Floor to
-    1 so we never feed 0 into sherpa-onnx."""
-    monkeypatch.setenv("OCTOMIL_SHERPA_NUM_THREADS", "0")
-    assert _default_sherpa_num_threads() == 1

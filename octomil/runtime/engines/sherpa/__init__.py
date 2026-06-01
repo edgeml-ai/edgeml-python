@@ -1,13 +1,14 @@
-"""sherpa-onnx engine — on-device speech synthesis (and ASR, future)."""
+"""sherpa-onnx model and voice-catalog helpers."""
 
-from octomil.runtime.engines.sherpa.engine import (
+from octomil.runtime.engines.sherpa.catalog import (
     _KOKORO_VOICES,
     ResolvedVoiceCatalog,
     catalog_for_model,
     fallback_catalog_for_artifact,
     is_sherpa_tts_model,
-    is_sherpa_tts_runtime_available,
+    resolve_default_voice_label,
     resolve_voice_catalog,
+    resolve_voice_sid,
 )
 
 TIER = "supported"
@@ -18,7 +19,8 @@ __all__ = [
     "catalog_for_model",
     "fallback_catalog_for_artifact",
     "is_sherpa_tts_model",
-    "is_sherpa_tts_runtime_available",
+    "resolve_default_voice_label",
     "resolve_voice_catalog",
+    "resolve_voice_sid",
     "_KOKORO_VOICES",
 ]
