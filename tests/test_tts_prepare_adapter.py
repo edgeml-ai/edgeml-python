@@ -101,12 +101,14 @@ class _FakePrepareManager:
 
 
 class _FakeNativeTtsBatchBackend:
-    supported_model_names = frozenset({"piper-en-amy", "piper-amy"})
+    supported_model_names = frozenset({"piper-en-amy", "piper-amy", "kokoro-82m"})
     last_loaded_model: str | None = None
+    last_load_kwargs: dict[str, Any] = {}
     synthesize_calls: list[tuple[str, str | None, float]] = []
 
-    def load_model(self, model_name: str) -> None:
+    def load_model(self, model_name: str, **kwargs: Any) -> None:
         self.__class__.last_loaded_model = model_name
+        self.__class__.last_load_kwargs = dict(kwargs)
 
     def synthesize(self, text: str, voice: str | None = None, speed: float = 1.0, **kwargs: Any):
         self.__class__.synthesize_calls.append((text, voice, speed))
@@ -122,7 +124,7 @@ class _FakeNativeTtsBatchBackend:
 
 
 class _FailingNativeTtsBatchBackend(_FakeNativeTtsBatchBackend):
-    def load_model(self, model_name: str) -> None:
+    def load_model(self, model_name: str, **kwargs: Any) -> None:
         raise OctomilError(code=ErrorCode.RUNTIME_UNAVAILABLE, message="native load failed")
 
 
@@ -134,6 +136,7 @@ def _patch_native_tts(stack, *, runtime_available: bool = True, backend_cls=_Fak
 @pytest.fixture(autouse=True)
 def _reset_fakes():
     _FakeNativeTtsBatchBackend.last_loaded_model = None
+    _FakeNativeTtsBatchBackend.last_load_kwargs = {}
     _FakeNativeTtsBatchBackend.synthesize_calls = []
     yield
 
@@ -151,6 +154,18 @@ def _kernel_with(prepare_manager) -> ExecutionKernel:
         },
     )()
     return kernel
+
+
+def test_native_tts_model_open_kwargs_uses_prepared_model_digest(tmp_path):
+    artifact_dir = tmp_path / "kokoro"
+    artifact_dir.mkdir()
+    model = artifact_dir / "model.onnx"
+    model.write_bytes(b"native-kokoro-test-model")
+
+    kwargs = ExecutionKernel._native_tts_model_open_kwargs(str(artifact_dir))
+
+    assert kwargs["model_path"] == str(model)
+    assert kwargs["artifact_digest"] == "sha256:4cfe19b37c86208c3f6bfed05a3de938b5716632a0f8679e7eaf4fc438548a66"
 
 
 @pytest.mark.asyncio

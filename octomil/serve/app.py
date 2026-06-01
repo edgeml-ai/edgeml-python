@@ -459,8 +459,9 @@ def create_app(
         elif _is_sherpa_tts_model(model_name):
             # Native cutover: batch and stream TTS both route through
             # octomil-runtime. The runtime advertises these capabilities
-            # only when OCTOMIL_SHERPA_TTS_MODEL points at the canonical
-            # piper-amy ONNX with required sidecars and digest gates.
+            # only when OCTOMIL_SHERPA_TTS_MODEL points at a reviewed
+            # native TTS ONNX (piper-amy or kokoro-82m) with required
+            # sidecars and digest gates.
             from ..runtime.native.tts_batch_backend import NativeTtsBatchBackend
 
             try:
@@ -1605,8 +1606,8 @@ def create_app(
                 message=(
                     "native audio.tts.stream backend not loaded. "
                     "Set OCTOMIL_RUNTIME_DYLIB + OCTOMIL_SHERPA_TTS_MODEL "
-                    "(canonical-pinned ONNX with sibling tokens.txt + "
-                    "espeak-ng-data/) and restart the server."
+                    "(reviewed native TTS ONNX with required sidecars, e.g. "
+                    "piper-amy or kokoro-82m) and restart the server."
                 ),
             )
 
@@ -1806,7 +1807,8 @@ def create_app(
                 code=OctomilErrorCode.RUNTIME_UNAVAILABLE,
                 message=(
                     "native audio.tts.batch backend not loaded. Set OCTOMIL_RUNTIME_DYLIB + "
-                    "OCTOMIL_SHERPA_TTS_MODEL to the canonical piper-amy ONNX bundle and restart the server."
+                    "OCTOMIL_SHERPA_TTS_MODEL to a reviewed native TTS ONNX bundle "
+                    "(piper-amy or kokoro-82m) and restart the server."
                 ),
             )
 

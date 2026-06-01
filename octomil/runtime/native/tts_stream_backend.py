@@ -56,6 +56,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, AsyncIterator, Iterator, Literal
 
 from ...audio.text_normalize import PROFILE_ESPEAK_COMPAT, normalize_for_profile
@@ -210,6 +211,7 @@ class NativeTtsStreamBackend:
         self._model_name: str = ""
         self._runtime: NativeRuntime | None = None
         self._model: Any | None = None
+        self._prepared_model_dir: str | None = None
         self._default_deadline_ms: int = (
             default_deadline_ms if default_deadline_ms is not None else self.DEFAULT_DEADLINE_MS
         )
@@ -266,6 +268,7 @@ class NativeTtsStreamBackend:
 
         if model_path:
             os.environ[_TTS_MODEL_ENV] = model_path
+            self._prepared_model_dir = str(Path(model_path).parent)
 
         try:
             self._runtime = NativeRuntime.open()
@@ -290,7 +293,7 @@ class NativeTtsStreamBackend:
                     code=OctomilErrorCode.CHECKSUM_MISMATCH,
                     message=(
                         f"native {self.backend_label} backend: sherpa-onnx TTS model "
-                        "SHA-256 does not match the canonical pin. "
+                        "SHA-256 does not match a reviewed native TTS pin. "
                         "Re-download the artifact."
                     ),
                 )
@@ -299,8 +302,8 @@ class NativeTtsStreamBackend:
                 message=(
                     f"native {self.backend_label} backend: runtime does not advertise "
                     f"'{self.capability_id}'. Check OCTOMIL_SHERPA_TTS_MODEL "
-                    "(must point at the pinned VITS .onnx with sibling "
-                    "tokens.txt + espeak-ng-data/) and that the dylib "
+                    "(must point at a reviewed native TTS .onnx with the required "
+                    "sidecars, e.g. piper-amy or kokoro-82m) and that the dylib "
                     "was built with OCT_HAVE_SHERPA_ONNX_TTS."
                 ),
             )
@@ -312,6 +315,8 @@ class NativeTtsStreamBackend:
                 code=OctomilErrorCode.RUNTIME_UNAVAILABLE,
                 message=(f"native {self.backend_label} backend: {_TTS_MODEL_ENV} not set."),
             )
+        if self._prepared_model_dir is None:
+            self._prepared_model_dir = str(Path(tts_model_path).parent)
         try:
             self._model = self._runtime.open_model(
                 model_uri=tts_model_path,
@@ -362,6 +367,8 @@ class NativeTtsStreamBackend:
                     exc_info=True,
                 )
             self._runtime = None
+        self._prepared_model_dir = None
+        self._artifact_digest = ""
 
     def __del__(self) -> None:
         try:
@@ -391,13 +398,23 @@ class NativeTtsStreamBackend:
         if not v:
             return "0"
         if not v.isdigit():
+            if self._model_name and self._prepared_model_dir:
+                from ...runtime.engines.sherpa import resolve_voice_sid
+
+                return str(
+                    resolve_voice_sid(
+                        self._model_name,
+                        v,
+                        prepared_model_dir=self._prepared_model_dir,
+                    )
+                )
             raise OctomilError(
                 code=OctomilErrorCode.INVALID_INPUT,
                 message=(
                     f"native TTS-stream: voice {voice!r} is not a non-negative "
-                    "integer sid string. sherpa-onnx accepts numeric speaker "
-                    'ids only at the runtime ABI; pass voice="0" for the '
-                    "model default."
+                    "integer sid string, and no prepared voice catalog is loaded "
+                    "for label resolution. Pass a numeric sid, or load from a "
+                    "prepared Kokoro artifact with voices.txt."
                 ),
             )
         return v
