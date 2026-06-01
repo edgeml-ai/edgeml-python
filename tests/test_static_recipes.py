@@ -1162,7 +1162,7 @@ def test_synthesize_speech_app_scoped_synthetic_candidate_surfaces_planner_error
     )()
 
     with ExitStack() as stack:
-        stack.enter_context(patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", _FakeEngine))
+        stack.enter_context(patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", _FakeEngine, create=True))
         stack.enter_context(patch("octomil.runtime.engines.sherpa.is_sherpa_tts_model", return_value=True))
         stack.enter_context(patch("octomil.runtime.engines.sherpa.is_sherpa_tts_runtime_available", return_value=True))
         stack.enter_context(patch("octomil.execution.kernel._resolve_planner_selection", return_value=selection))
@@ -1259,7 +1259,7 @@ def test_synthesize_speech_explicit_app_kwarg_does_not_short_circuit_cache(tmp_p
     )()
 
     with ExitStack() as stack:
-        stack.enter_context(patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", _FakeEngine))
+        stack.enter_context(patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", _FakeEngine, create=True))
         stack.enter_context(patch("octomil.runtime.engines.sherpa.is_sherpa_tts_model", return_value=True))
         stack.enter_context(patch("octomil.runtime.engines.sherpa.is_sherpa_tts_runtime_available", return_value=True))
         stack.enter_context(patch("octomil.execution.kernel._resolve_planner_selection", return_value=selection))
@@ -1339,7 +1339,7 @@ def test_synthesize_speech_direct_mismatched_identity_does_not_short_circuit_cac
     )()
 
     with ExitStack() as stack:
-        stack.enter_context(patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", _FakeEngine))
+        stack.enter_context(patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", _FakeEngine, create=True))
         stack.enter_context(patch("octomil.runtime.engines.sherpa.is_sherpa_tts_model", return_value=True))
         stack.enter_context(patch("octomil.runtime.engines.sherpa.is_sherpa_tts_runtime_available", return_value=True))
         stack.enter_context(patch("octomil.execution.kernel._resolve_planner_selection", return_value=selection))

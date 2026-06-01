@@ -140,8 +140,9 @@ def _make_app(
     tmp_path: Any,
 ) -> Any:
     """Build the production ``create_app`` with the
-    ``NativeTtsStreamBackend`` and ``SherpaTtsEngine`` factories
-    patched. Returns the FastAPI app + the python-sherpa fake.
+    ``NativeTtsStreamBackend`` factory patched. A create=True guard
+    ensures a reintroduced legacy ``SherpaTtsEngine`` would still
+    fail this test if startup constructed it.
     """
     pytest.importorskip("fastapi")
 
@@ -149,7 +150,7 @@ def _make_app(
     fake_engine.create_backend.return_value = sherpa_backend
 
     return (
-        patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", return_value=fake_engine),
+        patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", create=True, return_value=fake_engine),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
         _stub_kernel_warmup_for_tts(tmp_path),
         patch(

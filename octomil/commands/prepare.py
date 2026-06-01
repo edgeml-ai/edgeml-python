@@ -8,8 +8,8 @@ error.
 Today this command supports the capabilities whose dispatch paths
 actually consume the prepared ``model_dir``:
 
-- ``tts``           — ``SherpaTtsEngine`` loads from the prepared dir.
-- ``transcription`` — ``_WhisperBackend`` loads the prepared
+- ``tts``           — native TTS loads from the prepared artifact.
+- ``transcription`` — native/whisper STT loads the prepared
   ``<dir>/artifact`` sentinel (or the matching ``.bin`` / ``.gguf`` /
   ``.ggml``) instead of triggering pywhispercpp's HuggingFace download.
 
@@ -44,8 +44,8 @@ import click
     type=click.Choice(["tts", "transcription"]),
     show_default=True,
     help=(
-        "Which capability's planner candidate to prepare. Today: 'tts' (SherpaTtsEngine "
-        "consumes the prepared dir) and 'transcription' (whisper.cpp loads the prepared "
+        "Which capability's planner candidate to prepare. Today: 'tts' (native TTS "
+        "artifact) and 'transcription' (whisper.cpp loads the prepared "
         ".bin/.gguf/.ggml file instead of triggering its own download). Chat / responses "
         "and embedding are added once their backends consume the prepared dir."
     ),
