@@ -24,9 +24,11 @@ Extracted sub-modules (prefer importing from them directly):
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 import tempfile
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -301,6 +303,7 @@ def _call_backend_synthesize(
     text: str,
     resolved_speaker: Any,
     speed: float,
+    cancel_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     """Synchronous bridge to ``backend.synthesize`` that respects the resolver.
 
@@ -315,7 +318,22 @@ def _call_backend_synthesize(
     """
     voice = resolved_speaker.native_voice if resolved_speaker is not None else None
     extra = _backend_synthesize_kwargs(backend, resolved_speaker)
+    if cancel_event is not None and _call_accepts_keyword(backend.synthesize, "cancel_event"):
+        extra["cancel_event"] = cancel_event
     return backend.synthesize(text, voice, speed, **extra)
+
+
+def _call_accepts_keyword(fn: Any, name: str) -> bool:
+    try:
+        signature = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return False
+    for param in signature.parameters.values():
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            return True
+        if param.name == name:
+            return True
+    return False
 
 
 def _build_local_realtime_stream(
@@ -428,6 +446,9 @@ def _build_local_realtime_stream(
             inner_close_hook = getattr(inner, "aclose", None)
 
             async def _on_preempt() -> None:
+                cancel_active = getattr(backend, "cancel_active_synthesis", None)
+                if callable(cancel_active):
+                    await asyncio.to_thread(cancel_active)
                 if inner_close_hook is not None:
                     try:
                         await inner_close_hook()
@@ -1989,48 +2010,24 @@ class ExecutionKernel:
 
         # Scheduler slot acquisition.
         #
-        # P1 fix — no priority claim for create().
-        #
-        # The non-streaming ``synthesize`` call runs as a single
-        # ``engine.generate()`` on a worker thread (asyncio.to_thread)
-        # with NO per-chunk callback, so there is no cooperative
-        # cancellation hook the scheduler could fire to preempt
-        # an in-flight create(). Previously create() acquired the
-        # slot at the caller-supplied priority; the scheduler's
-        # preemption check then refused to preempt because the
-        # slot had no cancel hook, but the in-flight SPECULATIVE
-        # / PREFETCH still held the slot — a FOREGROUND create()
-        # would queue behind it instead of jumping the queue.
-        #
-        # That's the worst of both worlds: priority looks like it
-        # matters but only at queue-ordering time, never at
-        # in-flight preemption time. Honest fix: claim FOREGROUND
-        # at the scheduler, regardless of caller-supplied priority.
-        # All create() calls now FIFO at the scheduler — two
-        # creates run in arrival order — and the caller-supplied
-        # ``priority`` kwarg becomes telemetry metadata only.
-        #
-        # Stream callers ARE preemptible (synthesize_stream uses
-        # the per-chunk callback path) and continue to honor the
-        # caller-supplied priority via ``slot.set_cancel``.
-        #
-        # Future work: a backend ``synthesize_with_cancel`` variant
-        # that flips a cancellation flag the worker thread checks
-        # between phonemizer / model-forward / vocoder steps would
-        # let create() honor priority again.
-        from octomil.audio.scheduler import TtsRequestPriority
+        # Native batch TTS now drains the same sentence-bounded runtime
+        # chunks as streaming TTS, even though the public create() API
+        # returns one final WAV. That gives the scheduler a real
+        # cancellation handle: a foreground arrival can cancel an
+        # in-flight speculative / prefetch create at the next runtime
+        # poll/chunk boundary rather than waiting behind the whole
+        # utterance.
+        from octomil.audio.scheduler import coerce_priority
 
-        # Acquire FOREGROUND regardless of the caller-supplied
-        # ``priority`` kwarg. create() honors priority at the API
-        # surface (the kwarg accepts SPECULATIVE/PREFETCH for
-        # symmetry with stream()), but the scheduler treats every
-        # create() as FOREGROUND because there is no way to
-        # actually preempt an in-flight create(). FIFO ordering at
-        # the scheduler is honest; per-priority ordering would
-        # imply preemption we can't deliver.
-        del priority  # documented telemetry kwarg only — see block above
-        scheduler_priority = TtsRequestPriority.FOREGROUND
+        scheduler_priority = coerce_priority(priority)
         scheduler_key = f"{runtime_model}:{id(backend)}"
+        cancel_event = threading.Event()
+
+        async def _cancel_in_flight_create() -> None:
+            cancel_event.set()
+            cancel_active = getattr(backend, "cancel_active_synthesis", None)
+            if callable(cancel_active):
+                await asyncio.to_thread(cancel_active)
 
         # Apply backend-aware text normalization once we know which
         # backend will run. Sherpa Kokoro/Piper get the espeak_compat
@@ -2041,6 +2038,7 @@ class ExecutionKernel:
         normalized_input = _normalize_text_for_backend(backend, input, text_normalization)
 
         async with await self.tts_scheduler.acquire(key=scheduler_key, priority=scheduler_priority) as slot:
+            slot.set_cancel(_cancel_in_flight_create)
             t0 = time.monotonic()
             # Backends that opt into speaker-aware synthesis accept
             # ``speaker_profile=``; legacy backends ignore it and
@@ -2053,6 +2051,7 @@ class ExecutionKernel:
                 normalized_input,
                 resolved_speaker,
                 speed,
+                cancel_event,
             )
             latency_ms = (time.monotonic() - t0) * 1000.0
             _ = slot  # acquired-slot lifetime is the synthesis call

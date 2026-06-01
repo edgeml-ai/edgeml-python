@@ -49,6 +49,7 @@ class NativeTtsBatchBackend(NativeTtsStreamBackend):
         *,
         response_format: str = "wav",
         deadline_ms: int | None = None,
+        cancel_event: Any | None = None,
     ) -> dict[str, Any]:
         if response_format.lower() != "wav":
             from ...errors import OctomilError, OctomilErrorCode
@@ -64,6 +65,7 @@ class NativeTtsBatchBackend(NativeTtsStreamBackend):
                 voice_id=voice,
                 speed=speed,
                 deadline_ms=deadline_ms,
+                cancel_event=cancel_event,
             )
         )
         pcm_s16 = b"".join(_chunk_to_pcm_s16le(chunk) for chunk in chunks)
