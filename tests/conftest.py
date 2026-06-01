@@ -50,6 +50,7 @@ _RUNTIME_NO_MARKER_TESTS: frozenset[str] = frozenset(
         # Flavor-selection regression tests — use tmp_path caches; no live dylib.
         "test_both_flavors_cached_default_resolves_chat",
         "test_env_flavor_stt_selects_stt",
+        "test_env_flavor_tts_selects_tts",
         "test_env_flavor_invalid_raises",
         "test_env_flavor_override_applies_to_new_layout_legacy_unaffected",
     }

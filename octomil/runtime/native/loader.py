@@ -354,13 +354,14 @@ class OctomilUnsupportedError(NativeRuntimeError):
 ENV_DYLIB_OVERRIDE: str = "OCTOMIL_RUNTIME_DYLIB"
 
 # Env var that selects a specific runtime flavor when set.
-# Valid values: "chat", "stt".  Authoritative — no fallback when set.
+# Valid values: "chat", "stt", "tts".  Authoritative — no fallback when set.
 _ENV_FLAVOR: str = "OCTOMIL_RUNTIME_FLAVOR"
 
 # Preference order for flavor selection when no env override is set.
 # chat covers the most common consumer paths (chat completion, embeddings);
-# stt is opt-in.  First entry is most preferred (tried first by resolver).
-_FLAVOR_PREFERENCE: tuple[str, ...] = ("chat", "stt")
+# stt and tts are selected explicitly by capability-specific backends.
+# First entry is most preferred (tried first by resolver).
+_FLAVOR_PREFERENCE: tuple[str, ...] = ("chat", "stt", "tts")
 
 # Default location for a fetched dev artifact. The fetch script
 # (`scripts/fetch_runtime_dev.py`) extracts release tarballs into
@@ -419,13 +420,13 @@ def _fetched_dylib_candidates() -> list[Path]:
       are returned.  An unrecognised value raises ``ImportError`` immediately
       — there is no silent fallback.
     * When unset, flavors are ordered by :data:`_FLAVOR_PREFERENCE`
-      (``chat`` before ``stt``).  Unknown flavor names sort after all known
+      (``chat`` before ``stt`` before ``tts``).  Unknown flavor names sort after all known
       ones.
 
     **Version ordering:** newest version first (``_version_sort_key``
     reversed).  Combining both axes gives a list ordered as:
 
-        ``[v0.1.5-chat, v0.1.5-stt, v0.1.4-chat, v0.1.4-stt, ...]``
+        ``[v0.1.5-chat, v0.1.5-stt, v0.1.5-tts, v0.1.4-chat, ...]``
 
     Callers iterate *forward* — the first candidate that exists and loads
     wins (no ``reversed()`` needed).

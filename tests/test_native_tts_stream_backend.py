@@ -32,6 +32,7 @@ from octomil.runtime.native.loader import OCT_STATUS_INVALID_INPUT, NativeRuntim
 from octomil.runtime.native.tts_stream_backend import (
     NativeTtsStreamBackend,
     TtsAudioChunk,
+    open_runtime_for_tts,
     runtime_advertises_tts_stream,
 )
 
@@ -446,3 +447,67 @@ class TestRuntimeAdvertisesHelper:
 
         rt = types.SimpleNamespace(capabilities=_boom, last_error=lambda: "")
         assert runtime_advertises_tts_stream(rt) is False  # type: ignore[arg-type]
+
+
+class TestOpenRuntimeForTts:
+    def test_prefers_tts_flavor_when_no_operator_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from octomil.runtime.native import loader
+        from octomil.runtime.native import tts_stream_backend as mod
+
+        calls: list[str | None] = []
+        sentinel = object()
+
+        def fake_open() -> object:
+            calls.append(os.environ.get("OCTOMIL_RUNTIME_FLAVOR"))
+            return sentinel
+
+        monkeypatch.delenv("OCTOMIL_RUNTIME_DYLIB", raising=False)
+        monkeypatch.delenv("OCTOMIL_RUNTIME_FLAVOR", raising=False)
+        monkeypatch.setattr(loader, "_LIB", None)
+        monkeypatch.setattr(mod.NativeRuntime, "open", staticmethod(fake_open))
+
+        assert open_runtime_for_tts() is sentinel
+        assert calls == ["tts"]
+        assert "OCTOMIL_RUNTIME_FLAVOR" not in os.environ
+
+    def test_falls_back_to_stt_for_older_releases(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from octomil.runtime.native import loader
+        from octomil.runtime.native import tts_stream_backend as mod
+
+        calls: list[str | None] = []
+        sentinel = object()
+
+        def fake_open() -> object:
+            flavor = os.environ.get("OCTOMIL_RUNTIME_FLAVOR")
+            calls.append(flavor)
+            if flavor == "tts":
+                raise ImportError("no cached tts flavor")
+            return sentinel
+
+        monkeypatch.delenv("OCTOMIL_RUNTIME_DYLIB", raising=False)
+        monkeypatch.delenv("OCTOMIL_RUNTIME_FLAVOR", raising=False)
+        monkeypatch.setattr(loader, "_LIB", None)
+        monkeypatch.setattr(mod.NativeRuntime, "open", staticmethod(fake_open))
+
+        assert open_runtime_for_tts() is sentinel
+        assert calls == ["tts", "stt"]
+        assert "OCTOMIL_RUNTIME_FLAVOR" not in os.environ
+
+    def test_operator_flavor_override_is_authoritative(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from octomil.runtime.native import loader
+        from octomil.runtime.native import tts_stream_backend as mod
+
+        calls: list[str | None] = []
+        sentinel = object()
+
+        def fake_open() -> object:
+            calls.append(os.environ.get("OCTOMIL_RUNTIME_FLAVOR"))
+            return sentinel
+
+        monkeypatch.delenv("OCTOMIL_RUNTIME_DYLIB", raising=False)
+        monkeypatch.setenv("OCTOMIL_RUNTIME_FLAVOR", "chat")
+        monkeypatch.setattr(loader, "_LIB", None)
+        monkeypatch.setattr(mod.NativeRuntime, "open", staticmethod(fake_open))
+
+        assert open_runtime_for_tts() is sentinel
+        assert calls == ["chat"]
