@@ -19,8 +19,11 @@ hosted speech client.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Literal, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -163,8 +166,9 @@ class FacadeSpeech:
     and locality dispatch.
     """
 
-    def __init__(self, kernel: Any) -> None:
+    def __init__(self, kernel: Any, *, cloud_allowed: bool = True) -> None:
         self._kernel = kernel
+        self._cloud_allowed = cloud_allowed
 
     def stream(
         self,
@@ -211,6 +215,10 @@ class FacadeSpeech:
                 async for event in s:
                     ...
         """
+        if not self._cloud_allowed:
+            from octomil.audio import _reject_cloud_policy_without_credentials
+
+            _reject_cloud_policy_without_credentials(policy)
         import time
 
         # Lazily build the stream so callers can use ``async with`` /
@@ -258,6 +266,7 @@ class FacadeSpeech:
         app: Optional[str] = None,
         priority: Any = None,
         text_normalization: str = "auto",
+        cache: Literal["auto", "off", "refresh"] = "auto",
     ) -> SpeechResponse:
         """Synthesize speech from text.
 
@@ -283,8 +292,64 @@ class FacadeSpeech:
         :param app: Optional explicit app slug for ``@app/<slug>/<cap>``
             resolution. When set, the kernel uses this slug instead of
             parsing one from ``model``.
+        :param cache: Generated-output cache policy. ``"auto"`` serves and
+            stores regenerable audio in the OS cache directory, ``"off"``
+            bypasses the cache, and ``"refresh"`` regenerates then replaces
+            the cached entry.
         """
-        return await self._kernel.synthesize_speech(
+        if not self._cloud_allowed:
+            from octomil.audio import _reject_cloud_policy_without_credentials
+
+            _reject_cloud_policy_without_credentials(policy)
+        cache_key = None
+        output_cache = None
+        if cache not in ("auto", "off", "refresh"):
+            raise ValueError("cache must be one of 'auto', 'off', or 'refresh'")
+        if cache != "off":
+            from octomil.runtime.lifecycle.output_cache import (
+                GeneratedOutputCache,
+                derive_output_key,
+            )
+
+            output_cache = GeneratedOutputCache()
+            cache_key = derive_output_key(
+                "audio.speech",
+                model=model,
+                payload={
+                    "input": input,
+                    "voice": voice,
+                    "speaker": speaker,
+                    "response_format": response_format,
+                    "speed": speed,
+                    "app": app,
+                    "text_normalization": text_normalization,
+                },
+            )
+            if cache == "auto":
+                cached = output_cache.get("audio.speech", cache_key)
+                if cached is not None:
+                    meta = cached.metadata
+                    return SpeechResponse(
+                        audio_bytes=cached.data,
+                        content_type=str(meta.get("content_type") or _content_type_for_format(response_format)),
+                        format=str(meta.get("format") or response_format),
+                        model=str(meta.get("model") or model),
+                        provider=meta.get("provider"),
+                        voice=meta.get("voice"),
+                        sample_rate=meta.get("sample_rate"),
+                        duration_ms=meta.get("duration_ms"),
+                        latency_ms=0.0,
+                        route=SpeechRoute(
+                            locality=str(meta.get("locality") or "on_device"),
+                            engine=meta.get("engine"),
+                            policy=meta.get("policy"),
+                            fallback_used=bool(meta.get("fallback_used") or False),
+                        ),
+                        billed_units=meta.get("billed_units"),
+                        unit_kind=meta.get("unit_kind"),
+                    )
+
+        response = await self._kernel.synthesize_speech(
             model=model,
             input=input,
             voice=voice,
@@ -296,6 +361,41 @@ class FacadeSpeech:
             priority=priority,
             text_normalization=text_normalization,
         )
+        if output_cache is not None and cache_key is not None:
+            try:
+                output_cache.put(
+                    "audio.speech",
+                    cache_key,
+                    response.audio_bytes,
+                    {
+                        "content_type": response.content_type,
+                        "format": response.format,
+                        "model": response.model,
+                        "provider": response.provider,
+                        "voice": response.voice,
+                        "sample_rate": response.sample_rate,
+                        "duration_ms": response.duration_ms,
+                        "locality": response.route.locality,
+                        "engine": response.route.engine,
+                        "policy": response.route.policy,
+                        "fallback_used": response.route.fallback_used,
+                        "billed_units": response.billed_units,
+                        "unit_kind": response.unit_kind,
+                    },
+                )
+            except OSError:
+                logger.debug("audio.speech generated-output cache write failed", exc_info=True)
+        return response
+
+
+def _content_type_for_format(response_format: str) -> str:
+    if response_format == "wav":
+        return "audio/wav"
+    if response_format == "mp3":
+        return "audio/mpeg"
+    if response_format in ("pcm_s16le", "pcm"):
+        return "audio/pcm"
+    return "application/octet-stream"
 
 
 class FacadeVoices:

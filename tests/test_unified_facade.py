@@ -71,9 +71,13 @@ class TestConstructorAuth:
 
 
 class TestConstructorNoArgs:
-    def test_no_args_raises(self):
-        with pytest.raises(ValueError, match="One of"):
-            Octomil()
+    def test_no_args_uses_keyless_local_mode(self):
+        from octomil.auth import NoAuth
+
+        client = Octomil()
+
+        assert isinstance(client._auth, NoAuth)
+        assert client.planner_enabled is False
 
 
 # ---------------------------------------------------------------------------

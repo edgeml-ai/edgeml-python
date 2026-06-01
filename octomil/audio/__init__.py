@@ -176,6 +176,23 @@ class FacadeDiarization:
         return await asyncio.to_thread(_run)
 
 
+_CLOUD_POLICIES = {"cloud", "cloud_only", "cloud_first", "performance_first"}
+
+
+def _reject_cloud_policy_without_credentials(policy: Optional[str]) -> None:
+    if policy and policy.lower() in _CLOUD_POLICIES:
+        from octomil.errors import OctomilError, OctomilErrorCode
+
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_API_KEY,
+            message=(
+                f"Cloud routing policy {policy!r} requires Octomil credentials. "
+                "Construct Octomil with api_key= + org_id= or a publishable key, "
+                "or use a local policy such as 'local_first', 'local_only', or 'private'."
+            ),
+        )
+
+
 class FacadeTranscriptions:
     """``client.audio.transcriptions`` namespace on the unified Octomil facade.
 
@@ -188,8 +205,9 @@ class FacadeTranscriptions:
     the kernel enforced the gates but no facade exposed them.
     """
 
-    def __init__(self, kernel: Any) -> None:
+    def __init__(self, kernel: Any, *, cloud_allowed: bool = True) -> None:
         self._kernel = kernel
+        self._cloud_allowed = cloud_allowed
 
     async def create(
         self,
@@ -227,6 +245,8 @@ class FacadeTranscriptions:
             falling back to cloud (mirrors the TTS / chat / embeddings
             refusal gate).
         """
+        if not self._cloud_allowed:
+            _reject_cloud_policy_without_credentials(policy)
         result = await self._kernel.transcribe_audio(
             audio_data=audio,
             model=model,
@@ -262,9 +282,9 @@ class FacadeAudio:
         )
     """
 
-    def __init__(self, kernel: Any) -> None:
-        self._speech = FacadeSpeech(kernel)
-        self._transcriptions = FacadeTranscriptions(kernel)
+    def __init__(self, kernel: Any, *, cloud_allowed: bool = True) -> None:
+        self._speech = FacadeSpeech(kernel, cloud_allowed=cloud_allowed)
+        self._transcriptions = FacadeTranscriptions(kernel, cloud_allowed=cloud_allowed)
         self._voices = FacadeVoices(kernel)
         self._vad = FacadeVad()
         self._speaker_embedding = FacadeSpeakerEmbedding()

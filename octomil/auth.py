@@ -50,6 +50,7 @@ __all__ = [
     "AuthType",
     "PrincipalType",
     "Scope",
+    "NoAuth",
     "OrgApiKeyAuth",
     "DeviceTokenAuth",
     "PublishableKeyAuth",
@@ -62,6 +63,19 @@ __all__ = [
 ]
 
 _DEFAULT_API_BASE = "https://api.octomil.com/api/v1"
+
+
+@dataclass(frozen=True)
+class NoAuth:
+    """Keyless local-only auth marker.
+
+    This is intentionally not valid for hosted/control-plane calls. It lets
+    the high-level facade construct the same local execution kernel and public
+    namespaces without requiring apps to embed an org server key for fully
+    on-device inference.
+    """
+
+    api_base: str = _DEFAULT_API_BASE
 
 
 @dataclass(frozen=True)
@@ -165,7 +179,7 @@ class PublishableKeyAuth:
         }
 
 
-AuthConfig = Union[OrgApiKeyAuth, DeviceTokenAuth, PublishableKeyAuth]
+AuthConfig = Union[NoAuth, OrgApiKeyAuth, DeviceTokenAuth, PublishableKeyAuth]
 """Discriminated union of supported authentication configurations."""
 
 

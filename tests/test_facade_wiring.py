@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from octomil.auth import OrgApiKeyAuth
+from octomil.auth import NoAuth, OrgApiKeyAuth
 from octomil.capabilities_client import CapabilitiesClient, CapabilityProfile, _classify_device
 from octomil.chat_client import ChatChunk, ChatCompletion
 from octomil.model import Model, ModelMetadata
@@ -93,22 +93,19 @@ class TestOctomilFacadeFromEnv:
 
         assert client._auth.api_base == "http://localhost:8000/api/v1"
 
-    def test_requires_server_key_or_legacy_api_key(self, monkeypatch):
+    def test_missing_server_key_uses_keyless_local_mode(self, monkeypatch):
         from octomil import Octomil
 
         monkeypatch.delenv("OCTOMIL_SERVER_KEY", raising=False)
         monkeypatch.delenv("OCTOMIL_API_KEY", raising=False)
         monkeypatch.setenv("OCTOMIL_ORG_ID", "org_public_id")
 
-        try:
-            Octomil.from_env()
-        except ValueError as exc:
-            assert "OCTOMIL_SERVER_KEY" in str(exc)
-            assert "OCTOMIL_API_KEY" in str(exc)
-        else:
-            raise AssertionError("Expected Octomil.from_env() to require a server key")
+        client = Octomil.from_env()
 
-    def test_requires_org_id(self, monkeypatch):
+        assert isinstance(client._auth, NoAuth)
+        assert client.planner_enabled is False
+
+    def test_requires_org_id_when_server_key_present(self, monkeypatch):
         from octomil import Octomil
 
         monkeypatch.setenv("OCTOMIL_SERVER_KEY", "srv_key")
