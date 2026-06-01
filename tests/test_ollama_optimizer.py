@@ -16,10 +16,12 @@ from octomil.model_optimizer import (
     ModelOptimizer,
     QuantOffloadResult,
     SpeedEstimate,
+    _get_quant_preference_order,
     _kv_cache_gb,
     _model_memory_gb,
     _resolve_model_size,
     _total_memory_gb,
+    get_tts_quant_preference_order,
 )
 
 # ---------------------------------------------------------------------------
@@ -35,6 +37,7 @@ def _make_profile(
     speed_coeff: int = 100,
     threads: int = 16,
     platform: str = "linux",
+    architecture: str = "x86_64",
 ) -> HardwareProfile:
     gpu = None
     if vram_gb > 0:
@@ -56,7 +59,7 @@ def _make_profile(
         cores=8,
         threads=threads,
         base_speed_ghz=3.0,
-        architecture="x86_64",
+        architecture=architecture,
     )
     return HardwareProfile(
         gpu=gpu,
@@ -66,6 +69,46 @@ def _make_profile(
         platform=platform,
         best_backend=backend if vram_gb > 0 else "cpu",
     )
+
+
+# ---------------------------------------------------------------------------
+# TTS quantization defaults
+# ---------------------------------------------------------------------------
+
+
+class TestTtsQuantDefaults:
+    def test_apple_silicon_sherpa_prefers_unquantized_before_int8(self):
+        """Apple Silicon Kokoro/VITS paths should pick fp32 CPU before int8."""
+        profile = _make_profile(
+            vram_gb=0.0,
+            platform="Darwin",
+            architecture="arm64",
+            backend="cpu",
+        )
+
+        order = get_tts_quant_preference_order(profile, engine="sherpa-onnx", model_family="kokoro")
+
+        assert order[:2] == ["F32", "F16"]
+        assert order.index("F32") < order.index("Q8_0")
+
+    def test_apple_silicon_non_sherpa_uses_generic_quant_order(self):
+        profile = _make_profile(
+            vram_gb=0.0,
+            platform="Darwin",
+            architecture="arm64",
+            backend="cpu",
+        )
+
+        assert get_tts_quant_preference_order(profile, engine="llama.cpp", model_family="kokoro") == (
+            _get_quant_preference_order()
+        )
+
+    def test_linux_sherpa_uses_generic_quant_order(self):
+        profile = _make_profile(vram_gb=0.0, platform="linux", architecture="x86_64", backend="cpu")
+
+        assert get_tts_quant_preference_order(profile, engine="sherpa-onnx", model_family="kokoro") == (
+            _get_quant_preference_order()
+        )
 
 
 # ---------------------------------------------------------------------------

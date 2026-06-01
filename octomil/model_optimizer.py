@@ -125,6 +125,57 @@ def _get_quant_preference_order() -> list[str]:
     return get_device_config().quant_preference_order
 
 
+# Apple Silicon has a TTS-specific exception to the generic quant policy:
+# for sherpa/VITS-class speech graphs, fp32 CPU wins over int8 on recent
+# M-series devices. Keep this out of the generic LLM optimizer path.
+_APPLE_SILICON_TTS_UNQUANTIZED_ORDER: tuple[str, ...] = ("F32", "F16")
+_SHERPA_VITS_CLASS_ENGINES: frozenset[str] = frozenset(("sherpa-onnx", "sherpa", "sherpa_onnx"))
+_SHERPA_VITS_CLASS_FAMILIES: frozenset[str] = frozenset(("", "kokoro", "vits", "piper"))
+
+
+def _dedupe_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
+def _is_apple_silicon(hardware: HardwareProfile) -> bool:
+    platform = (hardware.platform or "").lower()
+    architecture = (hardware.cpu.architecture or "").lower()
+    return platform in {"darwin", "macos", "mac"} and architecture in {"arm64", "aarch64"}
+
+
+def get_tts_quant_preference_order(
+    hardware: HardwareProfile,
+    *,
+    engine: str,
+    model_family: str = "",
+) -> list[str]:
+    """Return quant preference order for local TTS artifact selection.
+
+    Generic LLM quant policy is intentionally server-configured and often
+    puts int8/low-bit formats first. Sherpa/VITS-class TTS graphs are a
+    measured exception on Apple Silicon: fp32 CPU is faster than int8 and
+    the CoreML EP for Kokoro-class models, so prefer unquantized artifacts
+    when the device can run them.
+    """
+    base_order = _get_quant_preference_order()
+    normalized_engine = (engine or "").lower()
+    normalized_family = (model_family or "").lower()
+    if (
+        _is_apple_silicon(hardware)
+        and normalized_engine in _SHERPA_VITS_CLASS_ENGINES
+        and normalized_family in _SHERPA_VITS_CLASS_FAMILIES
+    ):
+        return _dedupe_order([*_APPLE_SILICON_TTS_UNQUANTIZED_ORDER, *base_order])
+    return base_order
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

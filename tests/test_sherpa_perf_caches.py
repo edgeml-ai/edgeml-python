@@ -19,6 +19,7 @@ import pytest
 from octomil.runtime.engines.sherpa.engine import (
     _VOICE_CATALOG_CACHE,
     _default_sherpa_num_threads,
+    _default_sherpa_provider,
     release_voice_catalog_cache,
     resolve_voice_catalog,
 )
@@ -233,3 +234,28 @@ def test_octomil_sherpa_num_threads_env_zero_floors_to_one(monkeypatch):
     1 so we never feed 0 into sherpa-onnx."""
     monkeypatch.setenv("OCTOMIL_SHERPA_NUM_THREADS", "0")
     assert _default_sherpa_num_threads() == 1
+
+
+# ---------------------------------------------------------------------------
+# Default ONNX Runtime provider
+# ---------------------------------------------------------------------------
+
+
+def test_default_provider_stays_cpu_on_apple_silicon(monkeypatch):
+    """Kokoro/VITS-class graphs are faster on fp32 CPU than CoreML on
+    current Apple Silicon measurements, so CoreML must stay opt-in."""
+    monkeypatch.delenv("OCTOMIL_SHERPA_PROVIDER", raising=False)
+    with (
+        patch("octomil.runtime.engines.sherpa.engine.platform.system", return_value="Darwin"),
+        patch("octomil.runtime.engines.sherpa.engine.platform.machine", return_value="arm64"),
+    ):
+        assert _default_sherpa_provider() == "cpu"
+
+
+def test_octomil_sherpa_provider_env_overrides_default(monkeypatch):
+    monkeypatch.setenv("OCTOMIL_SHERPA_PROVIDER", "coreml")
+    with (
+        patch("octomil.runtime.engines.sherpa.engine.platform.system", return_value="Darwin"),
+        patch("octomil.runtime.engines.sherpa.engine.platform.machine", return_value="arm64"),
+    ):
+        assert _default_sherpa_provider() == "coreml"

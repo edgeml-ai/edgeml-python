@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import platform
 import struct
 import threading
 import time
@@ -104,6 +105,25 @@ def _default_sherpa_num_threads() -> int:
             pass
     cores = os.cpu_count() or 2
     return min(max(1, cores), 4)
+
+
+def _default_sherpa_provider() -> str:
+    """Default ONNX Runtime provider for sherpa-onnx TTS.
+
+    The default is deliberately ``cpu`` on Apple Silicon. Kokoro/VITS-class
+    graphs currently run faster and more predictably on fp32 CPU than via
+    the CoreML EP or int8-style paths; CoreML remains available as an
+    explicit opt-in for teams that benchmark their own graph/device pair.
+    """
+    override = os.environ.get("OCTOMIL_SHERPA_PROVIDER")
+    if override:
+        return override
+
+    # Keep this check explicit so the Apple Silicon policy is visible and
+    # test-pinned even though non-Apple devices also default to CPU today.
+    if platform.system().lower() == "darwin" and platform.machine().lower() in {"arm64", "aarch64"}:
+        return "cpu"
+    return "cpu"
 
 
 # Per-artifact Kokoro voice catalogs. Position in the tuple ==
@@ -854,15 +874,11 @@ class _SherpaTtsBackend:
         model_dir = self._resolve_model_dir(model_name)
         family = _model_family(model_name)
         num_threads = int(self._kwargs.get("num_threads", _default_sherpa_num_threads()))
-        # Provider override path: ``OCTOMIL_SHERPA_PROVIDER`` lets
-        # operators opt into ``coreml`` on Apple Silicon (often 2–4×
-        # faster than CPU for VITS-class graphs). Stays "cpu" by
-        # default — the CoreML provider has historical numerical-
-        # precision quirks with some VITS/Kokoro graphs that show
-        # up as audio-quality regressions, not crashes, so opt-in
-        # is the conservative posture. Per-call ``provider=`` kwarg
-        # wins over the env var so tests pin behaviour explicitly.
-        provider = self._kwargs.get("provider", os.environ.get("OCTOMIL_SHERPA_PROVIDER", "cpu"))
+        # Provider override path: per-call ``provider=`` wins, then
+        # ``OCTOMIL_SHERPA_PROVIDER``. The default provider stays CPU,
+        # including on Apple Silicon where measured Kokoro/VITS paths
+        # favor fp32 CPU over CoreML for this graph class.
+        provider = self._kwargs.get("provider", _default_sherpa_provider())
 
         if family == "kokoro":
             inner_model_config = sherpa_onnx.OfflineTtsModelConfig(
