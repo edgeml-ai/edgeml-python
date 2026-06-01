@@ -246,7 +246,7 @@ def pcm_s16le_to_wav_bytes(
 ) -> bytes:
     """Wrap raw PCM int16 little-endian samples in a valid RIFF/WAVE container.
 
-    Hand-rolled with :mod:`struct` (mirrors the engine's ``_samples_to_wav``)
+    Hand-rolled with :mod:`struct`
     so the helper is importable in stripped Python builds that lack
     :mod:`audioop`/:mod:`wave` (Ren'Py, PyInstaller bundles).
     """

@@ -20,6 +20,7 @@ Tests reuse the same lifespan/app construction pattern as
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -140,17 +141,12 @@ def _make_app(
     tmp_path: Any,
 ) -> Any:
     """Build the production ``create_app`` with the
-    ``NativeTtsStreamBackend`` factory patched. A create=True guard
-    ensures a reintroduced legacy ``SherpaTtsEngine`` would still
-    fail this test if startup constructed it.
+    ``NativeTtsStreamBackend`` factory patched.
     """
     pytest.importorskip("fastapi")
 
-    fake_engine = MagicMock()
-    fake_engine.create_backend.return_value = sherpa_backend
-
     return (
-        patch("octomil.runtime.engines.sherpa.SherpaTtsEngine", create=True, return_value=fake_engine),
+        nullcontext(),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
         _stub_kernel_warmup_for_tts(tmp_path),
         patch(

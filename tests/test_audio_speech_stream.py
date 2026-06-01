@@ -39,7 +39,7 @@ def _silence_chunk(num_samples: int) -> bytes:
 
 
 class FakeStreamingBackend:
-    """Backend mimicking ``_SherpaTtsBackend.synthesize_stream``.
+    """Backend mimicking a TTS stream backend.
 
     Yields ``num_chunks`` chunks of ``samples_per_chunk`` PCM samples
     each, sleeping ``chunk_delay_s`` between chunks so tests can
@@ -615,11 +615,6 @@ async def test_production_http_speech_stream_route_returns_pcm_with_metadata_hea
     from httpx import ASGITransport, AsyncClient
 
     with (
-        patch(
-            "octomil.runtime.engines.sherpa.SherpaTtsEngine",
-            create=True,
-            side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
-        ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
         _stub_kernel_warmup_for_tts(tmp_path),
         patch(
@@ -681,11 +676,6 @@ async def test_production_http_speech_stream_route_rejects_unsupported_format(tm
     from httpx import ASGITransport, AsyncClient
 
     with (
-        patch(
-            "octomil.runtime.engines.sherpa.SherpaTtsEngine",
-            create=True,
-            side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
-        ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
         _stub_kernel_warmup_for_tts(tmp_path),
         patch(
@@ -784,95 +774,6 @@ async def test_streaming_voice_validation_uses_static_recipe_manifest():
         assert "af_bella" in msg
 
 
-# ---------------------------------------------------------------------------
-# P1 follow-ups: catalog-less default voice + planner-artifact preflight bypass
-# ---------------------------------------------------------------------------
-
-
-def test_piper_default_voice_does_not_raise_on_create_or_stream(tmp_path):
-    """Piper has no voices.txt and an empty fallback catalog.
-
-    Pre-fix the backend collapsed ``self._default_voice`` (e.g.
-    ``'amy'``) into the same parameter as the explicit voice, so a
-    caller passing ``voice=None`` still hit
-    ``voice_not_supported_for_model``. The fix distinguishes
-    explicit-voice from default-label: empty/None must map to sid=0
-    silently, only an explicit unknown voice raises.
-    """
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    backend = _SherpaTtsBackend("piper-en-amy", model_dir=str(tmp_path))
-    # Explicit None -> sid=0, no error.
-    sid, _ = backend.validate_voice(None)
-    assert sid == 0
-    # Empty string also routes to sid=0 (no explicit name).
-    assert backend._voice_to_sid("", explicit=False) == 0
-    # Explicit unknown voice on a catalog-less model is rejected with
-    # the structured error, not silently aliased to 0.
-    from octomil.errors import OctomilError, OctomilErrorCode
-
-    with pytest.raises(OctomilError) as ei:
-        backend.validate_voice("amy")  # explicit, even though it matches the default label
-    assert ei.value.code == OctomilErrorCode.INVALID_INPUT
-    assert "voice_not_supported_for_model" in str(ei.value)
-
-
-def test_kokoro_default_voice_label_resolves_via_manifest(tmp_path):
-    """sid=0's reported label should be the manifest's first entry, not
-    the engine's static ``_default_voice`` string.
-
-    Pre-fix Kokoro reported ``af_bella`` for ``voice=None`` even when
-    the prepared manifest's sid=0 was actually ``af``. validate_voice
-    now reads manifest[0] for the default-label so reports are
-    accurate. Catalog-less models (Piper) keep falling back to
-    ``_default_voice`` since there's no authoritative source.
-    """
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    sidecar = tmp_path / "voices.txt"
-    # First entry intentionally != backend's _default_voice ('af_bella').
-    sidecar.write_text("af\naf_bella\nam_michael\n")
-
-    backend = _SherpaTtsBackend("kokoro-82m", model_dir=str(tmp_path))
-    sid, label = backend.validate_voice(None)
-    assert sid == 0
-    assert label == "af", (
-        f"sid=0 should resolve to manifest[0] ('af'), got {label!r} "
-        f"— this is the Kokoro default-label drift the reviewer flagged"
-    )
-
-    # Explicit name still wins.
-    sid, label = backend.validate_voice("af_bella")
-    assert sid == 1
-    assert label == "af_bella"
-
-
-def test_piper_default_voice_label_falls_back_to_default_string(tmp_path):
-    """Catalog-less Piper has no manifest; default label keeps using
-    ``_default_voice`` rather than failing or returning empty."""
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    backend = _SherpaTtsBackend("piper-en-amy", model_dir=str(tmp_path))
-    sid, label = backend.validate_voice(None)
-    assert sid == 0
-    assert label == "amy"
-
-
-def test_validate_voice_raises_synchronously_for_unsupported_explicit_voice(tmp_path):
-    """The whole point of validate_voice is to raise BEFORE
-    SpeechStreamStarted / 200 OK is committed."""
-    from octomil.errors import OctomilError, OctomilErrorCode
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    sidecar = tmp_path / "voices.txt"
-    sidecar.write_text("af\naf_bella\n")
-
-    backend = _SherpaTtsBackend("kokoro-82m", model_dir=str(tmp_path))
-    with pytest.raises(OctomilError) as ei:
-        backend.validate_voice("alloy")
-    assert ei.value.code == OctomilErrorCode.INVALID_INPUT
-
-
 @pytest.mark.asyncio
 async def test_stream_does_not_emit_started_for_unsupported_voice(tmp_path):
     """Reviewer P1: validate_voice runs synchronously in
@@ -924,18 +825,13 @@ async def test_stream_does_not_emit_started_for_unsupported_voice(tmp_path):
 @pytest.mark.asyncio
 async def test_tts_server_lifespan_loads_native_backends_without_sherpa_fallback(tmp_path):
     """Native server startup must wire both native TTS backends and
-    never construct the legacy Sherpa engine."""
+    never construct a Python sherpa fallback."""
     pytest.importorskip("fastapi")
 
     batch_instance = _fake_native_tts_batch_backend_factory()
     stream_instance = _fake_native_tts_stream_backend_factory()
 
     with (
-        patch(
-            "octomil.runtime.engines.sherpa.SherpaTtsEngine",
-            create=True,
-            side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
-        ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
         patch(
             "octomil.runtime.native.tts_batch_backend.NativeTtsBatchBackend",
@@ -967,11 +863,6 @@ async def test_tts_server_lifespan_does_not_construct_sherpa_engine(tmp_path):
     stream_instance = _fake_native_tts_stream_backend_factory()
 
     with (
-        patch(
-            "octomil.runtime.engines.sherpa.SherpaTtsEngine",
-            create=True,
-            side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
-        ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
         patch(
             "octomil.runtime.native.tts_batch_backend.NativeTtsBatchBackend",
@@ -1019,11 +910,6 @@ async def test_http_route_returns_4xx_for_unsupported_voice_before_streaming(tmp
     from httpx import ASGITransport, AsyncClient
 
     with (
-        patch(
-            "octomil.runtime.engines.sherpa.SherpaTtsEngine",
-            create=True,
-            side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
-        ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
         patch(
             "octomil.runtime.native.tts_batch_backend.NativeTtsBatchBackend",
@@ -1061,28 +947,6 @@ async def test_http_route_returns_4xx_for_unsupported_voice_before_streaming(tmp
 
     assert batch_instance.load_model_called is True
     assert native_instance.calls == []
-
-
-def test_kokoro_explicit_unknown_voice_still_raises(tmp_path):
-    """Pinned to make sure the explicit-vs-default refactor didn't
-    regress the catalog enforcement. Kokoro has a sidecar; an
-    explicit name not in it must raise."""
-    from octomil.errors import OctomilError, OctomilErrorCode
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    sidecar = tmp_path / "voices.txt"
-    sidecar.write_text("af_bella\nam_michael\n")
-
-    backend = _SherpaTtsBackend("kokoro-82m", model_dir=str(tmp_path))
-    sid, _ = backend.validate_voice(None)  # default still works
-    assert sid == 0
-    sid, _ = backend.validate_voice("af_bella")  # name in sidecar
-    assert sid == 0
-    sid, _ = backend.validate_voice("am_michael")
-    assert sid == 1
-    with pytest.raises(OctomilError) as ei:
-        backend.validate_voice("alloy")
-    assert ei.value.code == OctomilErrorCode.INVALID_INPUT
 
 
 def _make_planner_candidate(*, artifact_id: str, digest: str):
@@ -1679,19 +1543,18 @@ def test_backend_can_stream_detects_synthesize_stream_method():
 
 
 # ---------------------------------------------------------------------------
-# Sherpa engine — _count_sentences + streaming_capability
-# Pure-function unit tests (no sherpa-onnx import required).
+# Sentence counting
 # ---------------------------------------------------------------------------
 
 
 def test_count_sentences_single_sentence_returns_one():
-    from octomil.runtime.engines.sherpa.engine import _count_sentences
+    from octomil.audio._segmentation import count_sentences
 
     # Single sentence — no terminator inside the body.
-    assert _count_sentences("Hello there.") == 1
-    assert _count_sentences("hello") == 1
+    assert count_sentences("Hello there.") == 1
+    assert count_sentences("hello") == 1
     # Trailing terminator with no following text is still one sentence.
-    assert _count_sentences("Wait!") == 1
+    assert count_sentences("Wait!") == 1
 
 
 def test_count_sentences_multi_sentence_matches_kokoro_chunking():
@@ -1699,37 +1562,15 @@ def test_count_sentences_multi_sentence_matches_kokoro_chunking():
     ``max_num_sentences=1`` would actually do — split on terminator
     + whitespace + non-whitespace, which is the same regex sherpa
     uses internally for sentence boundaries."""
-    from octomil.runtime.engines.sherpa.engine import _count_sentences
+    from octomil.audio._segmentation import count_sentences
 
-    assert _count_sentences("Hello there. How are you?") == 2
-    assert _count_sentences("First. Second. Third.") == 3
+    assert count_sentences("Hello there. How are you?") == 2
+    assert count_sentences("First. Second. Third.") == 3
     # Mixed terminators (punctuation + question + exclamation).
-    assert _count_sentences("Welcome! Are you ready? Let's go.") == 3
+    assert count_sentences("Welcome! Are you ready? Let's go.") == 3
     # CJK terminators participate when followed by whitespace + char,
     # mirroring sherpa-onnx's split-on-boundary behaviour.
-    assert _count_sentences("你好。 今天很好。 再见。") >= 2
-
-
-def test_sherpa_streaming_capability_advertises_sentence_chunk_only_for_multi_sentence():
-    """The engine's per-input capability advertisement must be
-    truthful: single-sentence input gets ``final_chunk`` because
-    Kokoro will only invoke the callback once. The bug this prevents:
-    advertising sentence_chunk for a single-sentence prompt and then
-    delivering one chunk → fake realtime."""
-    # Light-weight construction: skip __init__ so we don't load sherpa.
-    from octomil.runtime.engines.sherpa.engine import _SherpaTtsBackend
-
-    backend = _SherpaTtsBackend.__new__(_SherpaTtsBackend)
-
-    cap_single = backend.streaming_capability("Hello there.")
-    assert cap_single.mode == TtsStreamingMode.FINAL_CHUNK
-    assert cap_single.granularity == TtsStreamingGranularity.UTTERANCE
-    assert cap_single.verified is False
-
-    cap_multi = backend.streaming_capability("Hello there. How are you?")
-    assert cap_multi.mode == TtsStreamingMode.SENTENCE_CHUNK
-    assert cap_multi.granularity == TtsStreamingGranularity.SENTENCE
-    assert cap_multi.verified is False
+    assert count_sentences("你好。 今天很好。 再见。") >= 2
 
 
 @pytest.mark.asyncio

@@ -44,11 +44,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from octomil.errors import OctomilError, OctomilErrorCode
-from octomil.runtime.engines.sherpa.engine import (
+from octomil.runtime.engines.sherpa.catalog import (
     _KOKORO_EN_V0_19_VOICES,
     _KOKORO_MULTI_LANG_V1_0_VOICES,
-    _SherpaTtsBackend,
     catalog_for_model,
+    resolve_voice_sid,
 )
 from octomil.runtime.lifecycle.materialization import (
     EXTRACTION_MARKER,
@@ -295,8 +295,8 @@ def test_materializer_writes_voice_manifest_after_archive_extraction(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _make_backend(model_dir: Path, model: str = "kokoro-82m") -> _SherpaTtsBackend:
-    return _SherpaTtsBackend(model, model_dir=str(model_dir))
+def _resolve_sid(model_dir: Path, voice: str, model: str = "kokoro-82m", *, explicit: bool = True) -> int:
+    return resolve_voice_sid(model, voice, prepared_model_dir=str(model_dir), explicit=explicit)
 
 
 def _write_v1_0_manifest(model_dir: Path) -> None:
@@ -312,43 +312,40 @@ def test_voice_to_sid_resolves_each_v1_0_voice_to_correct_index(tmp_path):
     voices.txt — pre-fix, ``bm_george`` resolved to ``sid=0`` because
     the (different) v0_19 bundle didn't have it at index 26."""
     _write_v1_0_manifest(tmp_path)
-    backend = _make_backend(tmp_path)
     for expected_sid, voice in enumerate(_EXPECTED_V1_0):
-        assert backend._voice_to_sid(voice) == expected_sid, f"voice={voice!r} should resolve to sid={expected_sid}"
+        assert _resolve_sid(tmp_path, voice) == expected_sid, f"voice={voice!r} should resolve to sid={expected_sid}"
 
 
 def test_voice_to_sid_specific_v1_0_assignments(tmp_path):
     """Explicit per-name assertions for the previously-missing
     voices that motivated the v1.0 cutover."""
     _write_v1_0_manifest(tmp_path)
-    backend = _make_backend(tmp_path)
-    assert backend._voice_to_sid("af_alloy") == 0
-    assert backend._voice_to_sid("af_bella") == 2
-    assert backend._voice_to_sid("am_adam") == 11
-    assert backend._voice_to_sid("am_echo") == 12  # the canonical regression case
-    assert backend._voice_to_sid("am_michael") == 16
-    assert backend._voice_to_sid("bf_emma") == 21
-    assert backend._voice_to_sid("bm_george") == 26
-    assert backend._voice_to_sid("bm_lewis") == 27
-    assert backend._voice_to_sid("zm_yunyang") == 52
+    assert _resolve_sid(tmp_path, "af_alloy") == 0
+    assert _resolve_sid(tmp_path, "af_bella") == 2
+    assert _resolve_sid(tmp_path, "am_adam") == 11
+    assert _resolve_sid(tmp_path, "am_echo") == 12  # the canonical regression case
+    assert _resolve_sid(tmp_path, "am_michael") == 16
+    assert _resolve_sid(tmp_path, "bf_emma") == 21
+    assert _resolve_sid(tmp_path, "bm_george") == 26
+    assert _resolve_sid(tmp_path, "bm_lewis") == 27
+    assert _resolve_sid(tmp_path, "zm_yunyang") == 52
 
 
 def test_voice_to_sid_v0_19_legacy_assignments(tmp_path):
     """The v0_19 11-speaker catalog still resolves correctly when
     its sidecar is on disk (kokoro-en-v0_19 model id retained)."""
     _write_v0_19_manifest(tmp_path)
-    backend = _make_backend(tmp_path, model="kokoro-en-v0_19")
-    assert backend._voice_to_sid("af") == 0
-    assert backend._voice_to_sid("af_bella") == 1
-    assert backend._voice_to_sid("af_nicole") == 2
-    assert backend._voice_to_sid("af_sarah") == 3
-    assert backend._voice_to_sid("af_sky") == 4
-    assert backend._voice_to_sid("am_adam") == 5
-    assert backend._voice_to_sid("am_michael") == 6
-    assert backend._voice_to_sid("bf_emma") == 7
-    assert backend._voice_to_sid("bf_isabella") == 8
-    assert backend._voice_to_sid("bm_george") == 9
-    assert backend._voice_to_sid("bm_lewis") == 10
+    assert _resolve_sid(tmp_path, "af", model="kokoro-en-v0_19") == 0
+    assert _resolve_sid(tmp_path, "af_bella", model="kokoro-en-v0_19") == 1
+    assert _resolve_sid(tmp_path, "af_nicole", model="kokoro-en-v0_19") == 2
+    assert _resolve_sid(tmp_path, "af_sarah", model="kokoro-en-v0_19") == 3
+    assert _resolve_sid(tmp_path, "af_sky", model="kokoro-en-v0_19") == 4
+    assert _resolve_sid(tmp_path, "am_adam", model="kokoro-en-v0_19") == 5
+    assert _resolve_sid(tmp_path, "am_michael", model="kokoro-en-v0_19") == 6
+    assert _resolve_sid(tmp_path, "bf_emma", model="kokoro-en-v0_19") == 7
+    assert _resolve_sid(tmp_path, "bf_isabella", model="kokoro-en-v0_19") == 8
+    assert _resolve_sid(tmp_path, "bm_george", model="kokoro-en-v0_19") == 9
+    assert _resolve_sid(tmp_path, "bm_lewis", model="kokoro-en-v0_19") == 10
 
 
 def test_voice_to_sid_bm_george_no_longer_aliases_to_sid_zero(tmp_path):
@@ -357,25 +354,22 @@ def test_voice_to_sid_bm_george_no_longer_aliases_to_sid_zero(tmp_path):
     the 11-speaker bundle). Post-fix it must resolve to its real
     speaker id under whichever bundle is active."""
     _write_v1_0_manifest(tmp_path)
-    backend = _make_backend(tmp_path)
-    assert backend._voice_to_sid("bm_george") == 26
-    assert backend._voice_to_sid("bm_george") != 0
+    assert _resolve_sid(tmp_path, "bm_george") == 26
+    assert _resolve_sid(tmp_path, "bm_george") != 0
 
 
 def test_voice_to_sid_empty_voice_returns_default_speaker(tmp_path):
     """Empty / missing voice intentionally maps to ``sid=0``."""
     _write_v1_0_manifest(tmp_path)
-    backend = _make_backend(tmp_path)
-    assert backend._voice_to_sid("") == 0
+    assert _resolve_sid(tmp_path, "") == 0
 
 
 def test_voice_to_sid_rejects_unknown_voice_against_v1_0(tmp_path):
     """A voice that isn't in the v1.0 catalog raises rather than
     falling back to sid=0."""
     _write_v1_0_manifest(tmp_path)
-    backend = _make_backend(tmp_path)
     with pytest.raises(OctomilError) as ei:
-        backend._voice_to_sid("not_a_real_voice")
+        _resolve_sid(tmp_path, "not_a_real_voice")
     assert ei.value.code == OctomilErrorCode.INVALID_INPUT
     msg = str(ei.value)
     assert "voice_not_supported_for_model" in msg
@@ -388,9 +382,8 @@ def test_voice_to_sid_rejects_v1_0_voice_against_v0_19_artifact(tmp_path):
     v0_19 sidecar — the bundles disagree on speaker ids and silent
     aliasing was the original bug. ``af_alloy`` belongs to v1.0."""
     _write_v0_19_manifest(tmp_path)
-    backend = _make_backend(tmp_path, model="kokoro-en-v0_19")
     with pytest.raises(OctomilError):
-        backend._voice_to_sid("af_alloy")
+        _resolve_sid(tmp_path, "af_alloy", model="kokoro-en-v0_19")
 
 
 def test_voice_to_sid_voices_txt_overrides_legacy_fallback(tmp_path):
@@ -399,12 +392,11 @@ def test_voice_to_sid_voices_txt_overrides_legacy_fallback(tmp_path):
     speaker order without code changes."""
     custom = ("custom_a", "custom_b", "custom_c")
     (tmp_path / "voices.txt").write_text("\n".join(custom) + "\n", encoding="utf-8")
-    backend = _make_backend(tmp_path)
-    assert backend._voice_to_sid("custom_a") == 0
-    assert backend._voice_to_sid("custom_b") == 1
-    assert backend._voice_to_sid("custom_c") == 2
+    assert _resolve_sid(tmp_path, "custom_a") == 0
+    assert _resolve_sid(tmp_path, "custom_b") == 1
+    assert _resolve_sid(tmp_path, "custom_c") == 2
     with pytest.raises(OctomilError):
-        backend._voice_to_sid("af_bella")  # not in the custom list
+        _resolve_sid(tmp_path, "af_bella")  # not in the custom list
 
 
 def test_voice_to_sid_fallback_keys_off_VERSION_sidecar(tmp_path):
@@ -417,10 +409,9 @@ def test_voice_to_sid_fallback_keys_off_VERSION_sidecar(tmp_path):
     (tmp_path / "dict").mkdir()
     (tmp_path / "dict" / "jieba.dict.utf8").write_bytes(b"x")
 
-    backend = _make_backend(tmp_path)
-    assert backend._voice_to_sid("af_alloy") == 0
-    assert backend._voice_to_sid("am_echo") == 12
-    assert backend._voice_to_sid("bm_george") == 26
+    assert _resolve_sid(tmp_path, "af_alloy") == 0
+    assert _resolve_sid(tmp_path, "am_echo") == 12
+    assert _resolve_sid(tmp_path, "bm_george") == 26
 
 
 def test_voice_to_sid_fallback_refuses_pre_cutover_v0_19_dir_under_kokoro_82m(tmp_path):
@@ -436,10 +427,8 @@ def test_voice_to_sid_fallback_refuses_pre_cutover_v0_19_dir_under_kokoro_82m(tm
     # state for any user upgrading without re-prepare).
     (tmp_path / "espeak-ng-data").mkdir()
     (tmp_path / "espeak-ng-data" / "phontab").write_bytes(b"x")
-    backend = _make_backend(tmp_path)  # model="kokoro-82m"
-
     with pytest.raises(OctomilError) as ei:
-        backend._voice_to_sid("bm_george")
+        _resolve_sid(tmp_path, "bm_george")
     assert "voice_not_supported_for_model" in str(ei.value)
 
 
@@ -449,9 +438,8 @@ def test_voice_to_sid_fallback_uses_v0_19_for_unambiguous_legacy_dir(tmp_path):
     v0_19 catalog — no ambiguity with the v1.0 bundle."""
     (tmp_path / "espeak-ng-data").mkdir()
     (tmp_path / "espeak-ng-data" / "phontab").write_bytes(b"x")
-    backend = _make_backend(tmp_path, model="kokoro-en-v0_19")
-    assert backend._voice_to_sid("af_bella") == 1
-    assert backend._voice_to_sid("bm_george") == 9
+    assert _resolve_sid(tmp_path, "af_bella", model="kokoro-en-v0_19") == 1
+    assert _resolve_sid(tmp_path, "bm_george", model="kokoro-en-v0_19") == 9
 
 
 def test_voice_to_sid_fallback_uses_v1_0_when_layout_unambiguous(tmp_path):
@@ -466,17 +454,15 @@ def test_voice_to_sid_fallback_uses_v1_0_when_layout_unambiguous(tmp_path):
     (tmp_path / "espeak-ng-data").mkdir()
     (tmp_path / "espeak-ng-data" / "phontab").write_bytes(b"x")
 
-    backend = _make_backend(tmp_path)
-    assert backend._voice_to_sid("am_echo") == 12
-    assert backend._voice_to_sid("bm_george") == 26
+    assert _resolve_sid(tmp_path, "am_echo") == 12
+    assert _resolve_sid(tmp_path, "bm_george") == 26
 
 
 def test_voice_to_sid_voice_lookup_is_case_insensitive(tmp_path):
     """Voice ids are compared case-insensitively."""
     _write_v1_0_manifest(tmp_path)
-    backend = _make_backend(tmp_path)
-    assert backend._voice_to_sid("AM_ECHO") == 12
-    assert backend._voice_to_sid("Bm_George") == 26
+    assert _resolve_sid(tmp_path, "AM_ECHO") == 12
+    assert _resolve_sid(tmp_path, "Bm_George") == 26
 
 
 # ---------------------------------------------------------------------------
@@ -489,9 +475,8 @@ def test_default_voice_for_catalog_less_model_returns_sid_zero(tmp_path):
     string (``amy`` for piper-en-amy). Piper has no catalog and no
     sidecar; the default-voice path must NOT raise — single-speaker
     bundles have nothing to validate against."""
-    backend = _SherpaTtsBackend("piper-en-amy", model_dir=str(tmp_path))
     # explicit=False is what synthesize() passes for a defaulted voice.
-    assert backend._voice_to_sid("amy", explicit=False) == 0
+    assert _resolve_sid(tmp_path, "amy", explicit=False) == 0
 
 
 def test_explicit_voice_for_catalog_less_model_still_raises(tmp_path):
@@ -499,9 +484,8 @@ def test_explicit_voice_for_catalog_less_model_still_raises(tmp_path):
     less model, refuse loudly — we have no way to validate the
     request, and silent ``sid=0`` aliasing is exactly the bug class
     the manifest fix exists to prevent."""
-    backend = _SherpaTtsBackend("piper-en-amy", model_dir=str(tmp_path))
     with pytest.raises(OctomilError) as ei:
-        backend._voice_to_sid("amy", explicit=True)
+        _resolve_sid(tmp_path, "amy", explicit=True)
     assert "voice_not_supported_for_model" in str(ei.value)
 
 
@@ -512,179 +496,16 @@ def test_default_voice_outside_catalog_falls_back_to_sid_zero(tmp_path):
     explicit path stays strict."""
     custom = ("custom_a", "custom_b")
     (tmp_path / "voices.txt").write_text("\n".join(custom) + "\n", encoding="utf-8")
-    backend = _make_backend(tmp_path)
     # af_bella is the documented kokoro-82m default; not in the
     # custom catalog. explicit=False → sid=0.
-    assert backend._voice_to_sid("af_bella", explicit=False) == 0
+    assert _resolve_sid(tmp_path, "af_bella", explicit=False) == 0
     # explicit=True → raise.
     with pytest.raises(OctomilError):
-        backend._voice_to_sid("af_bella", explicit=True)
-
-
-def test_synthesize_call_site_marks_default_voice_inexplicit(monkeypatch, tmp_path):
-    """Belt-and-suspenders: the synthesize() call path resolves a
-    None voice through the model default and calls _voice_to_sid
-    with explicit=False. Verify by stubbing _tts and capturing the
-    call shape."""
-    backend = _SherpaTtsBackend("piper-en-amy", model_dir=str(tmp_path))
-
-    fake_tts = MagicMock()
-    fake_audio = MagicMock()
-    fake_audio.samples = []
-    fake_audio.sample_rate = 24000
-    fake_tts.generate.return_value = fake_audio
-    backend._tts = fake_tts
-
-    captured: dict[str, object] = {}
-
-    def spy(voice, *, explicit=True):
-        captured["voice"] = voice
-        captured["explicit"] = explicit
-        return 0  # short-circuit; we're testing the call shape, not resolution
-
-    monkeypatch.setattr(backend, "_voice_to_sid", spy)
-    backend.synthesize("hello", voice=None)
-    assert captured["voice"] == "amy"
-    assert captured["explicit"] is False
-
-    # And explicit voice passes explicit=True.
-    captured.clear()
-    backend.synthesize("hello", voice="custom")
-    assert captured["voice"] == "custom"
-    assert captured["explicit"] is True
+        _resolve_sid(tmp_path, "af_bella", explicit=True)
 
 
 # ---------------------------------------------------------------------------
-# sherpa-onnx config builder: data_dir is required even for v1.0
-# ---------------------------------------------------------------------------
-
-
-def test_build_kokoro_model_config_v0_19_layout_sets_data_dir(tmp_path):
-    """v0.19 layout (espeak-ng-data/) → data_dir wires the espeak
-    directory. model/voices/tokens point at the artifact dir."""
-    from octomil.runtime.engines.sherpa.engine import _build_kokoro_model_config
-
-    (tmp_path / "model.onnx").write_bytes(b"x")
-    (tmp_path / "voices.bin").write_bytes(b"x")
-    (tmp_path / "tokens.txt").write_bytes(b"x")
-    (tmp_path / "espeak-ng-data").mkdir()
-    (tmp_path / "espeak-ng-data" / "phontab").write_bytes(b"x")
-
-    captured: dict[str, str] = {}
-
-    class _FakeSherpa:
-        @staticmethod
-        def OfflineTtsKokoroModelConfig(**kwargs):
-            captured.update(kwargs)
-            return object()
-
-    _build_kokoro_model_config(_FakeSherpa, str(tmp_path))
-    assert captured["data_dir"] == str(tmp_path / "espeak-ng-data")
-    assert captured["model"].endswith("/model.onnx")
-    assert captured["voices"].endswith("/voices.bin")
-    assert captured["tokens"].endswith("/tokens.txt")
-    # v0.19 must NOT set the v1.0 lexicon/dict knobs.
-    assert "lexicon" not in captured
-    assert "dict_dir" not in captured
-
-
-def test_build_kokoro_model_config_v1_0_layout_wires_espeak_alongside_lexicon(tmp_path):
-    """sherpa-onnx 1.13.0's OfflineTtsKokoroModelConfig requires
-    ``data_dir`` as a keyword argument (omitting it raises
-    TypeError). The upstream v1.0 bundle ships ``espeak-ng-data/``
-    AND lexicon files; upstream's own invocation passes both, so we
-    must do the same — an empty ``data_dir`` when espeak data is on
-    disk risks broken / OOV phonemization for languages not covered
-    by the lexicon."""
-    from octomil.runtime.engines.sherpa.engine import _build_kokoro_model_config
-
-    (tmp_path / "model.onnx").write_bytes(b"x")
-    (tmp_path / "voices.bin").write_bytes(b"x")
-    (tmp_path / "tokens.txt").write_bytes(b"x")
-    (tmp_path / "lexicon-us-en.txt").write_bytes(b"x")
-    (tmp_path / "lexicon-gb-en.txt").write_bytes(b"x")
-    (tmp_path / "lexicon-zh.txt").write_bytes(b"x")
-    (tmp_path / "dict").mkdir()
-    (tmp_path / "dict" / "jieba.dict.utf8").write_bytes(b"x")
-    (tmp_path / "espeak-ng-data").mkdir()
-    (tmp_path / "espeak-ng-data" / "phontab").write_bytes(b"x")
-
-    captured: dict[str, str] = {}
-
-    class _FakeSherpa:
-        @staticmethod
-        def OfflineTtsKokoroModelConfig(**kwargs):
-            captured.update(kwargs)
-            return object()
-
-    _build_kokoro_model_config(_FakeSherpa, str(tmp_path))
-    # data_dir wired to the espeak-ng-data path, not left empty —
-    # the v1.0 bundle ships espeak data and upstream uses it.
-    assert captured["data_dir"] == str(tmp_path / "espeak-ng-data")
-    # v1.0 lexicon + dict_dir wired alongside espeak.
-    assert captured["dict_dir"] == str(tmp_path / "dict")
-    lex = captured["lexicon"]
-    assert "lexicon-us-en.txt" in lex
-    assert "lexicon-gb-en.txt" in lex
-    assert "lexicon-zh.txt" in lex
-
-
-def test_build_kokoro_model_config_v1_0_without_espeak_uses_empty_data_dir(tmp_path):
-    """Defensive: if a hand-staged or stripped v1.0 dir lacks
-    espeak data, ``data_dir`` falls back to '' so the
-    sherpa-onnx 1.13.0 constructor still accepts the kwargs.
-    Lexicon + dict_dir still wire correctly so English/Chinese
-    paths keep working."""
-    from octomil.runtime.engines.sherpa.engine import _build_kokoro_model_config
-
-    (tmp_path / "model.onnx").write_bytes(b"x")
-    (tmp_path / "voices.bin").write_bytes(b"x")
-    (tmp_path / "tokens.txt").write_bytes(b"x")
-    (tmp_path / "lexicon-us-en.txt").write_bytes(b"x")
-    (tmp_path / "lexicon-gb-en.txt").write_bytes(b"x")
-    (tmp_path / "lexicon-zh.txt").write_bytes(b"x")
-    (tmp_path / "dict").mkdir()
-    (tmp_path / "dict" / "jieba.dict.utf8").write_bytes(b"x")
-
-    captured: dict[str, str] = {}
-
-    class _FakeSherpa:
-        @staticmethod
-        def OfflineTtsKokoroModelConfig(**kwargs):
-            captured.update(kwargs)
-            return object()
-
-    _build_kokoro_model_config(_FakeSherpa, str(tmp_path))
-    assert "data_dir" in captured
-    assert captured["data_dir"] == ""
-    assert "dict_dir" in captured
-    assert "lexicon" in captured
-
-
-def test_build_kokoro_model_config_rejects_unknown_layout(tmp_path):
-    """Neither espeak-ng-data/ nor dict/+lexicon-*.txt → fail loudly
-    rather than build a half-configured backend that errors at
-    inference time."""
-    from octomil.runtime.engines.sherpa.engine import _build_kokoro_model_config
-
-    (tmp_path / "model.onnx").write_bytes(b"x")
-    (tmp_path / "voices.bin").write_bytes(b"x")
-    (tmp_path / "tokens.txt").write_bytes(b"x")
-
-    class _FakeSherpa:
-        @staticmethod
-        def OfflineTtsKokoroModelConfig(**kwargs):
-            return object()
-
-    with pytest.raises(OctomilError) as ei:
-        _build_kokoro_model_config(_FakeSherpa, str(tmp_path))
-    assert ei.value.code == OctomilErrorCode.RUNTIME_UNAVAILABLE
-    assert "espeak-ng-data" in str(ei.value)
-    assert "lexicon" in str(ei.value)
-
-
-# ---------------------------------------------------------------------------
-# Engine helpers
+# Catalog helpers
 # ---------------------------------------------------------------------------
 
 

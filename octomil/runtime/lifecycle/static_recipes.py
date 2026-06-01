@@ -308,9 +308,8 @@ _KOKORO_82M_RECIPE = StaticRecipe(
         # safety policy refuses both, which is what we want.
         safety_policy=MaterializationSafetyPolicy(),
         # Materialize the bundle's authoritative 53-speaker table
-        # as a voices.txt sidecar so the sherpa engine resolves
-        # voices against THIS artifact's catalog rather than a
-        # global hardcoded list. See
+        # as a voices.txt sidecar so the SDK resolves voices against
+        # THIS artifact's catalog rather than a global hardcoded list. See
         # ``KOKORO_MULTI_LANG_V1_0_VOICES`` for rationale.
         voice_manifest=KOKORO_MULTI_LANG_V1_0_VOICES,
         artifact_version="kokoro-multi-lang-v1_0",

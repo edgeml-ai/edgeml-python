@@ -16,9 +16,9 @@ import pytest
 
 from octomil.audio.speech import FacadeVoices, VoiceCatalog, VoiceInfo
 from octomil.errors import OctomilError
-from octomil.runtime.engines.sherpa.engine import (
-    _SherpaTtsBackend,
+from octomil.runtime.engines.sherpa.catalog import (
     resolve_voice_catalog,
+    resolve_voice_sid,
 )
 from octomil.runtime.lifecycle.static_recipes import (
     KOKORO_EN_V0_19_VOICES,
@@ -101,35 +101,31 @@ def test_resolver_returns_empty_for_unknown_model_with_no_signals():
 
 
 # ---------------------------------------------------------------------------
-# Closure-of-loop: resolver feeds both _voice_to_sid AND list_speech_voices
+# Closure-of-loop: resolver feeds both sid resolution AND list_speech_voices
 # ---------------------------------------------------------------------------
 
 
-def test_engine_voice_to_sid_walks_through_resolver(tmp_path):
-    """Pin the closure-of-loop: ``_SherpaTtsBackend._voice_to_sid``
-    resolves names through the same code path the listing API
-    uses. If the resolver advertises ``am_echo`` at index 12, the
-    engine resolves it to sid=12; if the resolver excludes it,
-    the engine raises."""
+def test_catalog_voice_sid_walks_through_resolver(tmp_path):
+    """Pin the closure-of-loop: voice sid resolution uses the same
+    code path the listing API uses. If the resolver advertises
+    ``am_echo`` at index 12, sid resolution returns 12."""
     (tmp_path / "voices.txt").write_text("\n".join(KOKORO_MULTI_LANG_V1_0_VOICES) + "\n", encoding="utf-8")
-    backend = _SherpaTtsBackend("kokoro-82m", model_dir=str(tmp_path))
 
     resolved = resolve_voice_catalog("kokoro-82m", prepared_model_dir=str(tmp_path))
     for expected_sid, name in enumerate(resolved.voices):
-        assert backend._voice_to_sid(name) == expected_sid
+        assert resolve_voice_sid("kokoro-82m", name, prepared_model_dir=str(tmp_path)) == expected_sid
 
 
-def test_engine_voice_to_sid_rejects_when_resolver_returns_empty(tmp_path):
-    """When the resolver returns an empty catalog (ambiguous
-    prepared dir), the engine raises voice_not_supported_for_model
+def test_catalog_voice_sid_rejects_when_resolver_returns_empty(tmp_path):
+    """When the resolver returns an empty catalog (ambiguous prepared dir),
+    sid resolution raises voice_not_supported_for_model
     rather than aliasing to sid=0."""
     # v0.19 layout under kokoro-82m id → resolver returns ().
     (tmp_path / "espeak-ng-data").mkdir()
     (tmp_path / "espeak-ng-data" / "phontab").write_bytes(b"x")
-    backend = _SherpaTtsBackend("kokoro-82m", model_dir=str(tmp_path))
 
     with pytest.raises(OctomilError) as ei:
-        backend._voice_to_sid("bm_george")
+        resolve_voice_sid("kokoro-82m", "bm_george", prepared_model_dir=str(tmp_path))
     assert "voice_not_supported_for_model" in str(ei.value)
 
 
@@ -572,9 +568,9 @@ async def test_list_speech_voices_raises_on_local_route_failure():
 
 @pytest.mark.asyncio
 async def test_listing_and_synthesis_share_catalog_for_prepared_artifact(tmp_path):
-    """End-to-end closure: every voice the listing API advertises
-    resolves through the engine's _voice_to_sid to the same sid,
-    and any voice the listing API DOESN'T advertise raises."""
+    """End-to-end closure: every voice the listing API advertises resolves
+    through the catalog sid resolver to the same sid, and any voice the
+    listing API DOESN'T advertise raises."""
     from octomil.config.local import ResolvedExecutionDefaults
 
     # Prepared cache with the canonical v1.0 sidecar.
@@ -602,14 +598,13 @@ async def test_listing_and_synthesis_share_catalog_for_prepared_artifact(tmp_pat
     ):
         catalog = await kernel.list_speech_voices(model="kokoro-82m")
 
-    backend = _SherpaTtsBackend("kokoro-82m", model_dir=str(tmp_path))
     # Every voice listing advertises resolves to its declared sid.
     for v in catalog.voices:
-        assert backend._voice_to_sid(v.id) == v.sid
+        assert resolve_voice_sid("kokoro-82m", v.id, prepared_model_dir=str(tmp_path)) == v.sid
 
     # A voice NOT in the listing raises.
     not_in_catalog = "completely_made_up_voice"
     assert catalog.get(not_in_catalog) is None
     with pytest.raises(OctomilError) as ei:
-        backend._voice_to_sid(not_in_catalog)
+        resolve_voice_sid("kokoro-82m", not_in_catalog, prepared_model_dir=str(tmp_path))
     assert "voice_not_supported_for_model" in str(ei.value)

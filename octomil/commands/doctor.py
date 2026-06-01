@@ -3,7 +3,7 @@
 Embedded callers (Ren'Py games, kiosk apps, PyInstaller binaries)
 hit a long tail of confusing failure modes: ``sqlite3`` missing,
 ``OCTOMIL_SERVER_KEY`` unset, ``OCTOMIL_API_BASE`` accidentally
-pointing at staging, sherpa-onnx not installed, planner returning
+pointing at staging, native runtime dylib missing, planner returning
 401 because the org id is mismatched. Each one surfaces today as a
 generic ``RUNTIME_UNAVAILABLE`` deep inside an inference call.
 
@@ -15,8 +15,8 @@ and prints one structured report:
   - Planner: cache backend in use (sqlite vs memory vs null),
     cache directory, network reachability of the configured
     ``OCTOMIL_API_BASE``.
-  - Local runtimes: which engine extras are installed (sherpa-onnx,
-    mlx-lm, llama.cpp, whisper.cpp, onnxruntime), which models are
+  - Local runtimes: which engine extras / native capabilities are available
+    (native TTS, mlx-lm, llama.cpp, whisper.cpp, onnxruntime), which models are
     staged, which static recipes are available offline.
   - Cache directories: artifact cache root, free space, sample of
     materialized artifacts.
@@ -171,13 +171,29 @@ def _check_artifact_cache() -> list[tuple[str, str, str]]:
 
 def _check_local_engines() -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
+    try:
+        from octomil.runtime.native.loader import NativeRuntime
+        from octomil.runtime.native.tts_batch_backend import runtime_advertises_tts_batch
+        from octomil.runtime.native.tts_stream_backend import runtime_advertises_tts_stream
+
+        runtime = NativeRuntime.open()
+        try:
+            batch = runtime_advertises_tts_batch(runtime)
+            stream = runtime_advertises_tts_stream(runtime)
+        finally:
+            runtime.close()
+        status = _OK if batch or stream else _WARN
+        caps = ", ".join(
+            name for name, available in (("audio.tts.batch", batch), ("audio.tts.stream", stream)) if available
+        )
+        rows.append(_row(status, "native TTS runtime", caps or "not advertised (local TTS unavailable)"))
+    except Exception as exc:
+        rows.append(_row(_WARN, "native TTS runtime", f"unavailable: {exc}"))
+
     # ``label`` is the user-facing name (matches the pip extra /
     # PyPI distribution); ``module`` is the actual Python import
-    # name. ``sherpa-onnx`` ships as ``sherpa_onnx`` on import,
-    # which the operator's mental model doesn't match — the row
-    # label sticks with the dist name they typed in ``pip install``.
+    # name.
     engines = [
-        ("sherpa-onnx", "sherpa_onnx", "tts (Kokoro / VITS / Piper)"),
         ("mlx_lm", "mlx_lm", "chat / responses on Apple Silicon"),
         ("llama_cpp", "llama_cpp", "chat / responses (GGUF)"),
         ("pywhispercpp", "pywhispercpp", "transcription"),

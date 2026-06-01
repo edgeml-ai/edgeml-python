@@ -30,10 +30,9 @@ logger = logging.getLogger(__name__)
 
 
 def _is_sherpa_tts_model(model_name: str) -> bool:
-    """Lazy wrapper around the sherpa engine's TTS-model check.
+    """Lazy wrapper around the sherpa catalog's TTS-model check.
 
-    Imported as a free function so the dispatch site stays a one-liner and
-    we avoid hauling sherpa-onnx into the import path of non-TTS servers.
+    Imported as a free function so the dispatch site stays a one-liner.
     """
     from ..runtime.engines.sherpa import is_sherpa_tts_model
 
