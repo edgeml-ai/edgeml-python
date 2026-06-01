@@ -1,7 +1,7 @@
 """Tests for native TTS cutover in the kernel route.
 
 The legacy Python Sherpa path prepared an artifact directory and
-threaded it into ``SherpaTtsEngine``. Native cutover makes
+threaded it into the Python sherpa engine. Native cutover makes
 ``audio.tts.batch`` advertisement the local-routing truth instead:
 the runtime either advertises the capability and the SDK opens a
 native backend, or the route fails closed without running

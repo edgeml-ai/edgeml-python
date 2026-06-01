@@ -3,7 +3,6 @@
 from octomil.runtime.engines.sherpa.engine import (
     _KOKORO_VOICES,
     ResolvedVoiceCatalog,
-    SherpaTtsEngine,
     catalog_for_model,
     fallback_catalog_for_artifact,
     is_sherpa_tts_model,
@@ -14,7 +13,6 @@ from octomil.runtime.engines.sherpa.engine import (
 TIER = "supported"
 
 __all__ = [
-    "SherpaTtsEngine",
     "TIER",
     "ResolvedVoiceCatalog",
     "catalog_for_model",

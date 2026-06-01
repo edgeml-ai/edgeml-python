@@ -335,7 +335,15 @@ class TestGlobalRegistry:
         names = [e.name for e in reg.engines]
         assert "mlx-lm" in names
         assert "llama.cpp" in names
+        assert "sherpa-onnx" not in names
         assert "echo" in names
+
+    def test_sherpa_package_exports_helpers_not_engine_plugin(self):
+        import octomil.runtime.engines.sherpa as sherpa
+
+        assert hasattr(sherpa, "is_sherpa_tts_model")
+        assert hasattr(sherpa, "resolve_voice_catalog")
+        assert not hasattr(sherpa, "SherpaTtsEngine")
 
     def test_reset_registry_clears_singleton(self):
         r1 = get_registry()

@@ -617,6 +617,7 @@ async def test_production_http_speech_stream_route_returns_pcm_with_metadata_hea
     with (
         patch(
             "octomil.runtime.engines.sherpa.SherpaTtsEngine",
+            create=True,
             side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
         ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
@@ -682,6 +683,7 @@ async def test_production_http_speech_stream_route_rejects_unsupported_format(tm
     with (
         patch(
             "octomil.runtime.engines.sherpa.SherpaTtsEngine",
+            create=True,
             side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
         ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
@@ -931,6 +933,7 @@ async def test_tts_server_lifespan_loads_native_backends_without_sherpa_fallback
     with (
         patch(
             "octomil.runtime.engines.sherpa.SherpaTtsEngine",
+            create=True,
             side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
         ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
@@ -966,6 +969,7 @@ async def test_tts_server_lifespan_does_not_construct_sherpa_engine(tmp_path):
     with (
         patch(
             "octomil.runtime.engines.sherpa.SherpaTtsEngine",
+            create=True,
             side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
         ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),
@@ -1017,6 +1021,7 @@ async def test_http_route_returns_4xx_for_unsupported_voice_before_streaming(tmp
     with (
         patch(
             "octomil.runtime.engines.sherpa.SherpaTtsEngine",
+            create=True,
             side_effect=AssertionError("SherpaTtsEngine must not be constructed on native TTS startup"),
         ),
         patch("octomil.serve.app._is_sherpa_tts_model", return_value=True),

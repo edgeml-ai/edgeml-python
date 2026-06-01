@@ -1,13 +1,9 @@
-"""sherpa-onnx engine plugin -- on-device text-to-speech via sherpa-onnx.
+"""sherpa-onnx TTS helpers.
 
 sherpa-onnx (k2-fsa) ships VITS/Piper/Kokoro TTS models packaged as ONNX.
-This plugin wraps the sherpa-onnx Python bindings so TTS models register
-with the octomil engine registry under the canonical ``sherpa-onnx``
-executor id.
-
-Unlike LLM engines, TTS does NOT use ``generate()`` / ``generate_stream()``.
-Instead, the backend exposes a ``synthesize()`` method and the serve layer
-adds an OpenAI-compatible ``/v1/audio/speech`` endpoint.
+Production TTS synthesis now runs through the native OCT_* ABI runtime; this
+module remains as the shared model/catalog/voice helper layer plus the legacy
+backend implementation used by focused tests and compatibility utilities.
 """
 
 from __future__ import annotations
@@ -17,7 +13,6 @@ import logging
 import os
 import struct
 import threading
-import time
 from collections import deque
 from dataclasses import dataclass
 from io import BytesIO
@@ -30,7 +25,6 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 # ``streaming_capability``) keep working unchanged.
 from octomil.audio._segmentation import count_sentences as _count_sentences
 from octomil.errors import OctomilError, OctomilErrorCode
-from octomil.runtime.core.base import BenchmarkResult, EnginePlugin
 
 if TYPE_CHECKING:
     from octomil.audio.streaming import TtsStreamingCapability
@@ -683,16 +677,6 @@ def _has_sherpa_onnx() -> bool:
         return False
 
 
-def _get_sherpa_version() -> str:
-    """Return sherpa_onnx version string, or empty if unavailable."""
-    try:
-        import sherpa_onnx  # type: ignore[import-untyped]
-
-        return getattr(sherpa_onnx, "__version__", "unknown")
-    except ImportError:
-        return ""
-
-
 def is_sherpa_tts_model(model_name: str) -> bool:
     """Check if a model name refers to a sherpa-onnx TTS model.
 
@@ -716,81 +700,6 @@ def is_sherpa_tts_runtime_available(model_name: str) -> bool:
     artifact dir threaded in via ``model_dir=``.
     """
     return _has_sherpa_onnx() and is_sherpa_tts_model(model_name)
-
-
-class SherpaTtsEngine(EnginePlugin):
-    """Text-to-speech engine using sherpa-onnx."""
-
-    @property
-    def name(self) -> str:
-        return "sherpa-onnx"
-
-    @property
-    def display_name(self) -> str:
-        return "sherpa-onnx (Text-to-Speech)"
-
-    @property
-    def priority(self) -> int:
-        return 36  # Sits next to whisper.cpp (35).
-
-    def detect(self) -> bool:
-        return _has_sherpa_onnx()
-
-    def detect_info(self) -> str:
-        version = _get_sherpa_version()
-        if not version:
-            return ""
-        models = ", ".join(sorted(_SHERPA_TTS_MODELS.keys()))
-        return f"sherpa_onnx {version}; tts models: {models}"
-
-    def supports_model(self, model_name: str) -> bool:
-        return is_sherpa_tts_model(model_name)
-
-    def benchmark(self, model_name: str, n_tokens: int = 32) -> BenchmarkResult:
-        """Benchmark by synthesizing a short reference utterance.
-
-        For TTS, ``tokens_per_second`` is repurposed as
-        ``audio_seconds_per_second`` (real-time factor).
-        """
-        if not _has_sherpa_onnx():
-            return BenchmarkResult(engine_name=self.name, error="sherpa_onnx not available")
-
-        if not is_sherpa_tts_model(model_name):
-            return BenchmarkResult(
-                engine_name=self.name,
-                error=f"Unsupported model: {model_name}",
-            )
-
-        try:
-            backend = _SherpaTtsBackend(model_name)
-            backend.load_model(model_name)
-
-            reference = "Octomil benchmark synthesis check."
-
-            start = time.monotonic()
-            result = backend.synthesize(reference)
-            elapsed = time.monotonic() - start
-
-            audio_duration_s = result["duration_ms"] / 1000.0
-            realtime_factor = audio_duration_s / elapsed if elapsed > 0 else 0.0
-
-            return BenchmarkResult(
-                engine_name=self.name,
-                tokens_per_second=realtime_factor,
-                metadata={
-                    "method": "synthesize",
-                    "audio_seconds_per_second": realtime_factor,
-                    "audio_duration_s": round(audio_duration_s, 3),
-                    "elapsed_s": round(elapsed, 3),
-                    "model": model_name,
-                    "sample_chars": len(reference),
-                },
-            )
-        except Exception as exc:
-            return BenchmarkResult(engine_name=self.name, error=str(exc))
-
-    def create_backend(self, model_name: str, **kwargs: Any) -> Any:
-        return _SherpaTtsBackend(model_name, **kwargs)
 
 
 class _SherpaTtsBackend:
