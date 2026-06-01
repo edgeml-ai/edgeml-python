@@ -31,6 +31,11 @@ class _SpeechKernel:
         )
 
 
+class _UnavailableSpeechKernel:
+    async def synthesize_speech(self, **kwargs):
+        raise AssertionError("engine should not be touched for generated-output cache hits")
+
+
 def test_cache_round_trip_and_hex_key_validation(tmp_path: Path) -> None:
     cache = GeneratedOutputCache(root=tmp_path, max_bytes=1024)
     key = derive_output_key("audio.speech", model="kokoro-82m", payload={"input": "hi"})
@@ -74,6 +79,48 @@ async def test_speech_create_uses_generated_output_cache(monkeypatch, tmp_path: 
     assert second.latency_ms == 0.0
     assert refreshed.audio_bytes == b"audio-2"
     assert kernel.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_speech_cache_hit_returns_before_engine_ready(monkeypatch, tmp_path: Path) -> None:
+    """Cached generated audio must be playable while warmup/model load is still cold."""
+    monkeypatch.setenv("OCTOMIL_OUTPUT_CACHE_DIR", str(tmp_path))
+    key = derive_output_key(
+        "audio.speech",
+        model="kokoro-82m",
+        payload={
+            "input": "hello",
+            "voice": "af_bella",
+            "speaker": None,
+            "response_format": "wav",
+            "speed": 1.0,
+            "app": None,
+            "text_normalization": "auto",
+        },
+    )
+    GeneratedOutputCache(root=tmp_path / "outputs").put(
+        "audio.speech",
+        key,
+        b"cached-wav",
+        {
+            "content_type": "audio/wav",
+            "format": "wav",
+            "model": "kokoro-82m",
+            "voice": "af_bella",
+            "sample_rate": 24_000,
+            "duration_ms": 120,
+            "locality": "on_device",
+            "engine": "sherpa-onnx",
+            "policy": "local_first",
+        },
+    )
+    speech = FacadeSpeech(_UnavailableSpeechKernel())
+
+    response = await speech.create(model="kokoro-82m", input="hello", voice="af_bella")
+
+    assert response.audio_bytes == b"cached-wav"
+    assert response.latency_ms == 0.0
+    assert response.route.engine == "sherpa-onnx"
 
 
 @pytest.mark.asyncio
