@@ -138,12 +138,14 @@ class FacadeEmbeddings:
             )
             embeddings = list(getattr(result, "embeddings", None) or [])
             route = getattr(result, "route", None)
-            return EmbeddingResult(
+            response = EmbeddingResult(
                 embeddings=embeddings,
                 model=getattr(result, "model", "") or model,
                 usage=usage,
                 route=route,
             )
+            self._emit_local_embedding_telemetry(response, input_count=len(inputs))
+            return response
         import asyncio
 
         loop = asyncio.get_running_loop()
@@ -151,6 +153,32 @@ class FacadeEmbeddings:
             None,
             lambda: self._client.embed(model, input, timeout=timeout),
         )
+
+    def _emit_local_embedding_telemetry(self, response: Any, *, input_count: int) -> None:
+        route = getattr(response, "route", None)
+        if getattr(route, "locality", None) != "on_device":
+            return
+        reporter = getattr(self._client, "_reporter", None)
+        if reporter is None:
+            return
+        emit = getattr(reporter, "track_event", None) or getattr(reporter, "track", None)
+        if emit is None:
+            return
+        attrs: dict[str, Any] = {
+            "model.id": getattr(response, "model", ""),
+            "inference.modality": "embeddings",
+            "locality": "on_device",
+            "input.count": input_count,
+        }
+        embeddings = getattr(response, "embeddings", None) or []
+        if embeddings:
+            first = embeddings[0]
+            if isinstance(first, (list, tuple)):
+                attrs["embedding.dimensions"] = len(first)
+        try:
+            emit("embeddings.create.completed", attrs)
+        except Exception:
+            logger.debug("embeddings telemetry failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # v0.1.14 — embeddings.image public facade
@@ -553,7 +581,11 @@ class Octomil:
         """
         from .audio import FacadeAudio
 
-        return FacadeAudio(self._kernel, cloud_allowed=not _is_no_auth(self._auth))
+        return FacadeAudio(
+            self._kernel,
+            cloud_allowed=not _is_no_auth(self._auth),
+            telemetry_reporter=getattr(self._client, "_reporter", None),
+        )
 
     def _build_kernel(self) -> Any:
         from .config.local import load_standalone_config

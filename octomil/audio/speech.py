@@ -166,9 +166,10 @@ class FacadeSpeech:
     and locality dispatch.
     """
 
-    def __init__(self, kernel: Any, *, cloud_allowed: bool = True) -> None:
+    def __init__(self, kernel: Any, *, cloud_allowed: bool = True, telemetry_reporter: Any | None = None) -> None:
         self._kernel = kernel
         self._cloud_allowed = cloud_allowed
+        self._telemetry_reporter = telemetry_reporter
 
     def stream(
         self,
@@ -251,7 +252,7 @@ class FacadeSpeech:
 
         from octomil.audio.streaming import SpeechStream
 
-        return SpeechStream(_producer())
+        return SpeechStream(_producer(), metrics_collector=self._stream_metrics_collector(model, voice, policy, app))
 
     async def create(
         self,
@@ -329,7 +330,7 @@ class FacadeSpeech:
                 cached = output_cache.get("audio.speech", cache_key)
                 if cached is not None:
                     meta = cached.metadata
-                    return SpeechResponse(
+                    response = SpeechResponse(
                         audio_bytes=cached.data,
                         content_type=str(meta.get("content_type") or _content_type_for_format(response_format)),
                         format=str(meta.get("format") or response_format),
@@ -348,6 +349,8 @@ class FacadeSpeech:
                         billed_units=meta.get("billed_units"),
                         unit_kind=meta.get("unit_kind"),
                     )
+                    self._emit_create_telemetry(response, cache_hit=True)
+                    return response
 
         response = await self._kernel.synthesize_speech(
             model=model,
@@ -385,7 +388,62 @@ class FacadeSpeech:
                 )
             except OSError:
                 logger.debug("audio.speech generated-output cache write failed", exc_info=True)
+        self._emit_create_telemetry(response, cache_hit=False)
         return response
+
+    def _stream_metrics_collector(
+        self,
+        model: str,
+        voice: Optional[str],
+        policy: Optional[str],
+        app: Optional[str],
+    ) -> Any | None:
+        if self._telemetry_reporter is None:
+            return None
+        try:
+            from octomil.audio.metrics import TtsMetricsCollector, _TelemetryReporterSink
+
+            return TtsMetricsCollector(
+                sink=_TelemetryReporterSink(self._telemetry_reporter),
+                model=model,
+                voice=voice,
+                policy=policy,
+                app_slug=app,
+            )
+        except Exception:
+            logger.debug("failed to initialize TTS stream telemetry collector", exc_info=True)
+            return None
+
+    def _emit_create_telemetry(self, response: SpeechResponse, *, cache_hit: bool) -> None:
+        if self._telemetry_reporter is None or response.route.locality != "on_device":
+            return
+        emit = getattr(self._telemetry_reporter, "track_event", None) or getattr(
+            self._telemetry_reporter, "track", None
+        )
+        if emit is None:
+            return
+        attrs: dict[str, Any] = {
+            "model.id": response.model,
+            "inference.modality": "audio.speech",
+            "locality": response.route.locality,
+            "cache.hit": cache_hit,
+            "audio.format": response.format,
+            "audio.bytes": len(response.audio_bytes),
+        }
+        if response.route.engine is not None:
+            attrs["engine"] = response.route.engine
+        if response.route.policy is not None:
+            attrs["policy"] = response.route.policy
+        if response.voice is not None:
+            attrs["voice"] = response.voice
+        if response.sample_rate is not None:
+            attrs["audio.sample_rate"] = response.sample_rate
+        if response.duration_ms is not None:
+            attrs["audio.duration_ms"] = response.duration_ms
+        try:
+            emit("tts.create.completed", attrs)
+        except Exception:
+            logger.debug("audio.speech create telemetry failed", exc_info=True)
 
 
 def _content_type_for_format(response_format: str) -> str:
