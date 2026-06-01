@@ -10,6 +10,8 @@
 #   OCTOMIL_INSTALL_DIR   bin directory for the octomil symlink (default: /usr/local/bin or ~/.local/bin)
 #   OCTOMIL_INSTALL       legacy alias for OCTOMIL_INSTALL_DIR
 #   OCTOMIL_LIB_DIR       bundle directory (default: ~/.local/lib/octomil)
+#   OCTOMIL_LOCAL_ARCHIVE install from a local .tar.gz instead of downloading
+#                         (skips download + checksum; for air-gapped installs and tests)
 
 set -eu
 
@@ -167,27 +169,45 @@ verify_checksum() {
 }
 
 download_and_install() {
-    base="$(release_base_url "$VERSION")"
-    archive_path="${TMPDIR_PATH}/${ARTIFACT}"
     checksum_path="${TMPDIR_PATH}/SHA256SUMS"
     bundle_path="${TMPDIR_PATH}/bundle"
 
-    info "Downloading Octomil ${VERSION} for ${PLATFORM}..."
-    download "${base}/${ARTIFACT}" "$archive_path"
-    download_checksums "$base" "$checksum_path"
-    verify_checksum "$checksum_path" "$archive_path"
+    if [ -n "${OCTOMIL_LOCAL_ARCHIVE:-}" ]; then
+        [ -f "$OCTOMIL_LOCAL_ARCHIVE" ] || error "OCTOMIL_LOCAL_ARCHIVE not found: ${OCTOMIL_LOCAL_ARCHIVE}"
+        archive_path="$OCTOMIL_LOCAL_ARCHIVE"
+        info "Installing Octomil from local archive ${archive_path} (download + checksum skipped)..."
+    else
+        archive_path="${TMPDIR_PATH}/${ARTIFACT}"
+        base="$(release_base_url "$VERSION")"
+        info "Downloading Octomil ${VERSION} for ${PLATFORM}..."
+        download "${base}/${ARTIFACT}" "$archive_path"
+        download_checksums "$base" "$checksum_path"
+        verify_checksum "$checksum_path" "$archive_path"
+    fi
 
     info "Installing bundle..."
     mkdir -p "$bundle_path"
     tar -xzf "$archive_path" -C "$bundle_path"
 
-    if [ ! -f "${bundle_path}/${BINARY_NAME}" ]; then
-        error "Archive did not contain expected binary '${BINARY_NAME}'."
+    # Locate the binary within the extracted archive. Release tarballs are
+    # flat (binary at the root, next to _internal/), but older and alternate
+    # bundles nest everything under an octomil/ directory. Accept either, so a
+    # change to the build's archive layout can't silently break installs. The
+    # Windows installer (install.ps1) already tolerates both layouts.
+    if [ -f "${bundle_path}/${BINARY_NAME}" ]; then
+        bundle_root="${bundle_path}"
+    elif [ -f "${bundle_path}/${BINARY_NAME}/${BINARY_NAME}" ]; then
+        bundle_root="${bundle_path}/${BINARY_NAME}"
+    else
+        error "Archive did not contain expected binary '${BINARY_NAME}' (looked at the archive root and ${BINARY_NAME}/)."
     fi
 
     rm -rf "$LIB_DIR"
     mkdir -p "$LIB_DIR"
-    tar -xzf "$archive_path" -C "$LIB_DIR"
+    # Copy the resolved bundle contents (binary + _internal/) into LIB_DIR.
+    # -R preserves symlinks (PyInstaller bundles ship dylib/framework links),
+    # -p preserves modes — matching the previous tar-into-place behavior.
+    cp -Rp "${bundle_root}/." "$LIB_DIR/"
     chmod +x "${LIB_DIR}/${BINARY_NAME}"
 
     mkdir -p "$INSTALL_DIR"
@@ -226,7 +246,13 @@ main() {
     trap 'rm -rf "$TMPDIR_PATH"' EXIT
 
     detect_platform
-    get_version
+    # Version resolution (and its network calls) is only needed when we
+    # download from a release. A local archive install skips it entirely.
+    if [ -z "${OCTOMIL_LOCAL_ARCHIVE:-}" ]; then
+        get_version
+    else
+        VERSION="${OCTOMIL_VERSION:-local archive}"
+    fi
     get_install_dirs
     download_and_install
     verify_installation
