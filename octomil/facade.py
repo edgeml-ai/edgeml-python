@@ -601,6 +601,7 @@ class Octomil:
         capability: str = "tts",
         policy: str | None = None,
         app: str | None = None,
+        on_progress: Any | None = None,
     ) -> Any:
         """Pre-warm a model: prepare the artifact AND load it into memory.
 
@@ -617,7 +618,9 @@ class Octomil:
         to free GPU memory between phases.
 
         Returns a :class:`WarmupOutcome` (capability, model,
-        prepare_outcome, backend_loaded, latency_ms).
+        prepare_outcome, backend_loaded, latency_ms, events). Pass
+        ``on_progress`` to receive coarse warmup lifecycle events while
+        the artifact is prepared and the backend loads.
         """
         if not self._initialized:
             raise OctomilNotInitializedError()
@@ -629,6 +632,7 @@ class Octomil:
             capability=capability,
             policy=policy,
             app=app,
+            on_progress=on_progress,
         )
 
     def _build_hosted_responses(self) -> OctomilResponses:

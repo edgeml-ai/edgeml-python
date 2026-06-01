@@ -33,7 +33,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Callable, Optional
 
 from octomil._generated.message_role import MessageRole
 from octomil.config.local import (
@@ -189,6 +189,27 @@ class StreamChunk:
 
 
 @dataclass
+class WarmupProgressEvent:
+    """Lifecycle/progress event emitted while ``warmup`` runs.
+
+    ``progress`` is a best-effort fraction in ``[0.0, 1.0]``. Warmup
+    does not know byte-level download or model-load progress for every
+    backend yet, so these events intentionally report coarse stages that
+    apps can render as a truthful "loading voices" state.
+    """
+
+    capability: str
+    model: str
+    stage: str
+    progress: float
+    message: str = ""
+    elapsed_ms: float = 0.0
+
+
+WarmupProgressCallback = Callable[[WarmupProgressEvent], None]
+
+
+@dataclass
 class WarmupOutcome:
     """Result of :meth:`ExecutionKernel.warmup`.
 
@@ -212,6 +233,8 @@ class WarmupOutcome:
       this host, runtime imports failed, etc.) — prepare bytes are
       still on disk, just not loaded.
     - ``latency_ms``: wall time for the full prepare + load loop.
+    - ``events``: coarse lifecycle/progress events emitted during the
+      run, also delivered to the optional progress callback.
     """
 
     capability: str
@@ -219,6 +242,7 @@ class WarmupOutcome:
     prepare_outcome: Any
     backend_loaded: bool
     latency_ms: float
+    events: tuple[WarmupProgressEvent, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -3379,6 +3403,7 @@ class ExecutionKernel:
         capability: str = "tts",
         policy: Optional[str] = None,
         app: Optional[str] = None,
+        on_progress: WarmupProgressCallback | None = None,
     ) -> WarmupOutcome:
         """Run ``prepare`` and load the local backend so first-call is hot.
 
@@ -3403,7 +3428,8 @@ class ExecutionKernel:
 
         Returns a :class:`WarmupOutcome` with the underlying
         :class:`PrepareOutcome`, ``backend_loaded`` flag, and
-        ``latency_ms`` wall time.
+        ``latency_ms`` wall time. Pass ``on_progress`` to receive
+        coarse lifecycle events while warmup is still running.
         """
         if capability not in _WARMUPABLE_CAPABILITIES:
             raise OctomilError(
@@ -3418,6 +3444,25 @@ class ExecutionKernel:
             )
 
         t0 = time.monotonic()
+        progress_events: list[WarmupProgressEvent] = []
+
+        def _emit_progress(stage: str, progress: float, message: str, event_model: str | None = None) -> None:
+            event = WarmupProgressEvent(
+                capability=capability,
+                model=event_model or model,
+                stage=stage,
+                progress=max(0.0, min(1.0, progress)),
+                message=message,
+                elapsed_ms=(time.monotonic() - t0) * 1000.0,
+            )
+            progress_events.append(event)
+            if on_progress is not None:
+                try:
+                    on_progress(event)
+                except Exception:
+                    logger.debug("warmup progress callback failed", exc_info=True)
+
+        _emit_progress("resolving", 0.0, "resolving runtime model and local candidate")
 
         # We need the planner selection up front for two reasons:
         #   1. ``_runtime_model_for_selection`` resolves ``@app/...``
@@ -3437,6 +3482,7 @@ class ExecutionKernel:
         runtime_model = _runtime_model_for_selection(selection, effective_model)
         planner_candidate = _local_sdk_runtime_candidate(selection)
         app_scoped = bool(app) or _is_app_ref(model or "")
+        _emit_progress("resolved", 0.1, "runtime model resolved", runtime_model)
         candidate, used_static_recipe = self._select_prepare_candidate(
             effective_model=effective_model,
             capability=capability,
@@ -3477,6 +3523,7 @@ class ExecutionKernel:
         from octomil.runtime.lifecycle.prepare_manager import PrepareManager, PrepareMode
 
         manager = self._prepare_manager or PrepareManager()
+        _emit_progress("preparing", 0.2, "preparing local artifact", runtime_model)
         prepare_outcome = manager.prepare(candidate, mode=PrepareMode.EXPLICIT)
         # Mirror ``prepare()``: when the kernel substituted a static
         # recipe, run its MaterializationPlan after the download.
@@ -3485,6 +3532,7 @@ class ExecutionKernel:
         if used_static_recipe is not None:
             from octomil.runtime.lifecycle.materialization import Materializer
 
+            _emit_progress("materializing", 0.55, "materializing static recipe files", runtime_model)
             Materializer().materialize(prepare_outcome.artifact_dir, used_static_recipe.materialization)
         artifact_dir = str(prepare_outcome.artifact_dir)
         # Cache MUST be keyed under the planner candidate, not the
@@ -3504,6 +3552,7 @@ class ExecutionKernel:
         cache_key = self._warmup_cache_key(capability, runtime_model, planner_candidate)
 
         backend_loaded = False
+        _emit_progress("loading", 0.75, "loading backend into memory", runtime_model)
         if capability == CAPABILITY_TTS:
             backend = self._resolve_local_tts_backend(runtime_model, prepared_model_dir=artifact_dir)
             if backend is not None:
@@ -3536,12 +3585,19 @@ class ExecutionKernel:
                     backend_loaded = True
 
         latency_ms = (time.monotonic() - t0) * 1000.0
+        _emit_progress(
+            "ready" if backend_loaded else "load_skipped",
+            1.0,
+            "backend loaded" if backend_loaded else "artifact prepared; backend not loaded",
+            runtime_model,
+        )
         return WarmupOutcome(
             capability=capability,
             model=runtime_model,
             prepare_outcome=prepare_outcome,
             backend_loaded=backend_loaded,
             latency_ms=latency_ms,
+            events=tuple(progress_events),
         )
 
     @staticmethod

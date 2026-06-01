@@ -33,6 +33,7 @@ from octomil.execution.kernel import (
     _WARMUPABLE_CAPABILITIES,
     ExecutionKernel,
     WarmupOutcome,
+    WarmupProgressEvent,
 )
 from octomil.runtime.lifecycle.prepare_manager import PrepareOutcome
 from octomil.runtime.planner.schemas import (
@@ -182,6 +183,34 @@ def test_warmup_loads_backend_and_caches_it(tmp_path):
     # Cache populated under the artifact-identity key.
     cached_keys = list(kernel._warmed_backends.keys())
     assert any(k[0] == "tts" and k[1] == "piper-en-amy" for k in cached_keys), cached_keys
+
+
+def test_warmup_emits_progress_events_and_records_them(tmp_path):
+    artifact_dir = tmp_path / "kokoro"
+    artifact_dir.mkdir()
+    pm = _FakePM(artifact_dir)
+    kernel = ExecutionKernel(prepare_manager=pm)
+    _stub_kernel_resolve(kernel, "piper-en-amy")
+    selection = _Selection(candidates=[_local_candidate(engine="sherpa-onnx", artifact_id="piper-en-amy")])
+    observed: list[WarmupProgressEvent] = []
+
+    with ExitStack() as stack:
+        stack.enter_context(patch("octomil.execution.kernel._resolve_planner_selection", return_value=selection))
+        stack.enter_context(
+            patch("octomil.runtime.native.tts_batch_backend.NativeTtsBatchBackend", _FakeNativeTtsBatchBackend)
+        )
+        outcome = kernel.warmup(
+            model="piper-en-amy",
+            capability="tts",
+            on_progress=observed.append,
+        )
+
+    stages = [event.stage for event in observed]
+    assert stages == ["resolving", "resolved", "preparing", "loading", "ready"]
+    assert outcome.events == tuple(observed)
+    assert observed[-1].model == "piper-en-amy"
+    assert observed[-1].progress == 1.0
+    assert all(0.0 <= event.progress <= 1.0 for event in observed)
 
 
 def test_post_warmup_dispatch_skips_backend_construction(tmp_path):
