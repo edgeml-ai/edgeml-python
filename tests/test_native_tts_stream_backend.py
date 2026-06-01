@@ -209,6 +209,15 @@ class TestNativeTtsStreamBackendVoiceValidation:
             backend.validate_voice("af_bella")
         assert excinfo.value.code == OctomilErrorCode.INVALID_INPUT
 
+    def test_named_kokoro_voice_resolves_with_prepared_catalog(self, tmp_path) -> None:
+        (tmp_path / "VERSION").write_text("kokoro-multi-lang-v1_0\n", encoding="utf-8")
+        (tmp_path / "voices.txt").write_text("af_heart\naf_bella\nam_echo\n", encoding="utf-8")
+        backend = NativeTtsStreamBackend()
+        backend._model_name = "kokoro-82m"
+        backend._prepared_model_dir = str(tmp_path)
+
+        assert backend.validate_voice("af_bella") == "1"
+
     def test_voice_validation_runs_before_session_open(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When voice is invalid, synthesize_with_chunks raises
         INVALID_INPUT BEFORE the runtime sees the request.

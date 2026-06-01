@@ -173,7 +173,7 @@ async def test_create_threads_speaker_kwarg_to_kernel():
     backend = _FakeBackend()
     kernel = _FakeKernel(backend)
     facade = FacadeSpeech(kernel)
-    response = await facade.create(model="kokoro-82m", input="hello", speaker="af_bella")
+    response = await facade.create(model="kokoro-82m", input="hello", speaker="af_bella", cache="off")
     # Kernel saw the kwarg.
     assert kernel.synthesize_calls[0]["speaker"] == "af_bella"
     # On a non-app-ref, speaker is treated as native_voice alias.
@@ -188,7 +188,7 @@ async def test_create_voice_kwarg_still_works_back_compat():
     backend = _FakeBackend()
     kernel = _FakeKernel(backend)
     facade = FacadeSpeech(kernel)
-    await facade.create(model="kokoro-82m", input="hello", voice="af_bella")
+    await facade.create(model="kokoro-82m", input="hello", voice="af_bella", cache="off")
     assert kernel.synthesize_calls[0]["voice"] == "af_bella"
     assert kernel.synthesize_calls[0]["speaker"] is None
     assert backend.synthesize_calls[0]["voice"] == "af_bella"
@@ -241,7 +241,7 @@ async def test_voice_promoted_to_speaker_when_id_matches_planner_profile():
     backend = _FakeBackend()
     kernel = _FakeKernel(backend, selection=_selection_with_eternum_speakers())
     facade = FacadeSpeech(kernel)
-    await facade.create(model="@app/eternum/tts", input="hello", voice="narrator")
+    await facade.create(model="@app/eternum/tts", input="hello", voice="narrator", cache="off")
 
     profile = backend.synthesize_calls[0]["speaker_profile"]
     assert profile.source == "planner_profile"

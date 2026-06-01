@@ -1,7 +1,7 @@
 """Native ``audio.tts.batch`` backend.
 
 The runtime already exposes batch TTS as a native capability when the
-Sherpa TTS build and canonical piper-amy artifact gates pass. This
+Sherpa TTS build and one reviewed native TTS artifact gate passes. This
 wrapper gives Python product code a batch-shaped API without falling
 back to the legacy Python Sherpa engine.
 """
@@ -25,7 +25,7 @@ class NativeTtsBatchBackend(NativeTtsStreamBackend):
     name = "native-sherpa-onnx-tts-batch"
     capability_id = CAPABILITY_AUDIO_TTS_BATCH
     backend_label = "TTS-batch"
-    supported_model_names = frozenset({"piper-en-amy", "piper-amy"})
+    supported_model_names = frozenset({"piper-en-amy", "piper-amy", "kokoro-82m"})
     synthesize_stream = None  # type: ignore[assignment]
 
     def load_model(self, model_name: str, **kwargs: Any) -> None:
@@ -35,8 +35,9 @@ class NativeTtsBatchBackend(NativeTtsStreamBackend):
             raise OctomilError(
                 code=OctomilErrorCode.UNSUPPORTED_MODALITY,
                 message=(
-                    f"native TTS-batch supports the canonical piper-amy runtime artifact only; "
-                    f"got model {model_name!r}. Use piper-en-amy or keep this capability unadvertised."
+                    f"native TTS-batch supports reviewed native TTS artifacts only; "
+                    f"got model {model_name!r}. Use piper-en-amy or kokoro-82m, "
+                    "or keep this capability unadvertised."
                 ),
             )
         super().load_model(model_name, **kwargs)
