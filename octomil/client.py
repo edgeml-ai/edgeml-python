@@ -43,7 +43,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-from .auth import AuthConfig, DeviceTokenAuth, OrgApiKeyAuth  # noqa: E402
+from .auth import AuthConfig, DeviceTokenAuth, NoAuth, OrgApiKeyAuth  # noqa: E402
+from .errors import OctomilError, OctomilErrorCode  # noqa: E402
 
 # PR C: ``ModelOpsMixin`` and the inner-package classes
 # (``_ApiClient``, ``RolloutsAPI``, ``ModelRegistry``) are imported
@@ -95,10 +96,14 @@ class OctomilClient(ModelOpsMixin):
     ) -> None:
         from .auth import PublishableKeyAuth
 
-        if isinstance(auth, OrgApiKeyAuth):
-            self._api_key: str = auth.api_key
-            self._org_id: str = auth.org_id
-            self._api_base: str = auth.api_base
+        if isinstance(auth, NoAuth):
+            self._api_key = ""
+            self._org_id = ""
+            self._api_base = auth.api_base
+        elif isinstance(auth, OrgApiKeyAuth):
+            self._api_key = auth.api_key
+            self._org_id = auth.org_id
+            self._api_base = auth.api_base
         elif isinstance(auth, DeviceTokenAuth):
             self._api_key = auth.bootstrap_token
             self._org_id = ""
@@ -109,7 +114,7 @@ class OctomilClient(ModelOpsMixin):
             self._api_base = auth.api_base
         else:
             raise TypeError(
-                f"auth must be OrgApiKeyAuth, DeviceTokenAuth, or PublishableKeyAuth, got {type(auth).__name__}"
+                f"auth must be NoAuth, OrgApiKeyAuth, DeviceTokenAuth, or PublishableKeyAuth, got {type(auth).__name__}"
             )
 
         self._auth = auth
@@ -191,7 +196,14 @@ class OctomilClient(ModelOpsMixin):
         Raises:
             ValueError: If ``OCTOMIL_API_KEY`` is not set.
         """
-        return cls(auth=OrgApiKeyAuth.from_env(), device_id=device_id, planner_enabled=planner_enabled)
+        try:
+            auth: AuthConfig = OrgApiKeyAuth.from_env()
+        except OctomilError as exc:
+            if exc.code != OctomilErrorCode.INVALID_API_KEY:
+                raise
+            auth = NoAuth()
+            planner_enabled = False
+        return cls(auth=auth, device_id=device_id, planner_enabled=planner_enabled)
 
     # ------------------------------------------------------------------
     # Device ID — stable identifier for this device

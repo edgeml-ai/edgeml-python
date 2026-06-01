@@ -44,13 +44,6 @@ class Octomil:
 
         return FacadeOctomil.hosted_from_env(**kwargs)
 
-    @classmethod
-    def local(cls, **kwargs):
-        """Compatibility bridge to the unified facade local constructor."""
-        from octomil.facade import Octomil as FacadeOctomil
-
-        return FacadeOctomil.local(**kwargs)
-
     def client(
         self, device_identifier: Optional[str] = None, platform: str = "python"
     ) -> FederatedClient:

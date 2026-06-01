@@ -1,128 +1,69 @@
-"""Tests for Octomil.local() facade backed by the invisible local runner."""
+"""Tests for keyless local facade behavior."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from octomil.facade import LocalOctomil, Octomil, OctomilNotInitializedError
+from octomil.auth import NoAuth
+from octomil.errors import OctomilError, OctomilErrorCode
+from octomil.facade import Octomil
 
 
-class TestOctomilLocalFactory:
-    def test_local_returns_local_octomil(self) -> None:
-        client = Octomil.local(model="gemma-1b")
-        assert isinstance(client, LocalOctomil)
+class TestKeylessOctomil:
+    def test_no_arg_constructor_uses_keyless_local_mode(self) -> None:
+        client = Octomil()
 
-    def test_local_default_model(self) -> None:
-        client = Octomil.local()
-        assert isinstance(client, LocalOctomil)
-        assert client._model == "default"
+        assert isinstance(client._auth, NoAuth)
+        assert client.planner_enabled is False
 
+    def test_from_env_without_server_key_uses_keyless_local_mode(self, monkeypatch) -> None:
+        monkeypatch.delenv("OCTOMIL_SERVER_KEY", raising=False)
+        monkeypatch.delenv("OCTOMIL_API_KEY", raising=False)
+        monkeypatch.setenv("OCTOMIL_ORG_ID", "org_public_id")
 
-class TestLocalOctomilNotInitialized:
-    def test_responses_raises_before_initialize(self) -> None:
-        client = LocalOctomil(model="gemma-1b")
-        with pytest.raises(OctomilNotInitializedError):
-            _ = client.responses
+        client = Octomil.from_env()
 
-    def test_embeddings_raises_before_initialize(self) -> None:
-        client = LocalOctomil(model="gemma-1b")
-        with pytest.raises(OctomilNotInitializedError):
-            _ = client.embeddings
+        assert isinstance(client._auth, NoAuth)
+        assert client.planner_enabled is False
 
-
-class TestLocalOctomilInitialize:
-    @pytest.mark.asyncio
-    async def test_initialize_starts_runner(self) -> None:
-        mock_handle = MagicMock(
-            base_url="http://127.0.0.1:51200",
-            token="test-token",
-            model="gemma-1b",
-            engine="auto",
-        )
-        with (
-            patch("octomil.local_runner.manager.LocalRunnerManager") as MockMgr,
-            patch("octomil.local_runner.client.LocalRunnerClient"),
-        ):
-            MockMgr.return_value.ensure.return_value = mock_handle
-            client = LocalOctomil(model="gemma-1b")
-            await client.initialize()
-
-            MockMgr.return_value.ensure.assert_called_once_with(model="gemma-1b", engine=None)
-            assert client._initialized is True
+    def test_public_local_constructor_is_removed(self) -> None:
+        assert not hasattr(Octomil, "local")
 
     @pytest.mark.asyncio
-    async def test_initialize_idempotent(self) -> None:
-        mock_handle = MagicMock(
-            base_url="http://127.0.0.1:51200",
-            token="test-token",
-            model="gemma-1b",
-            engine="auto",
-        )
+    async def test_keyless_exposes_full_audio_surface(self) -> None:
+        from octomil.audio import FacadeAudio, FacadeSpeech
+
         with (
-            patch("octomil.local_runner.manager.LocalRunnerManager") as MockMgr,
-            patch("octomil.local_runner.client.LocalRunnerClient"),
+            patch("octomil.client.RolloutsAPI", create=True),
+            patch("octomil.client.ModelRegistry", create=True),
+            patch("octomil.client._ApiClient", create=True),
         ):
-            MockMgr.return_value.ensure.return_value = mock_handle
-            client = LocalOctomil(model="gemma-1b")
+            client = Octomil()
             await client.initialize()
-            await client.initialize()  # second call is no-op
-            assert MockMgr.return_value.ensure.call_count == 1
 
+        assert isinstance(client.audio, FacadeAudio)
+        assert isinstance(client.audio.speech, FacadeSpeech)
+        assert callable(client.audio.speech.create)
 
-class TestLocalResponses:
     @pytest.mark.asyncio
-    async def test_create_response(self) -> None:
-        mock_handle = MagicMock(
-            base_url="http://127.0.0.1:51200",
-            token="test-token",
-        )
-        mock_runner_client = MagicMock()
-        mock_runner_client.create_response = AsyncMock(return_value={"choices": [{"message": {"content": "Hello!"}}]})
+    async def test_keyless_rejects_explicit_cloud_policy(self) -> None:
         with (
-            patch("octomil.local_runner.manager.LocalRunnerManager") as MockMgr,
-            patch("octomil.local_runner.client.LocalRunnerClient", return_value=mock_runner_client),
+            patch("octomil.client.RolloutsAPI", create=True),
+            patch("octomil.client.ModelRegistry", create=True),
+            patch("octomil.client._ApiClient", create=True),
         ):
-            MockMgr.return_value.ensure.return_value = mock_handle
-            client = LocalOctomil(model="gemma-1b")
+            client = Octomil()
             await client.initialize()
 
-            result = await client.responses.create(input="Hi there")
-            assert result["choices"][0]["message"]["content"] == "Hello!"
-            mock_runner_client.create_response.assert_called_once_with(model="gemma-1b", input="Hi there")
+        with pytest.raises(OctomilError) as exc:
+            await client.audio.speech.create(
+                model="kokoro-82m",
+                input="hello",
+                policy="cloud_only",
+                cache="off",
+            )
 
-
-class TestLocalEmbeddings:
-    @pytest.mark.asyncio
-    async def test_create_embedding(self) -> None:
-        mock_handle = MagicMock(
-            base_url="http://127.0.0.1:51200",
-            token="test-token",
-        )
-        mock_runner_client = MagicMock()
-        mock_runner_client.create_embedding = AsyncMock(return_value={"data": [{"embedding": [0.1, 0.2]}]})
-        with (
-            patch("octomil.local_runner.manager.LocalRunnerManager") as MockMgr,
-            patch("octomil.local_runner.client.LocalRunnerClient", return_value=mock_runner_client),
-        ):
-            MockMgr.return_value.ensure.return_value = mock_handle
-            client = LocalOctomil(model="gemma-1b")
-            await client.initialize()
-
-            result = await client.embeddings.create(input="test text")
-            assert "data" in result
-            mock_runner_client.create_embedding.assert_called_once_with(model="gemma-1b", input=["test text"])
-
-
-class TestLocalPolicyBehavior:
-    def test_no_server_key_required(self) -> None:
-        """Octomil.local() should not require OCTOMIL_SERVER_KEY."""
-        with patch.dict("os.environ", {}, clear=True):
-            client = Octomil.local(model="gemma-1b")
-            assert isinstance(client, LocalOctomil)
-
-    def test_local_never_creates_cloud_client(self) -> None:
-        """LocalOctomil should not import or use OctomilClient (hosted)."""
-        client = LocalOctomil(model="gemma-1b")
-        assert client._client is None if hasattr(client, "_client") else True
+        assert exc.value.code == OctomilErrorCode.INVALID_API_KEY
+        assert "requires Octomil credentials" in str(exc.value)

@@ -51,8 +51,10 @@ def _has_credentials(auth: AuthConfig | None) -> bool:
         return False
 
     # Lazy import to avoid circular dependency
-    from .auth import OrgApiKeyAuth, PublishableKeyAuth
+    from .auth import NoAuth, OrgApiKeyAuth, PublishableKeyAuth
 
+    if isinstance(auth, NoAuth):
+        return False
     if isinstance(auth, OrgApiKeyAuth):
         return bool(auth.api_key)
     if isinstance(auth, PublishableKeyAuth):

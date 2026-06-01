@@ -19,7 +19,7 @@ from typing import Optional as _Optional
 
 from . import _generated as contracts  # noqa: F401
 from . import responses  # noqa: F401
-from .auth import AuthConfig, DeviceTokenAuth, OrgApiKeyAuth
+from .auth import AuthConfig, DeviceTokenAuth, NoAuth, OrgApiKeyAuth
 from .auth_config import AnonymousAuth, BootstrapTokenAuth, DeviceAuthConfig, PublishableKeyAuth
 from .capabilities_client import CapabilitiesClient, CapabilityProfile
 from .chat_client import ChatChunk, ChatClient, ChatCompletion
@@ -463,6 +463,7 @@ __all__ = [
     "__version__",
     "OctomilClient",
     "AuthConfig",
+    "NoAuth",
     "OrgApiKeyAuth",
     "DeviceTokenAuth",
     "CapabilitiesClient",
