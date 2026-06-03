@@ -30,7 +30,12 @@ dependencies = [
   "httpx>=0.24.0",
   "click>=8.0.0",
   "fastapi>=0.100.0",
-  "uvicorn[standard]>=0.20.0",
+  # Plain uvicorn only in core: `uvicorn[standard]` pulls uvloop (a native
+  # build with no Windows wheel) + httptools/watchfiles, which breaks the
+  # thin-client constraint above (Ren'Py / sandboxed CPython). `octomil
+  # serve` runs fine on plain uvicorn; the perf extras live in the `serve`
+  # and `all` optional-dependency groups below.
+  "uvicorn>=0.20.0",
   "segno>=1.6",
   "huggingface_hub>=0.20.0",
   "jsonschema>=4.0.0",
@@ -44,9 +49,11 @@ dependencies = [
 
 [project.optional-dependencies]
 serve = [
-  # Compatibility alias: `octomil serve` is a base CLI command, so
-  # FastAPI + Uvicorn live in core dependencies. Keep the extra name
-  # so existing `pip install octomil[serve]` instructions stay valid.
+  # `octomil serve` is a base CLI command, so FastAPI + plain Uvicorn live
+  # in core dependencies. This extra adds the high-performance Uvicorn stack
+  # (uvloop, httptools, websockets, watchfiles) for production serving;
+  # `pip install octomil[serve]` stays valid and now opts into the perf path.
+  "uvicorn[standard]>=0.20.0",
 ]
 mlx = [
   "mlx-lm>=0.10.0",
@@ -61,7 +68,9 @@ llama = [
   "llama-cpp-python>=0.2.0",
 ]
 onnx = [
+  "onnx>=1.14.0",
   "onnxruntime>=1.16.0",
+  "onnxruntime-genai>=0.5.0",
 ]
 whisper = [
   "pywhispercpp>=1.0.0",
@@ -134,6 +143,7 @@ all = [
   "pywhispercpp>=1.0.0",
   "sherpa-onnx>=1.12",
   "torch>=2.0.0",
+  "uvicorn[standard]>=0.20.0",
 ]
 test = [
   "pytest>=7.0.0",

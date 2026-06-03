@@ -97,7 +97,19 @@ class TestPyInstallerSpec:
 
     def test_spec_excludes_heavy_deps(self, spec_content: str) -> None:
         """Heavy engine/data deps stay out of the lean binary bundle."""
-        for dep in ("torch", "tensorflow", "pandas", "pyarrow", "onnxruntime", "mlx_lm", "llama_cpp", "numpy"):
+        for dep in (
+            "torch",
+            "tensorflow",
+            "pandas",
+            "pyarrow",
+            "onnxruntime",
+            "mlx_lm",
+            "llama_cpp",
+            "numpy",
+            "pytest",
+            "scipy",
+            "matplotlib",
+        ):
             assert dep in spec_content, f"Expected {dep} in excludes list"
 
 
