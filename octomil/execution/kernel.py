@@ -115,29 +115,16 @@ logger = logging.getLogger(__name__)
 #   - transcription   (PR 10a)        — _WhisperBackend honors injected model_dir
 #                                       and skips pywhispercpp's HF download path.
 # Wiring backlog (intentionally NOT in the supported set):
-#   - chat (kernel)   — MLXBackend and LlamaCppBackend accept ``model_dir``
-#                       (PR 10c backend threading), but the capability is
-#                       still gated because:
-#                         (a) the public ``client.responses.create`` facade
-#                             goes through ``OctomilResponses``, which does
-#                             not thread ``model_dir`` into its engine
-#                             ``create_backend`` calls — flipping ``chat``
-#                             on the kernel would mean ``client.prepare``
-#                             succeeds but the next ``client.responses.
-#                             create`` cold-loads anyway;
-#                         (b) PrepareManager materializes only single-file
-#                             artifacts (``<dir>/artifact`` sentinel) and
-#                             has no snapshot/manifest support, so MLX
-#                             loads from a prepared dir don't work for
-#                             real model shapes that mlx_lm requires
-#                             (config.json + tokenizer + safetensors).
-#                       ``chat`` and ``responses`` flip to wired once
-#                       OctomilResponses goes through the kernel (or
-#                       threads model_dir itself) AND PrepareManager grows
-#                       snapshot materialization proven by an MLX e2e test.
-#   - responses        — same gate as chat (dispatches through chat).
+#   - chat             (media translation / native GGUF) — the kernel
+#                       already lazily prepares local chat candidates and
+#                       threads ``model_dir`` into native llama.cpp. Public
+#                       prepare/warmup is now enabled for chat so callers can
+#                       materialize the artifact explicitly before serving.
+#   - responses        — still gated until the public ``client.responses``
+#                       facade goes through this kernel path or threads
+#                       ``model_dir`` itself.
 #   - embedding        — thread model_dir into the local embeddings backend.
-_PREPAREABLE_CAPABILITIES = frozenset({CAPABILITY_TTS, CAPABILITY_TRANSCRIPTION})
+_PREPAREABLE_CAPABILITIES = frozenset({CAPABILITY_TTS, CAPABILITY_TRANSCRIPTION, CAPABILITY_CHAT})
 
 # Capabilities whose dispatch path can construct + cache a backend
 # ahead of first inference — i.e., where ``client.warmup()`` produces
@@ -147,10 +134,9 @@ _PREPAREABLE_CAPABILITIES = frozenset({CAPABILITY_TTS, CAPABILITY_TRANSCRIPTION}
 #       on disk first), AND
 #   (b) the kernel's local resolver consults the warmup cache before
 #       calling ``engine.create_backend`` again.
-# Today: tts + transcription. Chat / responses join once their
-# OctomilResponses bypass and MLX snapshot materialization gates
-# clear (same blockers as prepare).
-_WARMUPABLE_CAPABILITIES = frozenset({CAPABILITY_TTS, CAPABILITY_TRANSCRIPTION})
+# Today: tts + transcription + chat. Responses join once the public
+# facade uses the same kernel-backed route.
+_WARMUPABLE_CAPABILITIES = frozenset({CAPABILITY_TTS, CAPABILITY_TRANSCRIPTION, CAPABILITY_CHAT})
 
 
 # ---------------------------------------------------------------------------
@@ -3361,9 +3347,9 @@ class ExecutionKernel:
         candidates whose ``prepare_policy='explicit_only'`` succeed when
         invoked through this method.
 
-        Supported capabilities: ``"tts"`` and ``"transcription"`` today.
-        Transcription threads the prepared ``artifact_dir`` into its
-        backend:
+        Supported capabilities: ``"tts"``, ``"transcription"``, and
+        ``"chat"`` today. These dispatch paths thread the prepared
+        ``artifact_dir`` into their backends:
 
         - ``tts`` -> retained for explicit artifact materialization and
           warmup compatibility; product native TTS routing is gated by
@@ -3372,20 +3358,14 @@ class ExecutionKernel:
         - ``transcription`` -> ``_WhisperBackend`` honors injected
           ``model_dir`` and prefers PrepareManager's ``<dir>/artifact``
           sentinel before falling back to ``.bin`` / ``.gguf`` / ``.ggml``.
+        - ``chat`` -> native llama.cpp chat honors injected ``model_dir``
+          and loads the prepared GGUF through ``octomil-runtime``.
 
-        Embedding and chat (and responses, which routes through chat)
-        will be added one at a time as their adapters learn to accept a
-        ``model_dir`` kwarg — exposing ``prepare`` for them now would be
-        a false success: the bytes would land on disk and the next
-        inference call would still cold-start through the engine's own
-        lookup. PR 10c added the kernel-side threading for chat into
-        ``MLXBackend`` and ``LlamaCppBackend``, but the capability
-        remains gated until (a) the public ``client.responses.create``
-        facade goes through the kernel (or threads ``model_dir``
-        itself), and (b) PrepareManager grows snapshot/manifest support
-        for multi-file MLX artifacts. The current set is the source of
-        truth; the lifecycle support fixture in octomil-contracts cites
-        the e2e test that proves each cell's claim.
+        Embedding and responses will be added one at a time as their
+        adapters or public facades learn to consume the prepared
+        ``model_dir``. The current set is the source of truth; the
+        lifecycle support fixture in octomil-contracts cites the e2e
+        test that proves each cell's claim.
 
         Returns a :class:`PrepareOutcome`. Raises :class:`OctomilError` if
         the capability is not yet wired, the planner emits no preparable
@@ -3634,6 +3614,19 @@ class ExecutionKernel:
                 if backend is not None:
                     self._warmed_backends[cache_key] = backend
                     backend_loaded = True
+        elif capability == CAPABILITY_CHAT:
+            try:
+                from octomil.runtime.engines import get_registry as get_engine_registry
+
+                engine_name = getattr(planner_candidate, "engine", None)
+                engine_registry = get_engine_registry()
+                engine = engine_registry.get_engine(engine_name) if engine_name else None
+                if engine is not None and engine.detect() and engine.name != "echo":
+                    backend = engine.create_backend(runtime_model, model_dir=artifact_dir)
+                    self._warmed_backends[cache_key] = backend
+                    backend_loaded = True
+            except Exception:
+                logger.debug("chat warmup failed to load backend", exc_info=True)
 
         latency_ms = (time.monotonic() - t0) * 1000.0
         _emit_progress(
@@ -4292,6 +4285,26 @@ class ExecutionKernel:
         def local_factory(hint: str):
             if planner_forces_cloud:
                 return None
+
+            current_candidate = None
+            if planner_selection is not None and getattr(planner_selection, "locality", None) == "local":
+                current_candidate = planner_selection
+            elif planner_selection is not None:
+                current_candidate = _local_sdk_runtime_candidate(planner_selection)
+            cached = self._lookup_warmed_backend(capability, model, candidate=current_candidate)
+            if cached is not None:
+                from octomil.runtime.core.adapter import InferenceBackendAdapter
+                from octomil.runtime.core.engine_bridge import _infer_tool_call_tier
+                from octomil.runtime.core.types import RuntimeCapabilities
+
+                return InferenceBackendAdapter(
+                    backend=cached,
+                    model_name=model,
+                    capabilities=RuntimeCapabilities(
+                        tool_call_tier=_infer_tool_call_tier(model),
+                        supports_streaming=True,
+                    ),
+                )
 
             # If planner recommends a specific local engine, try it first
             if planner_engine:

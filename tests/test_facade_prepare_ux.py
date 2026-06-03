@@ -136,14 +136,14 @@ def test_kernel_prepare_rejects_unknown_capability(tmp_path):
     assert "vision" in str(excinfo.value)
 
 
-@pytest.mark.parametrize("capability", ["embedding", "chat", "responses"])
+@pytest.mark.parametrize("capability", ["embedding", "responses"])
 def test_kernel_prepare_rejects_unwired_capabilities(tmp_path, capability):
     """Unwired capabilities — embedding (no model_dir kwarg yet) and
-    chat / responses (kernel-side threading lands in PR 10c, but the
-    public responses facade and MLX snapshot materialization aren't
-    ready). Each must be rejected with an actionable INVALID_INPUT
-    message until their full inference path consumes the prepared dir.
-    Transcription was added in PR 10a."""
+    responses (the public responses facade and MLX snapshot
+    materialization aren't ready). Each must be rejected with an
+    actionable INVALID_INPUT message until their full inference path
+    consumes the prepared dir. Transcription was added in PR 10a; chat
+    is now wired (see test_chat_prepare_adapter.py)."""
     kernel = ExecutionKernel()
     with pytest.raises(OctomilError) as excinfo:
         kernel.prepare(model="m", capability=capability)
@@ -286,11 +286,11 @@ def test_cli_prepare_accepts_tts_capability(tmp_path):
     assert result.exit_code == 0, result.output
 
 
-@pytest.mark.parametrize("cap", ["embedding", "chat", "responses"])
+@pytest.mark.parametrize("cap", ["embedding", "responses"])
 def test_cli_prepare_rejects_unwired_capabilities_at_choice_constraint(cap):
-    """CLI surface must match the kernel: tts and transcription are wired,
-    so embedding/chat/responses are rejected at the click choice constraint
-    until their backends consume the prepared dir end-to-end."""
+    """CLI surface must match the kernel: tts, transcription, and chat are
+    wired, so embedding/responses are rejected at the click choice
+    constraint until their backends consume the prepared dir end-to-end."""
     runner = CliRunner()
     result = runner.invoke(prepare_cmd, ["m", "--capability", cap])
     assert result.exit_code != 0

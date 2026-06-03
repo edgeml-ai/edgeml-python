@@ -114,7 +114,7 @@ def _stub_kernel_resolve(kernel: ExecutionKernel, model: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("capability", ["chat", "responses", "embedding", "vision"])
+@pytest.mark.parametrize("capability", ["responses", "embedding", "vision"])
 def test_warmup_rejects_unwired_capabilities(capability, tmp_path):
     kernel = ExecutionKernel()
     with pytest.raises(OctomilError) as excinfo:
@@ -128,7 +128,7 @@ def test_warmup_rejects_unwired_capabilities(capability, tmp_path):
 def test_warmupable_capabilities_invariant():
     assert "tts" in _WARMUPABLE_CAPABILITIES
     assert "transcription" in _WARMUPABLE_CAPABILITIES
-    assert "chat" not in _WARMUPABLE_CAPABILITIES
+    assert "chat" in _WARMUPABLE_CAPABILITIES
     assert "responses" not in _WARMUPABLE_CAPABILITIES
     assert "embedding" not in _WARMUPABLE_CAPABILITIES
 

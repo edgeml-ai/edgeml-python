@@ -5,8 +5,8 @@ artifact bytes are on disk *and* the local engine has constructed +
 ``load_model``'d a backend instance, so the next inference dispatch in
 the same process can reuse it without paying cold-start latency.
 
-Today this command supports the same capabilities as ``prepare`` —
-``tts`` and ``transcription`` — because those are the cells whose
+Today this command supports the same capabilities as ``prepare``:
+``tts``, ``transcription``, and ``chat``. These are the cells whose
 dispatch path actually threads ``model_dir`` into the backend AND
 checks the kernel's warmup cache before constructing a fresh one.
 
@@ -20,6 +20,7 @@ Usage::
 
     octomil warmup @app/eternum/tts
     octomil warmup @app/notes/transcription --capability transcription
+    octomil warmup qwen2.5-3b --capability chat
     octomil warmup kokoro-en-v0_19 --capability tts --policy local_first
 """
 
@@ -35,13 +36,13 @@ import click
 @click.option(
     "--capability",
     default="tts",
-    type=click.Choice(["tts", "transcription"]),
+    type=click.Choice(["tts", "transcription", "chat"]),
     show_default=True,
     help=(
         "Which capability's planner candidate to warm. Mirrors "
-        "``octomil prepare`` plus the load + cache step. Today: 'tts' and "
-        "'transcription'. Chat / responses and embedding are added once their "
-        "backends consume the prepared dir."
+        "``octomil prepare`` plus the load + cache step. Today: 'tts', "
+        "'transcription', and 'chat'. Responses and embedding are added once "
+        "their backends consume the prepared dir."
     ),
 )
 @click.option(

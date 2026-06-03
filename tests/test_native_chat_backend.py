@@ -905,6 +905,47 @@ def test_native_chat_backend_does_not_read_env_var(monkeypatch):
     assert exc_info.value.code == OctomilErrorCode.MODEL_NOT_FOUND
 
 
+def test_native_chat_backend_accepts_extensionless_gguf_file(tmp_path):
+    from octomil.runtime.native.chat_backend import NativeChatBackend
+
+    blob = tmp_path / "sha256-deadbeef"
+    blob.write_bytes(b"GGUF" + b"\0" * 32)
+
+    backend = NativeChatBackend()
+    assert backend._resolve_gguf_path(str(blob)) == str(blob)  # noqa: SLF001
+
+
+def test_native_chat_backend_finds_extensionless_gguf_in_model_dir(tmp_path):
+    from octomil.runtime.native.chat_backend import NativeChatBackend
+
+    blob = tmp_path / "sha256-deadbeef"
+    blob.write_bytes(b"GGUF" + b"\0" * 32)
+
+    backend = NativeChatBackend(model_dir=str(tmp_path))
+    assert backend._resolve_gguf_path("logical-model") == str(blob)  # noqa: SLF001
+
+
+def test_native_chat_backend_passes_llama_cpp_engine_hint(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+
+    from octomil.runtime.native.chat_backend import NativeChatBackend
+
+    gguf = tmp_path / "model.gguf"
+    gguf.write_bytes(b"GGUF" + b"\0" * 32)
+
+    fake_model = MagicMock()
+    fake_runtime = MagicMock()
+    fake_runtime.open_model.return_value = fake_model
+
+    monkeypatch.setattr("octomil.runtime.native.chat_backend.NativeRuntime.open", lambda: fake_runtime)
+
+    backend = NativeChatBackend()
+    backend.load_model(str(gguf))
+
+    fake_runtime.open_model.assert_called_once_with(model_uri=str(gguf), engine_hint="llama_cpp")
+    fake_model.warm.assert_called_once()
+
+
 @pytest.mark.requires_runtime
 @pytest.mark.timeout(120)
 def test_native_chat_backend_default_temperature_does_not_block_request():
@@ -1043,6 +1084,22 @@ def test_native_chat_backend_runtime_unsupported_maps_to_unsupported_modality():
 
     err = _runtime_status_to_sdk_error(OCT_STATUS_BUSY, "msg")
     assert err.code == OctomilErrorCode.SERVER_ERROR
+
+
+def test_native_chat_backend_version_mismatch_mentions_expected_session_config():
+    from octomil.errors import OctomilErrorCode
+    from octomil.runtime.native.chat_backend import _runtime_status_to_sdk_error
+    from octomil.runtime.native.loader import OCT_SESSION_CONFIG_VERSION, OCT_STATUS_VERSION_MISMATCH
+
+    err = _runtime_status_to_sdk_error(
+        OCT_STATUS_VERSION_MISMATCH,
+        "native chat backend failed to open session",
+        last_error="config.version 4 unknown to this runtime build (accepts 1, 2, or 3)",
+    )
+
+    assert err.code == OctomilErrorCode.RUNTIME_UNAVAILABLE
+    assert "runtime too old for this SDK" in str(err)
+    assert f"session_config ABI {OCT_SESSION_CONFIG_VERSION}" in str(err)
 
 
 def test_legacy_llama_cpp_backend_module_marked_deprecated_for_product():
