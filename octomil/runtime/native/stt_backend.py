@@ -833,10 +833,11 @@ class NativeSttBackend:
         sample_rate_hz
             Hz. Must be 16000 for the native whisper.cpp STT path.
         language
-            BCP-47 / ISO-639-1 language hint, forwarded to the runtime
-            via session_config v4 to set whisper's decode language.
-            ``""`` / ``"auto"`` asks the engine to auto-detect. Also
-            echoed back on the result.
+            BCP-47 / ISO-639-1 language hint (default ``"en"``), forwarded
+            to the runtime via session_config v4 to set whisper's decode
+            language. Pass ``"auto"`` to opt into language auto-detection;
+            ``""`` / ``None`` fall back to the engine default (English),
+            NOT auto-detect. Also echoed back on the result.
         transcription_task
             ``"transcribe"`` (same-language transcript, default) or
             ``"translate"`` (Whisper translate-to-English). Forwarded

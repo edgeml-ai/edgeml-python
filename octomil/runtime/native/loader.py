@@ -844,7 +844,8 @@ typedef struct {
      * alive until the session has been closed. */
     oct_model_t*   model;
     /* v0.1.12 (session_config v=4) — STT decode hints. Caller-owned; the
-     * runtime copies both at open. NULL ok (auto-detect + transcribe). */
+     * runtime copies both at open. NULL = engine default (English
+     * transcribe); language "auto" opts into detection. */
     const char*    language;
     const char*    transcription_task;
 } oct_session_config_t;
@@ -1408,9 +1409,12 @@ class NativeRuntime:
         # may pass model=None and resolve via model_uri (slice-2A).
         model: "NativeModel | None" = None,
         # v0.1.12 (session_config v=4) — STT decode hints for
-        # audio.transcription. Non-STT capabilities ignore them. ``None``
-        # / "" / "auto" language → engine auto-detect; transcription_task
-        # "translate" → Whisper translate-to-English, else transcribe.
+        # audio.transcription. Non-STT capabilities ignore them.
+        # ``None`` / "" → NULL across the ABI, which the runtime treats as
+        # "keep the engine default" (English transcribe). Auto-detect is
+        # OPT-IN via the explicit string "auto"; any other value forces
+        # that language. transcription_task "translate" → Whisper
+        # translate-to-English, else (incl. empty) transcribe.
         language: str | None = None,
         transcription_task: str | None = None,
     ) -> "NativeSession":
