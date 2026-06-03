@@ -180,10 +180,6 @@ OCT_EMBED_POOLING_RANK: int = 4
 # audio.diarization speaker_id sentinel.
 OCT_DIARIZATION_SPEAKER_UNKNOWN: int = 65535
 
-# v0.1.1 — bumped lockstep with runtime.h. session_config v=3 adds
-# the appended `oct_model_t* model` field; chat.completion sessions
-# REQUIRE non-NULL config.model on v=3 (runtime returns INVALID_INPUT
-# otherwise — bindings MUST upgrade or stay on non-chat capabilities).
 OCT_SESSION_CONFIG_VERSION: int = 3
 OCT_EVENT_VERSION: int = 2
 
@@ -2231,6 +2227,7 @@ class NativeSession:
         max_completion_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        enable_thinking: bool | None = None,
     ) -> None:
         """v0.1.2: send a `chat.completion` turn with caller-controlled
         generation options.
@@ -2269,6 +2266,10 @@ class NativeSession:
         top_p
             v0.1.2 ships greedy-only; only 1.0 is accepted. Non-1.0
             values reject UNSUPPORTED.
+        enable_thinking
+            Optional model-template control for reasoning models such as
+            Qwen3. ``False`` asks the runtime to prefill a closed thinking
+            block when the embedded chat template supports that variable.
         """
         import json as _json
 
@@ -2281,6 +2282,8 @@ class NativeSession:
             options["temperature"] = float(temperature)
         if top_p is not None:
             options["top_p"] = float(top_p)
+        if enable_thinking is not None:
+            options["enable_thinking"] = bool(enable_thinking)
         payload: dict[str, Any] = {"messages": messages}
         if options:
             payload["options"] = options
