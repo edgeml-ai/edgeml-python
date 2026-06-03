@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from ...errors import OctomilError, OctomilErrorCode
 from .loader import (
+    OCT_SESSION_CONFIG_VERSION,
     OCT_STATUS_BUSY,
     OCT_STATUS_CANCELLED,
     OCT_STATUS_INVALID_INPUT,
@@ -183,6 +184,14 @@ def map_oct_status(
         # product path if a fresh runtime open detects a divergent
         # session config version etc. → RUNTIME_UNAVAILABLE.
         code = OctomilErrorCode.RUNTIME_UNAVAILABLE
+        if "config.version" in last_error_lc or "session_config" in last_error_lc:
+            expected = f"expected session_config ABI {OCT_SESSION_CONFIG_VERSION}"
+            if expected not in message.lower():
+                message = (
+                    f"{message}; runtime too old for this SDK ({expected})"
+                    if message
+                    else f"runtime too old for this SDK ({expected})"
+                )
 
     elif status == OCT_STATUS_CANCELLED:
         # Canonical taxonomy uses ``CANCELLED`` (not "OPERATION_CANCELLED").

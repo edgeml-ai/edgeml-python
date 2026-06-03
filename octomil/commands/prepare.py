@@ -5,27 +5,27 @@ can download an artifact once, explicitly, instead of paying first-call
 latency or hitting the ``prepare_policy='explicit_only'`` actionable
 error.
 
-Today this command supports the capabilities whose dispatch paths
+This command supports the capabilities whose dispatch paths
 actually consume the prepared ``model_dir``:
 
 - ``tts``           — native TTS loads from the prepared artifact.
 - ``transcription`` — native/whisper STT loads the prepared
   ``<dir>/artifact`` sentinel (or the matching ``.bin`` / ``.gguf`` /
   ``.ggml``) instead of triggering pywhispercpp's HuggingFace download.
+- ``chat``          — native llama.cpp chat loads a prepared GGUF
+  artifact through ``octomil-runtime``.
 
-Embedding and chat (plus responses, which routes through chat) will be
+Embedding and responses (which routes through chat) will be
 added one at a time as their backends learn to consume the prepared
 directory; until then, calling prepare for them would download bytes
-the next inference ignores. PR 10c added the kernel-side threading for
-chat into MLX/llama.cpp, but the CLI flag stays gated until the public
-``responses.create`` facade goes through the kernel and PrepareManager
-grows multi-file snapshot support. The CLI mirrors the kernel's
+the next inference ignores. The CLI mirrors the kernel's
 ``_PREPAREABLE_CAPABILITIES`` set via the ``--capability`` choice list.
 
 Usage::
 
     octomil prepare @app/eternum/tts
     octomil prepare @app/notes/transcription --capability transcription
+    octomil prepare qwen2.5-3b --capability chat
     octomil prepare kokoro-en-v0_19 --capability tts --policy local_first
 """
 
@@ -41,13 +41,13 @@ import click
 @click.option(
     "--capability",
     default="tts",
-    type=click.Choice(["tts", "transcription"]),
+    type=click.Choice(["tts", "transcription", "chat"]),
     show_default=True,
     help=(
-        "Which capability's planner candidate to prepare. Today: 'tts' (native TTS "
-        "artifact) and 'transcription' (whisper.cpp loads the prepared "
-        ".bin/.gguf/.ggml file instead of triggering its own download). Chat / responses "
-        "and embedding are added once their backends consume the prepared dir."
+        "Which capability's planner candidate to prepare. 'tts' prepares a native TTS "
+        "artifact, 'transcription' prepares a whisper.cpp .bin/.gguf/.ggml artifact, "
+        "and 'chat' prepares a local GGUF chat artifact. Responses and embedding are "
+        "added once their dispatch paths consume the prepared dir."
     ),
 )
 @click.option(
