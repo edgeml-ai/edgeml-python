@@ -29,6 +29,8 @@ dependencies = [
   "psutil>=5.9.0",
   "httpx>=0.24.0",
   "click>=8.0.0",
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.20.0",
   "segno>=1.6",
   "huggingface_hub>=0.20.0",
   "jsonschema>=4.0.0",
@@ -42,8 +44,9 @@ dependencies = [
 
 [project.optional-dependencies]
 serve = [
-  "fastapi>=0.100.0",
-  "uvicorn[standard]>=0.20.0",
+  # Compatibility alias: `octomil serve` is a base CLI command, so
+  # FastAPI + Uvicorn live in core dependencies. Keep the extra name
+  # so existing `pip install octomil[serve]` instructions stay valid.
 ]
 mlx = [
   "mlx-lm>=0.10.0",
@@ -109,6 +112,28 @@ mcp = [
 x402 = [
   "eth-account>=0.10.0",
   "httpx>=0.25.0",
+]
+all = [
+  "cffi>=1.16.0",
+  "cryptography>=41.0.0",
+  "eth-account>=0.10.0",
+  "httpx>=0.25.0",
+  "keyring>=23.0.0",
+  "llama-cpp-python>=0.2.0",
+  "mcp[cli]>=1.2.0; python_version>='3.10'",
+  "mlx-lm>=0.10.0; platform_system == 'Darwin' and platform_machine == 'arm64'",
+  "numpy>=1.24.0",
+  "onnx>=1.14.0",
+  "onnxruntime>=1.16.0",
+  "onnxruntime-genai>=0.5.0",
+  "opentelemetry-api>=1.20.0",
+  "opentelemetry-sdk>=1.20.0",
+  "pandas>=1.5.0",
+  "prompt_toolkit>=3.0.0",
+  "pyarrow>=10.0.0",
+  "pywhispercpp>=1.0.0",
+  "sherpa-onnx>=1.12",
+  "torch>=2.0.0",
 ]
 test = [
   "pytest>=7.0.0",

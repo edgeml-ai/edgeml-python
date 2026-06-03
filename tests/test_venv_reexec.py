@@ -6,7 +6,7 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-from octomil.venv_reexec import needs_venv_reexec, try_venv_reexec, wait_for_setup
+from octomil.venv_reexec import needs_venv_reexec, try_managed_venv_reexec, try_venv_reexec, wait_for_setup
 
 # ---------------------------------------------------------------------------
 # needs_venv_reexec
@@ -140,6 +140,85 @@ class TestTryVenvReexec:
 
         mock_run_setup.assert_called_once()
         mock_execv.assert_called_once()
+
+    def test_prompt_setup_runs_setup_then_reexecs(self):
+        """Interactive serve path can ask before creating the managed runtime."""
+        from octomil.setup import SetupState
+
+        with patch("os.execv") as mock_execv:
+            with patch("octomil.setup.get_venv_python", side_effect=[None, "/venv/bin/python"]):
+                with patch("octomil.setup.is_engine_ready", return_value=True):
+                    with patch("octomil.setup.is_setup_in_progress", return_value=False):
+                        with patch("octomil.setup.load_state", return_value=SetupState()):
+                            with patch(
+                                "octomil.setup.run_setup",
+                                return_value=SetupState(phase="complete", engine_installed=True),
+                            ) as mock_run_setup:
+                                with patch(
+                                    "octomil.setup.detect_best_engine",
+                                    return_value=("mlx-lm", "octomil[mlx,serve]"),
+                                ):
+                                    with patch("octomil.venv_reexec.click.confirm", return_value=True):
+                                        with patch.object(sys.stdin, "isatty", return_value=True):
+                                            with patch.object(sys.stdout, "isatty", return_value=True):
+                                                with patch.object(sys, "argv", ["octomil", "serve", "qwen35-4b"]):
+                                                    try_venv_reexec(prompt_setup=True)
+
+        mock_run_setup.assert_called_once()
+        mock_execv.assert_called_once()
+
+    def test_prompt_setup_decline_does_not_run_setup(self, capsys):
+        """Declining setup falls through with a concrete next command."""
+        from octomil.setup import SetupState
+
+        with patch("octomil.setup.get_venv_python", return_value=None):
+            with patch("octomil.setup.is_engine_ready", return_value=False):
+                with patch("octomil.setup.is_setup_in_progress", return_value=False):
+                    with patch("octomil.setup.load_state", return_value=SetupState()):
+                        with patch("octomil.setup.run_setup") as mock_run_setup:
+                            with patch(
+                                "octomil.setup.detect_best_engine",
+                                return_value=("mlx-lm", "octomil[mlx,serve]"),
+                            ):
+                                with patch("octomil.venv_reexec.click.confirm", return_value=False):
+                                    with patch.object(sys.stdin, "isatty", return_value=True):
+                                        with patch.object(sys.stdout, "isatty", return_value=True):
+                                            result = try_venv_reexec(prompt_setup=True)
+
+        assert result is False
+        mock_run_setup.assert_not_called()
+        assert "octomil setup" in capsys.readouterr().out
+
+    def test_prompt_setup_noninteractive_prints_setup_hint(self, capsys):
+        """Non-interactive commands get instructions instead of a prompt."""
+        from octomil.setup import SetupState
+
+        with patch("octomil.setup.get_venv_python", return_value=None):
+            with patch("octomil.setup.is_engine_ready", return_value=False):
+                with patch("octomil.setup.is_setup_in_progress", return_value=False):
+                    with patch("octomil.setup.load_state", return_value=SetupState()):
+                        with patch("octomil.setup.run_setup") as mock_run_setup:
+                            with patch("octomil.venv_reexec.click.confirm") as mock_confirm:
+                                with patch.object(sys.stdin, "isatty", return_value=False):
+                                    result = try_venv_reexec(prompt_setup=True)
+
+        assert result is False
+        mock_run_setup.assert_not_called()
+        mock_confirm.assert_not_called()
+        output = capsys.readouterr().out
+        assert "octomil setup" in output
+        assert "OCTOMIL_ALLOW_MANAGED_PYTHON_SETUP=1" in output
+
+    @patch("octomil.venv_reexec.try_venv_reexec")
+    @patch("octomil.venv_reexec.should_managed_venv_reexec", return_value=True)
+    def test_managed_reexec_forwards_prompt_setup(self, mock_should_reexec, mock_try_reexec):
+        mock_try_reexec.return_value = False
+
+        result = try_managed_venv_reexec(include_non_frozen=True, prompt_setup=True)
+
+        assert result is False
+        mock_should_reexec.assert_called_once_with(include_non_frozen=True)
+        mock_try_reexec.assert_called_once_with(prompt_setup=True)
 
 
 class TestFrozenEnginePrompt:

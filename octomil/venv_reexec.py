@@ -2,8 +2,9 @@
 
 Older Octomil binary installs could prepare a managed venv at
 ``~/.octomil/engines/venv/``. Frozen commands may re-launch into that
-runtime if it already exists, but they do not create it implicitly. The
-standalone installer must not reach for the user's Python or pip.
+runtime if it already exists. Commands that want first-run setup can opt
+into an interactive prompt; the default path still avoids reaching for the
+user's Python or pip.
 
 Extracted from ``commands/serve.py`` so that ``benchmark``, ``mcp serve``,
 and any future engine-dependent commands share the same logic.
@@ -51,7 +52,38 @@ def should_managed_venv_reexec(*, include_non_frozen: bool = False) -> bool:
     return argv0 == "octomil"
 
 
-def try_venv_reexec() -> bool:
+def _can_prompt_for_setup() -> bool:
+    return bool(sys.stdin.isatty() and sys.stdout.isatty())
+
+
+def _print_setup_hint() -> None:
+    click.echo(
+        click.style(
+            "\n  Local engine runtime is not ready.",
+            fg="yellow",
+        )
+    )
+    click.echo("  Run `octomil setup` to create the managed engine runtime.")
+    click.echo("  For automation, set OCTOMIL_ALLOW_MANAGED_PYTHON_SETUP=1 to allow inline setup.")
+
+
+def _confirm_inline_setup() -> bool:
+    from octomil.setup import VENV_DIR, detect_best_engine
+
+    engine_name, package = detect_best_engine()
+    click.echo(
+        click.style(
+            "\n  Local engine runtime is not ready.",
+            fg="yellow",
+        )
+    )
+    click.echo(f"  Recommended engine: {engine_name} ({package})")
+    click.echo(f"  Managed runtime: {VENV_DIR}")
+    click.echo()
+    return click.confirm("  Set up Octomil's managed engine runtime now?", default=True)
+
+
+def try_venv_reexec(*, prompt_setup: bool = False) -> bool:
     """Try to re-exec into an existing managed venv for native engine support.
 
     When running from a frozen binary with no native engines, this checks
@@ -60,7 +92,8 @@ def try_venv_reexec() -> bool:
     Python running the original command. Single process, no proxy.
 
     If no venv exists, returns False. Set ``OCTOMIL_ALLOW_MANAGED_PYTHON_SETUP=1``
-    to opt into the legacy inline setup path for development.
+    to opt into the legacy inline setup path for automation/development, or
+    pass ``prompt_setup=True`` to ask an interactive user before setup.
 
     Returns True if re-exec was initiated (unreachable after os.execv).
     Returns False if no managed runtime is available and we should fall through.
@@ -80,19 +113,32 @@ def try_venv_reexec() -> bool:
     if venv_py and _is_running_inside_managed_venv(venv_py):
         return False
     if not venv_py or not is_engine_ready():
-        if os.environ.get("OCTOMIL_ALLOW_MANAGED_PYTHON_SETUP") != "1":
-            return False
+        allow_env_setup = os.environ.get("OCTOMIL_ALLOW_MANAGED_PYTHON_SETUP") == "1"
+        if not allow_env_setup:
+            if not prompt_setup:
+                return False
+            if not _can_prompt_for_setup():
+                _print_setup_hint()
+                return False
+            if not _confirm_inline_setup():
+                click.echo("  Run `octomil setup` when ready, or use `--cloud` for hosted routing.")
+                return False
 
         state = load_state()
-        if state.phase == "failed":
+        if state.phase == "failed" and not prompt_setup:
             return False
 
-        click.echo(
-            click.style(
-                "\n  Setting up legacy managed Python runtime...\n",
-                fg="cyan",
+        if state.phase == "failed" and prompt_setup:
+            click.echo(click.style(f"  Previous setup failed: {state.error}", fg="yellow"))
+            click.echo("  Retrying managed runtime setup...")
+        else:
+            click.echo(
+                click.style(
+                    "\n  Setting up managed Python runtime...\n",
+                    fg="cyan",
+                )
             )
-        )
+
         result = run_setup()
         if result.phase == "failed":
             click.echo(click.style(f"  Setup failed: {result.error}", fg="red"))
@@ -121,11 +167,11 @@ def try_venv_reexec() -> bool:
     return True  # unreachable after execv
 
 
-def try_managed_venv_reexec(*, include_non_frozen: bool = False) -> bool:
+def try_managed_venv_reexec(*, include_non_frozen: bool = False, prompt_setup: bool = False) -> bool:
     """Try managed-venv delegation when appropriate for this entrypoint."""
     if not should_managed_venv_reexec(include_non_frozen=include_non_frozen):
         return False
-    return try_venv_reexec()
+    return try_venv_reexec(prompt_setup=prompt_setup)
 
 
 def wait_for_setup() -> None:

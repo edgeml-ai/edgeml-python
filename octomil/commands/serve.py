@@ -237,7 +237,7 @@ def serve(
     """
     from octomil.venv_reexec import try_managed_venv_reexec
 
-    try_managed_venv_reexec(include_non_frozen=True)
+    try_managed_venv_reexec(include_non_frozen=True, prompt_setup=True)
 
     # --- Config-driven model resolution ---
     from octomil.config.local import (
