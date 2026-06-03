@@ -172,21 +172,58 @@ def _check_artifact_cache() -> list[tuple[str, str, str]]:
 def _check_local_engines() -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
     try:
+        from octomil.runtime.native.capabilities import CAPABILITY_CHAT_COMPLETION, CAPABILITY_CHAT_STREAM
         from octomil.runtime.native.loader import NativeRuntime
         from octomil.runtime.native.tts_batch_backend import runtime_advertises_tts_batch
         from octomil.runtime.native.tts_stream_backend import runtime_advertises_tts_stream
 
         runtime = NativeRuntime.open()
         try:
+            caps = runtime.capabilities()
             batch = runtime_advertises_tts_batch(runtime)
             stream = runtime_advertises_tts_stream(runtime)
         finally:
             runtime.close()
+        rows.append(
+            _row(
+                _OK,
+                "native runtime dylib",
+                os.environ.get("OCTOMIL_RUNTIME_DYLIB", "auto-discovered"),
+            )
+        )
+        rows.append(
+            _row(
+                _OK if caps.supported_engines else _WARN,
+                "native engines",
+                ", ".join(caps.supported_engines) if caps.supported_engines else "none advertised",
+            )
+        )
+        rows.append(
+            _row(
+                _OK if caps.supported_capabilities else _WARN,
+                "native capabilities",
+                ", ".join(caps.supported_capabilities) if caps.supported_capabilities else "none advertised",
+            )
+        )
+        chat_ready = caps.claims(CAPABILITY_CHAT_COMPLETION)
+        chat_detail = "chat.completion"
+        if caps.claims(CAPABILITY_CHAT_STREAM):
+            chat_detail += ", chat.stream"
+        if not any(engine in caps.supported_engines for engine in ("llama_cpp", "llama.cpp")):
+            chat_detail += "; llama.cpp engine not advertised"
+            chat_ready = False
+        rows.append(
+            _row(
+                _OK if chat_ready else _WARN,
+                "native chat runtime",
+                chat_detail if chat_ready else f"not ready ({chat_detail})",
+            )
+        )
         status = _OK if batch or stream else _WARN
-        caps = ", ".join(
+        tts_caps_detail = ", ".join(
             name for name, available in (("audio.tts.batch", batch), ("audio.tts.stream", stream)) if available
         )
-        rows.append(_row(status, "native TTS runtime", caps or "not advertised (local TTS unavailable)"))
+        rows.append(_row(status, "native TTS runtime", tts_caps_detail or "not advertised (local TTS unavailable)"))
     except Exception as exc:
         rows.append(_row(_WARN, "native TTS runtime", f"unavailable: {exc}"))
 

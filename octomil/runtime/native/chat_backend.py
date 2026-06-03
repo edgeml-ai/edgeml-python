@@ -57,6 +57,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from ...errors import OctomilError, OctomilErrorCode
@@ -91,6 +92,16 @@ _SUPPORTED_ROLES: frozenset[str] = frozenset({"system", "user", "assistant"})
 # benchmarks. Distinct from the legacy "llama.cpp" name so logs /
 # metrics / planner candidate lists make the cutover visible.
 _BACKEND_NAME = "native-llama-cpp"
+_GGUF_MAGIC = b"GGUF"
+
+
+def _looks_like_gguf_file(path: str) -> bool:
+    """Best-effort GGUF content sniff for extensionless artifact stores."""
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(4) == _GGUF_MAGIC
+    except OSError:
+        return False
 
 
 def _runtime_status_to_sdk_error(
@@ -304,17 +315,28 @@ class NativeChatBackend(InferenceBackend):
                 for entry in sorted(os.listdir(self._model_dir)):
                     if entry.lower().endswith(".gguf"):
                         return os.path.join(self._model_dir, entry)
+                for entry in sorted(os.listdir(self._model_dir)):
+                    candidate = os.path.join(self._model_dir, entry)
+                    if os.path.isfile(candidate) and _looks_like_gguf_file(candidate):
+                        return candidate
         # No injected model_dir — accept bare *.gguf for dev/tests.
+        # Also accept extensionless local GGUF blobs by sniffing the
+        # magic header; content-addressed stores often do not preserve
+        # source filenames.
         # Product flow shouldn't hit this branch (the PrepareManager
         # always sets model_dir before the engine is constructed).
         if model_name.endswith(".gguf") and os.path.isfile(model_name):
             return model_name
+        expanded = str(Path(model_name).expanduser())
+        if os.path.isfile(expanded) and _looks_like_gguf_file(expanded):
+            return expanded
         raise OctomilError(
             code=OctomilErrorCode.MODEL_NOT_FOUND,
             message=(
                 f"native chat backend could not resolve a GGUF for model {model_name!r}. "
                 f"Expected a PrepareManager-materialized artifact via model_dir; got "
-                f"{self._model_dir!r}."
+                f"{self._model_dir!r}. Extensionless files are accepted when their "
+                f"header starts with GGUF."
             ),
         )
 
@@ -331,7 +353,7 @@ class NativeChatBackend(InferenceBackend):
         )
         try:
             self._runtime = NativeRuntime.open()
-            self._model = self._runtime.open_model(model_uri=self._gguf_path)
+            self._model = self._runtime.open_model(model_uri=self._gguf_path, engine_hint="llama_cpp")
             self._model.warm()
         except NativeRuntimeError as exc:
             # Roll back any partial state so a retry can re-open cleanly.

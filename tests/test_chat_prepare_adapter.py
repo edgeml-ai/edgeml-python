@@ -1,22 +1,10 @@
 """End-to-end tests for PR 10c: chat dispatch threading.
 
 PR 10c wires ``model_dir`` from PrepareManager through the chat
-dispatch path into ``MLXBackend`` and ``LlamaCppBackend``. The
-*capability* (``chat`` / ``responses``) remains intentionally gated in
-``_PREPAREABLE_CAPABILITIES`` because:
-
-  - the public ``client.responses.create`` facade goes through
-    ``OctomilResponses``, which does NOT thread ``model_dir``;
-  - PrepareManager has no snapshot/manifest support, so MLX (which
-    needs a directory with ``config.json`` + tokenizer + weights)
-    cannot consume a prepared dir today even though
-    ``mlx_lm.load(<dir>)`` is wired.
-
-These tests therefore assert the *threading* contract for the kernel
-path (the part this PR ships), the prepare-ordering invariants the
-reviewer asked for, and that the public ``prepare(capability='chat')`` /
-``prepare(capability='responses')`` surface still rejects with an
-actionable error so we don't false-success the unfinished pipeline.
+dispatch path into ``MLXBackend`` and ``LlamaCppBackend``. Chat is now
+publicly preparable/warmupable for the native GGUF path; ``responses``
+remains gated until that public facade consumes the same prepared
+``model_dir``.
 """
 
 from __future__ import annotations
@@ -296,36 +284,67 @@ async def test_synthetic_local_candidate_is_filtered_before_runner(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Capability gate: prepare(capability='chat'/'responses') stays rejected
+# Capability gate: chat is preparable; responses stays rejected
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("capability", ["chat", "responses"])
-def test_prepare_rejects_chat_and_responses_until_facade_and_mlx_ready(capability, tmp_path):
-    """Until the public ``client.responses.create`` facade routes
-    through the kernel (or threads ``model_dir`` through OctomilResponses)
-    AND PrepareManager grows snapshot/manifest materialization for
-    multi-file MLX artifacts, ``client.prepare(capability='chat')`` /
-    ``prepare(capability='responses')`` must reject with INVALID_INPUT.
-    This regression-pins the gate so the next attempt to widen
-    ``_PREPAREABLE_CAPABILITIES`` cannot ship without removing this
-    test (and adding the e2e proofs for both blockers)."""
+def test_prepare_rejects_responses_until_facade_consumes_prepared_dir(tmp_path):
+    """``responses`` remains gated until that public facade routes
+    through the kernel or threads ``model_dir`` into backend creation."""
     kernel = ExecutionKernel()
     with pytest.raises(OctomilError) as excinfo:
-        kernel.prepare(model="m", capability=capability)
+        kernel.prepare(model="m", capability="responses")
     assert excinfo.value.code == OctomilErrorCode.INVALID_INPUT
-    msg = str(excinfo.value)
-    assert capability in msg
+    assert "responses" in str(excinfo.value)
+
+
+def test_prepare_chat_materializes_local_candidate(tmp_path):
+    candidate = _local_chat_candidate(engine="llama.cpp")
+    selection = _Selection(candidates=[candidate])
+    artifact_dir = tmp_path / "gemma3-1b"
+    artifact_dir.mkdir()
+    pm = _RecordingPM(artifact_dir)
+    kernel = ExecutionKernel(prepare_manager=pm)
+    kernel._resolve = lambda capability, **kw: _make_defaults()
+
+    with patch("octomil.execution.kernel._resolve_planner_selection", return_value=selection):
+        outcome = kernel.prepare(model="gemma3-1b", capability="chat")
+
+    assert outcome.artifact_dir == artifact_dir
+    assert outcome.artifact_id == "gemma3-1b"
+    assert pm.prepare_calls == ["gemma3-1b"]
 
 
 def test_preparable_capabilities_excludes_chat_and_responses():
     """Direct invariant on the kernel's allowlist."""
     from octomil.execution.kernel import _PREPAREABLE_CAPABILITIES
 
-    assert "chat" not in _PREPAREABLE_CAPABILITIES
+    assert "chat" in _PREPAREABLE_CAPABILITIES
     assert "responses" not in _PREPAREABLE_CAPABILITIES
     assert "tts" in _PREPAREABLE_CAPABILITIES
     assert "transcription" in _PREPAREABLE_CAPABILITIES
+
+
+@pytest.mark.asyncio
+async def test_warmup_chat_loads_backend_and_dispatch_reuses_it(tmp_path):
+    candidate = _local_chat_candidate(engine="mlx-lm")
+    selection = _Selection(candidates=[candidate])
+    artifact_dir = tmp_path / "gemma3-1b"
+    artifact_dir.mkdir()
+    (artifact_dir / "artifact").write_bytes(b"fake gguf")
+    pm = _RecordingPM(artifact_dir)
+    kernel = ExecutionKernel(prepare_manager=pm)
+    kernel._resolve = lambda capability, **kw: _make_defaults()
+
+    with ExitStack() as stack:
+        stack.enter_context(patch("octomil.execution.kernel._resolve_planner_selection", return_value=selection))
+        stack.enter_context(patch("octomil.runtime.engines.get_registry", return_value=_FakeEngineRegistry()))
+        outcome = kernel.warmup(model="gemma3-1b", capability="chat")
+        result = await kernel.create_response("Hello", model="gemma3-1b")
+
+    assert outcome.backend_loaded is True
+    assert result.output_text == "from prepared dir"
+    assert _FakeEngine.create_calls == 1, "dispatch should reuse the warmed chat backend"
 
 
 # ---------------------------------------------------------------------------
