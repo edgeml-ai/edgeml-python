@@ -159,9 +159,9 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Exclude heavy optional deps that users install separately.
-        # The binary is for the CLI (serve, deploy, scan, etc.) — not for
-        # the training/FL SDK which requires torch anyway.
+        # Exclude heavy optional deps that users install separately or access
+        # through the managed engine venv. The binary ships the CLI/server
+        # surface; engine-heavy commands can re-exec into the managed runtime.
         "torch",
         "tensorflow",
         "pandas",
