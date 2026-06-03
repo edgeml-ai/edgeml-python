@@ -315,7 +315,7 @@ def test_prepare_chat_materializes_local_candidate(tmp_path):
     assert pm.prepare_calls == ["gemma3-1b"]
 
 
-def test_preparable_capabilities_excludes_chat_and_responses():
+def test_preparable_capabilities_includes_chat_excludes_responses():
     """Direct invariant on the kernel's allowlist."""
     from octomil.execution.kernel import _PREPAREABLE_CAPABILITIES
 

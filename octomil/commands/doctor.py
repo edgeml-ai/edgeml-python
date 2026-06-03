@@ -225,7 +225,10 @@ def _check_local_engines() -> list[tuple[str, str, str]]:
         )
         rows.append(_row(status, "native TTS runtime", tts_caps_detail or "not advertised (local TTS unavailable)"))
     except Exception as exc:
-        rows.append(_row(_WARN, "native TTS runtime", f"unavailable: {exc}"))
+        # The probe above covers the dylib, engines, capabilities, chat, and
+        # TTS rows; attribute a probe-wide failure to the native runtime as a
+        # whole rather than misreporting it as a TTS-specific problem.
+        rows.append(_row(_WARN, "native runtime", f"unavailable: {exc}"))
 
     # ``label`` is the user-facing name (matches the pip extra /
     # PyPI distribution); ``module`` is the actual Python import
