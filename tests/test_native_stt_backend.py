@@ -534,6 +534,40 @@ class TestTranscribePreflight:
         # Session should NOT have been opened.
         backend._runtime.open_session.assert_not_called()
 
+    def test_transcribe_forwards_language_and_task_to_open_session(self) -> None:
+        # session_config v4: language + transcription_task must cross the
+        # ABI boundary as open_session kwargs. Short-circuit the session
+        # by raising from open_session — we only assert the forwarded args.
+        backend = NativeSttBackend()
+        backend._runtime = MagicMock()
+        backend._model = MagicMock()
+        backend._runtime.open_session.side_effect = NativeRuntimeError(
+            OCT_STATUS_UNSUPPORTED, "short-circuit after capturing kwargs"
+        )
+        with pytest.raises(OctomilError):
+            backend.transcribe(
+                np.zeros(16000, dtype=np.float32),
+                sample_rate_hz=16000,
+                language="ja",
+                transcription_task="translate",
+            )
+        kwargs = backend._runtime.open_session.call_args.kwargs
+        assert kwargs["language"] == "ja"
+        assert kwargs["transcription_task"] == "translate"
+
+    def test_transcribe_defaults_language_and_task(self) -> None:
+        # Defaults must still forward (en / transcribe) so the runtime
+        # path is exercised rather than relying on a hardcoded engine default.
+        backend = NativeSttBackend()
+        backend._runtime = MagicMock()
+        backend._model = MagicMock()
+        backend._runtime.open_session.side_effect = NativeRuntimeError(OCT_STATUS_UNSUPPORTED, "short-circuit")
+        with pytest.raises(OctomilError):
+            backend.transcribe(np.zeros(16000, dtype=np.float32), sample_rate_hz=16000)
+        kwargs = backend._runtime.open_session.call_args.kwargs
+        assert kwargs["language"] == "en"
+        assert kwargs["transcription_task"] == "transcribe"
+
 
 # ---------------------------------------------------------------------------
 # TranscriptionResult / Segment shape
