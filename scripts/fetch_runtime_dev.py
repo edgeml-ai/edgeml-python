@@ -63,7 +63,7 @@ import urllib.request
 from pathlib import Path
 
 REPO = "octomil/octomil-runtime"
-DEFAULT_VERSION = "v0.1.21"  # v0.1.21: session_config v4 runtime (STT language/transcription_task); darwin-arm64 chat/stt/tts + linux/android chat/stt
+DEFAULT_VERSION = "v0.1.22"  # v0.1.22: session_config v5 runtime (STT decode controls: strategy/beam/no_context + timestamp clamp); requires the v0.1.22 release dylibs
 CACHE_ROOT = Path.home() / ".cache" / "octomil-runtime"
 MANIFEST_ASSET_NAME = "MANIFEST.json"
 

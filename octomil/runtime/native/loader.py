@@ -180,14 +180,23 @@ OCT_EMBED_POOLING_RANK: int = 4
 # audio.diarization speaker_id sentinel.
 OCT_DIARIZATION_SPEAKER_UNKNOWN: int = 65535
 
-# v0.1.12 bump 3->4: appended STT language/transcription_task hints
-# (see oct_session_config_t cdef below). Lockstep with runtime.h. This is
-# a config-version-only bump; it adds no new ABI symbol, so
+# v0.1.12 bump 3->4: appended STT language/transcription_task hints.
+# v0.1.22 bump 4->5: appended STT whisper decode controls
+# (stt_decode_strategy / stt_beam_size / stt_no_context; see the
+# oct_session_config_t cdef below). Lockstep with runtime.h. This is a
+# config-version-only bump; it adds no new ABI symbol, so
 # _REQUIRED_ABI_MINOR is intentionally NOT raised (see its comment). A
-# runtime predating v4 rejects open_session with VERSION_MISMATCH, which
+# runtime predating v5 rejects open_session with VERSION_MISMATCH, which
 # error_mapping surfaces as "runtime too old for this SDK".
-OCT_SESSION_CONFIG_VERSION: int = 4
+OCT_SESSION_CONFIG_VERSION: int = 5
 OCT_EVENT_VERSION: int = 2
+
+# session_config v=5 stt_no_context tri-state (mirrors runtime.h
+# OCT_STT_NO_CONTEXT_*). DEFAULT preserves the runtime's historical
+# whisper no_context=true; ENABLED/DISABLED force the value.
+OCT_STT_NO_CONTEXT_DEFAULT: int = 0
+OCT_STT_NO_CONTEXT_ENABLED: int = 1
+OCT_STT_NO_CONTEXT_DISABLED: int = 2
 
 # v0.4 step 1 — model lifecycle config struct (unchanged in v0.1.1).
 OCT_MODEL_CONFIG_VERSION: int = 1
@@ -848,6 +857,14 @@ typedef struct {
      * transcribe); language "auto" opts into detection. */
     const char*    language;
     const char*    transcription_task;
+    /* v0.1.22 (session_config v=5) — whisper decode controls. Read by the
+     * runtime only when version>=5; v<=4 callers keep greedy / no_context=true.
+     * stt_decode_strategy: "greedy"|"beam"|"beam_search" (NULL=greedy).
+     * stt_beam_size: 0=default (5 when beam selected); >1 also selects beam.
+     * stt_no_context: OCT_STT_NO_CONTEXT_* tri-state. */
+    const char*    stt_decode_strategy;
+    uint32_t       stt_beam_size;
+    uint32_t       stt_no_context;
 } oct_session_config_t;
 
 typedef struct {
@@ -1417,6 +1434,15 @@ class NativeRuntime:
         # translate-to-English, else (incl. empty) transcribe.
         language: str | None = None,
         transcription_task: str | None = None,
+        # v0.1.22 (session_config v=5) — whisper decode controls for
+        # audio.transcription. Non-STT capabilities ignore them. Defaults
+        # reproduce the historical behavior (greedy, no_context=true).
+        # stt_decode_strategy: "greedy"|"beam"|"beam_search" (None=greedy).
+        # stt_beam_size: 0=runtime default (5 when beam); >1 also selects beam.
+        # stt_no_context: OCT_STT_NO_CONTEXT_* (DEFAULT preserves runtime default).
+        stt_decode_strategy: str | None = None,
+        stt_beam_size: int = 0,
+        stt_no_context: int = OCT_STT_NO_CONTEXT_DEFAULT,
     ) -> "NativeSession":
         """Open a session against this runtime.
 
@@ -1506,6 +1532,10 @@ class NativeRuntime:
         # v=4 STT hints (mirrors the correlation-ID keepalive pattern above).
         cfg.language = _cstr(language) if language else ffi.NULL
         cfg.transcription_task = _cstr(transcription_task) if transcription_task else ffi.NULL
+        # v=5 decode controls (greedy/beam, beam size, no_context tri-state).
+        cfg.stt_decode_strategy = _cstr(stt_decode_strategy) if stt_decode_strategy else ffi.NULL
+        cfg.stt_beam_size = max(0, int(stt_beam_size))
+        cfg.stt_no_context = int(stt_no_context)
         out = ffi.new("oct_session_t**")
         status = int(lib.oct_session_open(self._handle, cfg, out))
         if status != OCT_STATUS_OK:
@@ -2865,6 +2895,9 @@ __all__ = [
     "OCT_SAMPLE_FORMAT_PCM_F32LE",
     "OCT_SAMPLE_FORMAT_PCM_S16LE",
     "OCT_SESSION_CONFIG_VERSION",
+    "OCT_STT_NO_CONTEXT_DEFAULT",
+    "OCT_STT_NO_CONTEXT_ENABLED",
+    "OCT_STT_NO_CONTEXT_DISABLED",
     "OCT_STATUS_BUSY",
     "OCT_STATUS_CANCELLED",
     "OCT_STATUS_INTERNAL",

@@ -568,6 +568,73 @@ class TestTranscribePreflight:
         assert kwargs["language"] == "en"
         assert kwargs["transcription_task"] == "transcribe"
 
+    def _short_circuit_backend(self):
+        backend = NativeSttBackend()
+        backend._runtime = MagicMock()
+        backend._model = MagicMock()
+        backend._runtime.open_session.side_effect = NativeRuntimeError(
+            OCT_STATUS_UNSUPPORTED, "short-circuit after capturing kwargs"
+        )
+        return backend
+
+    def test_transcribe_forwards_decode_controls_to_open_session(self) -> None:
+        # session_config v5: decode_strategy/beam_size/no_context must cross
+        # the ABI as normalized open_session kwargs.
+        from octomil.runtime.native.loader import OCT_STT_NO_CONTEXT_DISABLED
+
+        backend = self._short_circuit_backend()
+        with pytest.raises(OctomilError):
+            backend.transcribe(
+                np.zeros(16000, dtype=np.float32),
+                sample_rate_hz=16000,
+                decode_strategy="beam",
+                beam_size=8,
+                no_context=False,
+            )
+        kwargs = backend._runtime.open_session.call_args.kwargs
+        assert kwargs["stt_decode_strategy"] == "beam"
+        assert kwargs["stt_beam_size"] == 8
+        assert kwargs["stt_no_context"] == OCT_STT_NO_CONTEXT_DISABLED
+
+    def test_transcribe_decode_defaults_are_runtime_default(self) -> None:
+        # No decode args → greedy default: strategy None, beam 0, no_context DEFAULT.
+        from octomil.runtime.native.loader import OCT_STT_NO_CONTEXT_DEFAULT
+
+        backend = self._short_circuit_backend()
+        with pytest.raises(OctomilError):
+            backend.transcribe(np.zeros(16000, dtype=np.float32), sample_rate_hz=16000)
+        kwargs = backend._runtime.open_session.call_args.kwargs
+        assert kwargs["stt_decode_strategy"] is None
+        assert kwargs["stt_beam_size"] == 0
+        assert kwargs["stt_no_context"] == OCT_STT_NO_CONTEXT_DEFAULT
+
+    def test_transcribe_beam_size_gt1_implies_beam_search(self) -> None:
+        # beam_size>1 with no explicit strategy selects beam_search.
+        backend = self._short_circuit_backend()
+        with pytest.raises(OctomilError):
+            backend.transcribe(np.zeros(16000, dtype=np.float32), sample_rate_hz=16000, beam_size=4)
+        kwargs = backend._runtime.open_session.call_args.kwargs
+        assert kwargs["stt_decode_strategy"] == "beam_search"
+        assert kwargs["stt_beam_size"] == 4
+
+    def test_transcribe_rejects_unknown_decode_strategy(self) -> None:
+        backend = self._short_circuit_backend()
+        with pytest.raises(OctomilError) as exc:
+            backend.transcribe(
+                np.zeros(16000, dtype=np.float32),
+                sample_rate_hz=16000,
+                decode_strategy="bogus",
+            )
+        assert exc.value.code == OctomilErrorCode.INVALID_INPUT
+        backend._runtime.open_session.assert_not_called()
+
+    def test_transcribe_rejects_negative_beam_size(self) -> None:
+        backend = self._short_circuit_backend()
+        with pytest.raises(OctomilError) as exc:
+            backend.transcribe(np.zeros(16000, dtype=np.float32), sample_rate_hz=16000, beam_size=-1)
+        assert exc.value.code == OctomilErrorCode.INVALID_INPUT
+        backend._runtime.open_session.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # TranscriptionResult / Segment shape
