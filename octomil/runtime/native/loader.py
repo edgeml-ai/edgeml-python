@@ -953,8 +953,8 @@ oct_status_t oct_session_send_text(
  * audio STT/VAD sessions: rejects further audio and lets poll_event run
  * the terminal decode even on an empty buffer (bounded no-audio error
  * path instead of a permanent timeout). Idempotent; single-thread-affine
- * (do not race send_*/poll_event). Sessions that don't consume streaming
- * input return OCT_STATUS_UNSUPPORTED; NULL session -> INVALID_INPUT.
+ * (do not race send_audio/send_text/poll_event). Sessions that do not
+ * consume streaming input return OCT_STATUS_UNSUPPORTED; NULL -> INVALID.
  * This symbol is why _REQUIRED_ABI_MINOR is 12. */
 oct_status_t oct_session_end_input(oct_session_t* session);
 oct_status_t oct_session_poll_event(
@@ -1838,6 +1838,19 @@ class NativeEvent:
         "tts_sample_format",
         "tts_channels",
         "tts_is_final",
+        # v0.1.24 (OCT_EVENT_VERSION 3) — STT stream provisional partial.
+        # Populated only on OCT_EVENT_TRANSCRIPT_PARTIAL; the partial UTF-8
+        # is copied into ``text`` (same as segment/final). ``revision_id``
+        # is a 1-based monotonic counter within the session so callers can
+        # discard stale partials. ``stable_prefix_bytes`` is the
+        # local-agreement stable UTF-8 prefix length (0 when unavailable);
+        # ``is_stable`` is True iff the whole partial is safe for
+        # speculative use. The final transcript stays authoritative.
+        "partial_revision_id",
+        "partial_start_ms",
+        "partial_end_ms",
+        "partial_stable_prefix_bytes",
+        "partial_is_stable",
     )
 
     def __init__(
@@ -1889,6 +1902,11 @@ class NativeEvent:
         tts_sample_format: int = 0,
         tts_channels: int = 0,
         tts_is_final: bool = False,
+        partial_revision_id: int = 0,
+        partial_start_ms: int = 0,
+        partial_end_ms: int = 0,
+        partial_stable_prefix_bytes: int = 0,
+        partial_is_stable: bool = False,
     ) -> None:
         self.type = type
         self.version = version
@@ -1936,6 +1954,11 @@ class NativeEvent:
         self.tts_sample_format = tts_sample_format
         self.tts_channels = tts_channels
         self.tts_is_final = tts_is_final
+        self.partial_revision_id = partial_revision_id
+        self.partial_start_ms = partial_start_ms
+        self.partial_end_ms = partial_end_ms
+        self.partial_stable_prefix_bytes = partial_stable_prefix_bytes
+        self.partial_is_stable = partial_is_stable
 
     @property
     def is_none(self) -> bool:
@@ -2522,6 +2545,12 @@ class NativeSession:
         tts_sample_format = 0
         tts_channels = 0
         tts_is_final = False
+        # v0.1.24 — STT stream provisional partial payload defaults.
+        partial_revision_id = 0
+        partial_start_ms = 0
+        partial_end_ms = 0
+        partial_stable_prefix_bytes = 0
+        partial_is_stable = False
         ev_type = int(ev.type)
         if ev_type == OCT_EVENT_TRANSCRIPT_CHUNK:
             chunk = ev.data.transcript_chunk
@@ -2574,6 +2603,20 @@ class NativeSession:
                 text_payload = ffi.buffer(fin.utf8, int(fin.n_bytes))[:].decode("utf-8", errors="replace")
             final_n_segments = int(fin.n_segments)
             final_duration_ms = int(fin.duration_ms)
+        elif ev_type == OCT_EVENT_TRANSCRIPT_PARTIAL:
+            # v0.1.24 (OCT_EVENT_VERSION 3) — STT stream provisional
+            # partial. Runtime-owned utf8 valid only until the next poll;
+            # copy it out into ``text_payload`` now. Revision-aware fields
+            # let callers replace stale partials; the final transcript
+            # stays authoritative.
+            par = ev.data.transcript_partial
+            if par.utf8 != ffi.NULL and par.n_bytes > 0:
+                text_payload = ffi.buffer(par.utf8, int(par.n_bytes))[:].decode("utf-8", errors="replace")
+            partial_revision_id = int(par.revision_id)
+            partial_start_ms = int(par.start_ms)
+            partial_end_ms = int(par.end_ms)
+            partial_stable_prefix_bytes = int(par.stable_prefix_bytes)
+            partial_is_stable = bool(par.is_stable)
         elif ev_type == OCT_EVENT_EMBEDDING_VECTOR:
             # v0.1.3 — pooled embedding vector. The runtime owns the
             # float buffer only until the next poll on this session,
@@ -2673,6 +2716,11 @@ class NativeSession:
             tts_sample_format=tts_sample_format,
             tts_channels=tts_channels,
             tts_is_final=tts_is_final,
+            partial_revision_id=partial_revision_id,
+            partial_start_ms=partial_start_ms,
+            partial_end_ms=partial_end_ms,
+            partial_stable_prefix_bytes=partial_stable_prefix_bytes,
+            partial_is_stable=partial_is_stable,
             **_envelope(ev),
         )
 
@@ -2689,6 +2737,34 @@ class NativeSession:
             raise NativeRuntimeError(
                 status,
                 "oct_session_cancel failed",
+                last_error=self._owner.last_error(),
+            )
+        return status
+
+    def end_input(self) -> int:
+        """Finalize streaming input for this turn (oct_session_end_input).
+
+        Signals the runtime that no more audio/text will be sent, so
+        :meth:`poll_event` can run the terminal decode even on an empty
+        buffer instead of blocking until timeout (the bounded no-audio
+        path). Idempotent: repeated calls after a successful finalize
+        return OK. Single-thread-affine — do not race with
+        ``send_audio``/``send_text``/``poll_event`` on this session.
+
+        Returns the raw status code. ``OCT_STATUS_UNSUPPORTED`` (sessions
+        that do not consume streaming input) is returned, not raised, so
+        callers can feature-detect; any other non-OK code raises.
+
+        Requires a runtime with ABI minor >= 12 (the
+        ``oct_session_end_input`` symbol); older dylibs are rejected at
+        load time by the loader's ABI-minor gate."""
+        if self._handle_invalid or self._closed:
+            return OCT_STATUS_OK
+        status = int(self._lib.oct_session_end_input(self._handle))
+        if status not in (OCT_STATUS_OK, OCT_STATUS_UNSUPPORTED):
+            raise NativeRuntimeError(
+                status,
+                "oct_session_end_input failed",
                 last_error=self._owner.last_error(),
             )
         return status
@@ -2920,6 +2996,7 @@ __all__ = [
     "OCT_EVENT_THERMAL_STATE",
     "OCT_EVENT_TRANSCRIPT_CHUNK",
     "OCT_EVENT_TRANSCRIPT_FINAL",
+    "OCT_EVENT_TRANSCRIPT_PARTIAL",
     "OCT_EVENT_TRANSCRIPT_SEGMENT",
     "OCT_EVENT_TTS_AUDIO_CHUNK",
     "OCT_EVENT_TURN_ENDED",
