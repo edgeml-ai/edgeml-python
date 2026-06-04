@@ -127,6 +127,14 @@ OCT_EVENT_EMBEDDING_VECTOR: int = 20
 # runtime-owned; lifetime = until next poll. Bindings MUST copy.
 OCT_EVENT_TRANSCRIPT_SEGMENT: int = 21
 OCT_EVENT_TRANSCRIPT_FINAL: int = 22
+# v0.1.24 (OCT_EVENT_VERSION 3) — STT stream provisional partial. Emitted
+# ONLY by audio.stt.stream before the committed TRANSCRIPT_FINAL; the final
+# transcript stays authoritative. Revision-aware so bindings replace stale
+# partials without confusing them with finalized segments. Payload:
+# data.transcript_partial { utf8, n_bytes, revision_id, start_ms, end_ms,
+# stable_prefix_bytes, is_stable } — runtime-owned utf8, lifetime = until
+# next poll; bindings MUST copy.
+OCT_EVENT_TRANSCRIPT_PARTIAL: int = 26
 # v0.1.8 Lane A — TTS audio-chunk event (audio.tts.batch + audio.tts.stream).
 # Carries PCM bytes for one synthesized chunk; granularity depends on the
 # capability:
@@ -189,7 +197,12 @@ OCT_DIARIZATION_SPEAKER_UNKNOWN: int = 65535
 # runtime predating v5 rejects open_session with VERSION_MISMATCH, which
 # error_mapping surfaces as "runtime too old for this SDK".
 OCT_SESSION_CONFIG_VERSION: int = 5
-OCT_EVENT_VERSION: int = 2
+# v0.1.24 bump 2->3: adds OCT_EVENT_TRANSCRIPT_PARTIAL (id=26) + the
+# data.transcript_partial union arm. Event-version-only bump (new event-type
+# id + union member, NOT a new ABI symbol), guarded by the out->size
+# handshake — mirrors runtime.h OCT_EVENT_VERSION 3. The end_input *symbol*
+# (minor 12) is what raises _REQUIRED_ABI_MINOR; partials ride this.
+OCT_EVENT_VERSION: int = 3
 
 # session_config v=5 stt_no_context tri-state (mirrors runtime.h
 # OCT_STT_NO_CONTEXT_*). DEFAULT preserves the runtime's historical
@@ -782,6 +795,23 @@ typedef struct oct_event {
             uint32_t    _reserved1;
         } transcript_final;
 
+        /* v0.1.24 (OCT_EVENT_VERSION 3) — STT provisional partial.
+         * Emitted only by audio.stt.stream before the committed final
+         * transcript. Revision-aware so bindings can replace stale
+         * partials. utf8 lifetime = until next poll. Mirrors runtime.h
+         * data.transcript_partial verbatim. */
+        struct {
+            const char* utf8;
+            uint32_t    n_bytes;
+            uint32_t    revision_id;
+            uint32_t    start_ms;
+            uint32_t    end_ms;
+            uint32_t    stable_prefix_bytes;
+            uint8_t     is_stable;
+            uint8_t     _reserved0;
+            uint16_t    _reserved1;
+        } transcript_partial;
+
         /* audio.diarization segment. */
         struct {
             uint32_t    start_ms;
@@ -919,6 +949,14 @@ oct_status_t oct_session_send_text(
     oct_session_t* session,
     const char* utf8
 );
+/* v0.1.23 (ABI minor 12) — explicit streaming-input finalization. For
+ * audio STT/VAD sessions: rejects further audio and lets poll_event run
+ * the terminal decode even on an empty buffer (bounded no-audio error
+ * path instead of a permanent timeout). Idempotent; single-thread-affine
+ * (do not race send_*/poll_event). Sessions that don't consume streaming
+ * input return OCT_STATUS_UNSUPPORTED; NULL session -> INVALID_INPUT.
+ * This symbol is why _REQUIRED_ABI_MINOR is 12. */
+oct_status_t oct_session_end_input(oct_session_t* session);
 oct_status_t oct_session_poll_event(
     oct_session_t* session,
     oct_event_t* out,
@@ -1030,7 +1068,7 @@ oct_status_t oct_session_send_image(
 # rather than a typed compatibility error. Codex R1 fix: fail fast
 # at load time with NativeRuntimeError(VERSION_MISMATCH).
 _REQUIRED_ABI_MAJOR: int = 0
-_REQUIRED_ABI_MINOR: int = 10  # v0.1.11: cache introspection ABI symbols and native audio event parity.
+_REQUIRED_ABI_MINOR: int = 12  # v0.1.23: oct_session_end_input symbol (the cdef declares it, so an older minor-11 dylib would fail dlsym on load). v0.1.11 (10): cache introspection + native audio event parity.
 # NOTE: deliberately NOT raised for session_config v4 (OCT_SESSION_CONFIG_VERSION=4).
 # Per the runtime's ABI-minor convention, the minor advertises symbol-table
 # presence only; v4 adds no new symbol. New-SDK-on-old-runtime is guarded by the
