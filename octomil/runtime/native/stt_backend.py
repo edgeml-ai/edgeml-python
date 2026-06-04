@@ -819,6 +819,7 @@ class NativeSttBackend:
         *,
         sample_rate_hz: int = _WHISPER_SAMPLE_RATE_HZ,
         language: str = "en",
+        transcription_task: str = "transcribe",
         deadline_ms: int | None = None,
     ) -> TranscriptionResult:
         """Run an ``audio.transcription`` request against the runtime.
@@ -832,9 +833,17 @@ class NativeSttBackend:
         sample_rate_hz
             Hz. Must be 16000 for the native whisper.cpp STT path.
         language
-            BCP-47 language hint. Echoed back on the result; the
-            runtime is multilingual but v0.1.5 surfaces a single
-            language tag per session.
+            BCP-47 / ISO-639-1 language hint (default ``"en"``), forwarded
+            to the runtime via session_config v4 to set whisper's decode
+            language. Pass ``"auto"`` to opt into language auto-detection;
+            ``""`` / ``None`` fall back to the engine default (English),
+            NOT auto-detect. Also echoed back on the result.
+        transcription_task
+            ``"transcribe"`` (same-language transcript, default) or
+            ``"translate"`` (Whisper translate-to-English). Forwarded
+            via session_config v4. Requires a runtime that understands
+            session_config v4; older runtimes reject with a clear
+            "runtime too old" error.
         deadline_ms
             Per-request poll deadline. Falls back to
             ``self._default_deadline_ms`` (5 minutes) when None.
@@ -890,6 +899,9 @@ class NativeSttBackend:
                 policy_preset="private",
                 sample_rate_in=sample_rate_hz,
                 model=self._model,
+                # v=4 STT hints: drive whisper language/translate at the runtime.
+                language=language,
+                transcription_task=transcription_task,
             )
         except NativeRuntimeError as exc:
             raise _runtime_status_to_sdk_error(

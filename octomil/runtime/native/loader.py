@@ -180,7 +180,13 @@ OCT_EMBED_POOLING_RANK: int = 4
 # audio.diarization speaker_id sentinel.
 OCT_DIARIZATION_SPEAKER_UNKNOWN: int = 65535
 
-OCT_SESSION_CONFIG_VERSION: int = 3
+# v0.1.12 bump 3->4: appended STT language/transcription_task hints
+# (see oct_session_config_t cdef below). Lockstep with runtime.h. This is
+# a config-version-only bump; it adds no new ABI symbol, so
+# _REQUIRED_ABI_MINOR is intentionally NOT raised (see its comment). A
+# runtime predating v4 rejects open_session with VERSION_MISMATCH, which
+# error_mapping surfaces as "runtime too old for this SDK".
+OCT_SESSION_CONFIG_VERSION: int = 4
 OCT_EVENT_VERSION: int = 2
 
 # v0.4 step 1 — model lifecycle config struct (unchanged in v0.1.1).
@@ -837,6 +843,11 @@ typedef struct {
      * Caller retains ownership; the binding MUST keep the model
      * alive until the session has been closed. */
     oct_model_t*   model;
+    /* v0.1.12 (session_config v=4) — STT decode hints. Caller-owned; the
+     * runtime copies both at open. NULL = engine default (English
+     * transcribe); language "auto" opts into detection. */
+    const char*    language;
+    const char*    transcription_task;
 } oct_session_config_t;
 
 typedef struct {
@@ -1003,6 +1014,12 @@ oct_status_t oct_session_send_image(
 # at load time with NativeRuntimeError(VERSION_MISMATCH).
 _REQUIRED_ABI_MAJOR: int = 0
 _REQUIRED_ABI_MINOR: int = 10  # v0.1.11: cache introspection ABI symbols and native audio event parity.
+# NOTE: deliberately NOT raised for session_config v4 (OCT_SESSION_CONFIG_VERSION=4).
+# Per the runtime's ABI-minor convention, the minor advertises symbol-table
+# presence only; v4 adds no new symbol. New-SDK-on-old-runtime is guarded by the
+# config-version handshake instead: open_session sends version=4, and a runtime
+# that predates v4 returns OCT_STATUS_VERSION_MISMATCH (surfaced by error_mapping
+# as "runtime too old for this SDK").
 
 
 def _build_lib() -> tuple[Any, Any]:
@@ -1391,6 +1408,15 @@ class NativeRuntime:
         # non-NULL model on a v=3 session_config. Other capabilities
         # may pass model=None and resolve via model_uri (slice-2A).
         model: "NativeModel | None" = None,
+        # v0.1.12 (session_config v=4) — STT decode hints for
+        # audio.transcription. Non-STT capabilities ignore them.
+        # ``None`` / "" → NULL across the ABI, which the runtime treats as
+        # "keep the engine default" (English transcribe). Auto-detect is
+        # OPT-IN via the explicit string "auto"; any other value forces
+        # that language. transcription_task "translate" → Whisper
+        # translate-to-English, else (incl. empty) transcribe.
+        language: str | None = None,
+        transcription_task: str | None = None,
     ) -> "NativeSession":
         """Open a session against this runtime.
 
@@ -1477,6 +1503,9 @@ class NativeRuntime:
             cfg.model = model._handle
         else:
             cfg.model = ffi.NULL
+        # v=4 STT hints (mirrors the correlation-ID keepalive pattern above).
+        cfg.language = _cstr(language) if language else ffi.NULL
+        cfg.transcription_task = _cstr(transcription_task) if transcription_task else ffi.NULL
         out = ffi.new("oct_session_t**")
         status = int(lib.oct_session_open(self._handle, cfg, out))
         if status != OCT_STATUS_OK:
