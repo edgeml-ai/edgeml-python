@@ -1108,13 +1108,14 @@ def test_oct_session_config_t_v0_4_appended_fields_present():
     assert cffi_size == runtime_size
 
 
-def test_session_config_version_bumped_to_4():
-    """v0.1.12 bumps session_config version 3 → 4 (appended STT
-    `language` + `transcription_task`). The runtime accepts {1,2,3,4};
-    a v4 SDK against a pre-v4 runtime is rejected with VERSION_MISMATCH."""
+def test_session_config_version_bumped_to_5():
+    """v0.1.22 bumps session_config version 4 → 5 (appended STT decode
+    controls: stt_decode_strategy / stt_beam_size / stt_no_context). The
+    runtime accepts {1,2,3,4,5}; a v5 SDK against a pre-v5 runtime is
+    rejected with VERSION_MISMATCH."""
     from octomil.runtime.native.loader import OCT_SESSION_CONFIG_VERSION
 
-    assert OCT_SESSION_CONFIG_VERSION == 4
+    assert OCT_SESSION_CONFIG_VERSION == 5
 
 
 def test_event_version_bumped_to_2():

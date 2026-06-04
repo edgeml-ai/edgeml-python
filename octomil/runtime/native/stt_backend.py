@@ -66,11 +66,56 @@ from .loader import (
     OCT_EVENT_TRANSCRIPT_SEGMENT,
     OCT_STATUS_INVALID_INPUT,
     OCT_STATUS_OK,
+    OCT_STT_NO_CONTEXT_DEFAULT,
+    OCT_STT_NO_CONTEXT_DISABLED,
+    OCT_STT_NO_CONTEXT_ENABLED,
     NativeRuntime,
     NativeRuntimeError,
 )
 
 logger = logging.getLogger(__name__)
+
+
+# session_config v=5 decode strategies accepted by the SDK; normalized to
+# the runtime's whisper.cpp spelling before crossing the ABI.
+_STT_DECODE_STRATEGIES: frozenset[str] = frozenset({"greedy", "beam", "beam_search"})
+
+
+def _normalize_stt_beam_size(beam_size: int | None) -> int:
+    """Validate + normalize the STT beam size. ``None`` → 0 (runtime default)."""
+    if beam_size is None:
+        return 0
+    value = int(beam_size)
+    if value < 0:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=f"native STT: beam_size must be >= 0; got {beam_size!r}",
+        )
+    return value
+
+
+def _normalize_stt_decode_strategy(strategy: str | None, beam_size: int | None) -> str | None:
+    """Normalize the decode strategy. ``None``/"" with beam_size>1 implies
+    beam search; otherwise None (runtime default greedy). Unknown values raise."""
+    value = (strategy or "").strip().lower().replace("-", "_")
+    if not value:
+        return "beam_search" if beam_size and beam_size > 1 else None
+    if value not in _STT_DECODE_STRATEGIES:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=(
+                f"native STT: unsupported decode_strategy {strategy!r}; " "expected 'greedy', 'beam', or 'beam_search'"
+            ),
+        )
+    return value
+
+
+def _normalize_stt_no_context(no_context: bool | None) -> int:
+    """Map the tri-state no_context flag to the runtime enum. ``None`` →
+    DEFAULT (preserve runtime default); True → ENABLED; False → DISABLED."""
+    if no_context is None:
+        return OCT_STT_NO_CONTEXT_DEFAULT
+    return OCT_STT_NO_CONTEXT_ENABLED if no_context else OCT_STT_NO_CONTEXT_DISABLED
 
 
 _BACKEND_NAME = "native-whisper-cpp"
@@ -820,6 +865,9 @@ class NativeSttBackend:
         sample_rate_hz: int = _WHISPER_SAMPLE_RATE_HZ,
         language: str = "en",
         transcription_task: str = "transcribe",
+        decode_strategy: str | None = None,
+        beam_size: int | None = None,
+        no_context: bool | None = None,
         deadline_ms: int | None = None,
     ) -> TranscriptionResult:
         """Run an ``audio.transcription`` request against the runtime.
@@ -866,6 +914,12 @@ class NativeSttBackend:
                 message="NativeSttBackend.transcribe called before load_model",
             )
 
+        # Normalize v=5 decode controls BEFORE opening a session so bad
+        # input fails fast (and beam_size>1 implies beam search).
+        normalized_beam_size = _normalize_stt_beam_size(beam_size)
+        normalized_decode_strategy = _normalize_stt_decode_strategy(decode_strategy, normalized_beam_size)
+        normalized_no_context = _normalize_stt_no_context(no_context)
+
         # Deadline validation BEFORE opening a session.
         resolved_deadline_ms = deadline_ms if deadline_ms is not None else self._default_deadline_ms
         if resolved_deadline_ms <= 0:
@@ -902,6 +956,10 @@ class NativeSttBackend:
                 # v=4 STT hints: drive whisper language/translate at the runtime.
                 language=language,
                 transcription_task=transcription_task,
+                # v=5 decode controls: greedy/beam, beam size, no_context.
+                stt_decode_strategy=normalized_decode_strategy,
+                stt_beam_size=normalized_beam_size,
+                stt_no_context=normalized_no_context,
             )
         except NativeRuntimeError as exc:
             raise _runtime_status_to_sdk_error(
