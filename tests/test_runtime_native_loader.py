@@ -1108,13 +1108,13 @@ def test_oct_session_config_t_v0_4_appended_fields_present():
     assert cffi_size == runtime_size
 
 
-def test_session_config_version_bumped_to_3():
-    """v0.1.1 bumps session_config version 2 → 3 (appended
-    `oct_model_t* model`). chat.completion REQUIRES non-NULL model
-    on v=3 sessions; runtime returns INVALID_INPUT otherwise."""
+def test_session_config_version_bumped_to_4():
+    """v0.1.12 bumps session_config version 3 → 4 (appended STT
+    `language` + `transcription_task`). The runtime accepts {1,2,3,4};
+    a v4 SDK against a pre-v4 runtime is rejected with VERSION_MISMATCH."""
     from octomil.runtime.native.loader import OCT_SESSION_CONFIG_VERSION
 
-    assert OCT_SESSION_CONFIG_VERSION == 3
+    assert OCT_SESSION_CONFIG_VERSION == 4
 
 
 def test_event_version_bumped_to_2():
