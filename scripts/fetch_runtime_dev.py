@@ -63,7 +63,7 @@ import urllib.request
 from pathlib import Path
 
 REPO = "octomil/octomil-runtime"
-DEFAULT_VERSION = "v0.1.27"  # v0.1.27: session_config v6 (STT chunked transcribe: stt_chunk_window_ms/overlap_ms) + OCT_EVENT_VERSION 4 (TRANSCRIPT_PARTIAL @ v0.1.24, transcript_segment avg_logprob/no_speech_prob @ v0.1.25) + oct_session_end_input (ABI minor 12). Required by loader.py OCT_SESSION_CONFIG_VERSION=6 + _REQUIRED_ABI_MINOR=12. Ships darwin-arm64 + linux-x86_64 (merged MANIFEST + SHA256SUMS).
+DEFAULT_VERSION = "v0.1.28"  # v0.1.28: v0.1.27 (session_config v6 chunked transcribe + EVENT_VERSION 4 + end_input) PLUS the chunked-decode tail-recovery fix (runtime #132) and whisper.chunk_*/first_partial/final observability metrics (#131). Same ABI (config 6, minor 12, event 4) — no SDK cdef change vs v0.1.27. Ships darwin-arm64 + linux-x86_64 (merged MANIFEST + SHA256SUMS).
 CACHE_ROOT = Path.home() / ".cache" / "octomil-runtime"
 MANIFEST_ASSET_NAME = "MANIFEST.json"
 
