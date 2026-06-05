@@ -69,6 +69,43 @@ class StreamSession(Protocol):
 StreamSessionFactory = Callable[[ModelRef], StreamSession]
 
 
+class _OwnedStreamSession:
+    """StreamSession that keeps its owning ``NativeSttBackend`` alive.
+
+    The default factory warms a ``NativeSttBackend`` and opens a streaming
+    session through it. Returning *only* the session lets the backend be
+    garbage-collected once the factory frame exits; the backend's finalizer
+    closes the parent ``NativeRuntime``, which invalidates the still-live
+    session ("session handle invalidated by parent NativeRuntime.close").
+
+    This wrapper pins the backend to the session's lifetime (strong ref) and
+    tears both down — session first, then backend — on ``close()``.
+    """
+
+    __slots__ = ("_session", "_backend")
+
+    def __init__(self, session: StreamSession, backend: object) -> None:
+        self._session = session
+        self._backend = backend
+
+    def send_audio(self, samples: bytes, *, sample_rate: int, channels: int = 1) -> None:
+        self._session.send_audio(samples, sample_rate=sample_rate, channels=channels)
+
+    def end_input(self) -> int:
+        return self._session.end_input()
+
+    def poll_event(self, timeout_ms: int = 0) -> object:
+        return self._session.poll_event(timeout_ms=timeout_ms)
+
+    def close(self) -> None:
+        try:
+            self._session.close()
+        finally:
+            backend_close = getattr(self._backend, "close", None)
+            if callable(backend_close):
+                backend_close()
+
+
 class AudioTranscriptions:
     """Audio transcription API.
 
@@ -304,7 +341,17 @@ class AudioTranscriptions:
             model_name = getattr(ref, "model_id", None) or getattr(ref, "name", "") or ""
             backend = NativeSttBackend()
             backend.load_model(str(model_name))
-            return backend.open_stream_session(language=language)  # type: ignore[no-any-return]
+            # Pin the backend to the session lifetime: returning the bare
+            # session lets the backend be GC'd, whose finalizer closes the
+            # parent NativeRuntime and invalidates the live session.
+            try:
+                session = backend.open_stream_session(language=language)
+            except BaseException:
+                backend_close = getattr(backend, "close", None)
+                if callable(backend_close):
+                    backend_close()
+                raise
+            return _OwnedStreamSession(session, backend)
 
         return _factory
 
