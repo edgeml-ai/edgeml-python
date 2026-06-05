@@ -251,6 +251,8 @@ class AudioTranscriptions:
         language: Optional[str] = None,
         sample_rate_hz: int = _STREAM_SAMPLE_RATE_HZ,
         deadline_ms: int = 60_000,
+        artifact_path: Optional[str] = None,
+        expected_sha256: Optional[str] = None,
     ) -> AsyncGenerator[Union[TranscriptionPartial, TranscriptionSegment], None]:
         """Stream transcription of incrementally-arriving audio.
 
@@ -281,13 +283,23 @@ class AudioTranscriptions:
             sample_rate_hz: Sample rate of the supplied PCM. Defaults to 16 kHz.
             deadline_ms: Overall wall-clock budget for draining finals after
                 ``end_input``. Exceeding it stops the drain.
+            artifact_path: Optional path to a user-supplied Whisper artifact
+                (e.g. ``ggml-medium.bin``). When given together with
+                ``expected_sha256``, the native backend loads it via the
+                uploaded-model path (``OCT_WHISPER_ALLOW_USER_ARTIFACTS``)
+                instead of the registered tiny/base names — lets callers run
+                whisper-small/medium/large without a runtime registry bump.
+            expected_sha256: 64-hex SHA-256 the on-disk ``artifact_path`` must
+                match (integrity gate). Required when ``artifact_path`` is set.
 
         Yields:
             ``TranscriptionPartial`` while audio is in flight, then
             ``TranscriptionSegment`` finals after ``end_input``.
         """
         ref = model or ModelRefFactory.capability(ModelCapability.TRANSCRIPTION)
-        factory = self._stream_session_factory or self._default_stream_session_factory(language)
+        factory = self._stream_session_factory or self._default_stream_session_factory(
+            language, artifact_path=artifact_path, expected_sha256=expected_sha256
+        )
         session = factory(ref)
 
         highest_revision = 0
@@ -325,7 +337,13 @@ class AudioTranscriptions:
         # guarantees it structurally.
         assert end_input_calls <= 1
 
-    def _default_stream_session_factory(self, language: Optional[str]) -> StreamSessionFactory:
+    def _default_stream_session_factory(
+        self,
+        language: Optional[str],
+        *,
+        artifact_path: Optional[str] = None,
+        expected_sha256: Optional[str] = None,
+    ) -> StreamSessionFactory:
         """Build the native ``audio.stt.stream`` session factory.
 
         Warms a :class:`~octomil.runtime.native.stt_backend.NativeSttBackend`
@@ -333,6 +351,10 @@ class AudioTranscriptions:
         the native runtime + model acquisition stays in the native module.
         Imported lazily so the public ``octomil.audio`` surface stays
         cffi-free unless streaming is actually used.
+
+        When ``artifact_path`` + ``expected_sha256`` are supplied the backend
+        is warmed via the uploaded-model path (user artifact, e.g. medium),
+        otherwise the registered-name path (tiny/base).
         """
 
         def _factory(ref: ModelRef) -> StreamSession:
@@ -340,7 +362,14 @@ class AudioTranscriptions:
 
             model_name = getattr(ref, "model_id", None) or getattr(ref, "name", "") or ""
             backend = NativeSttBackend()
-            backend.load_model(str(model_name))
+            if artifact_path and expected_sha256:
+                backend.load_uploaded_model(
+                    model_name=str(model_name),
+                    artifact_path=artifact_path,
+                    expected_sha256=expected_sha256,
+                )
+            else:
+                backend.load_model(str(model_name))
             # Pin the backend to the session lifetime: returning the bare
             # session lets the backend be GC'd, whose finalizer closes the
             # parent NativeRuntime and invalidates the live session.

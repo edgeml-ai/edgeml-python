@@ -355,3 +355,40 @@ def test_owned_stream_session_close_order_and_delegation(monkeypatch):
     assert order == []  # nothing torn down mid-stream
     session.close()
     assert order == ["session", "backend"]  # session first, backend second
+
+
+def test_default_factory_uses_uploaded_model_path_when_artifact_given(monkeypatch):
+    """artifact_path + expected_sha256 route through load_uploaded_model
+    (uploaded-model path), so medium/large run without a registry bump."""
+    calls: dict = {}
+
+    class _FakeBackend:
+        def load_model(self, name: str) -> None:
+            calls["load_model"] = name
+
+        def load_uploaded_model(self, *, model_name, artifact_path, expected_sha256) -> None:
+            calls["uploaded"] = (model_name, artifact_path, expected_sha256)
+
+        def open_stream_session(self, *, language=None):
+            return _FakeOwnedSession()
+
+        def close(self) -> None:
+            pass
+
+    import octomil.runtime.native.stt_backend as sb
+
+    monkeypatch.setattr(sb, "NativeSttBackend", _FakeBackend)
+    at = AudioTranscriptions(runtime_resolver=lambda ref: None)
+
+    # With artifact + sha -> uploaded path.
+    at._default_stream_session_factory(language="ja", artifact_path="/m/ggml-medium.bin", expected_sha256="ab" * 32)(
+        _FakeRef()
+    )
+    assert calls.get("uploaded") == ("whisper-base", "/m/ggml-medium.bin", "ab" * 32)
+    assert "load_model" not in calls
+
+    # Without -> registered-name path.
+    calls.clear()
+    at._default_stream_session_factory(language="ja")(_FakeRef())
+    assert calls.get("load_model") == "whisper-base"
+    assert "uploaded" not in calls
