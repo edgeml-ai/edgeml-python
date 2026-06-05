@@ -118,6 +118,32 @@ def _normalize_stt_no_context(no_context: bool | None) -> int:
     return OCT_STT_NO_CONTEXT_ENABLED if no_context else OCT_STT_NO_CONTEXT_DISABLED
 
 
+def _normalize_stt_chunk(chunk_window_ms: int | None, chunk_overlap_ms: int | None) -> tuple[int, int]:
+    """Validate + normalize the v=6 chunked-transcribe controls. ``None`` → 0
+    (single full-buffer decode). Overlap is meaningless without a window and
+    must be < the window; both must be >= 0."""
+    window = 0 if chunk_window_ms is None else int(chunk_window_ms)
+    overlap = 0 if chunk_overlap_ms is None else int(chunk_overlap_ms)
+    if window < 0:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=f"native STT: chunk_window_ms must be >= 0; got {chunk_window_ms!r}",
+        )
+    if overlap < 0:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=f"native STT: chunk_overlap_ms must be >= 0; got {chunk_overlap_ms!r}",
+        )
+    if window == 0:
+        return 0, 0  # chunking off — ignore overlap
+    if overlap >= window:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=(f"native STT: chunk_overlap_ms ({overlap}) must be < " f"chunk_window_ms ({window})"),
+        )
+    return window, overlap
+
+
 _BACKEND_NAME = "native-whisper-cpp"
 _DEFAULT_DEADLINE_MS = 300_000  # 5 minutes — same shape as chat / embeddings.
 # whisper.cpp STT is hard-coded to 16kHz mono PCM-f32 for the W1
@@ -868,6 +894,8 @@ class NativeSttBackend:
         decode_strategy: str | None = None,
         beam_size: int | None = None,
         no_context: bool | None = None,
+        chunk_window_ms: int | None = None,
+        chunk_overlap_ms: int | None = None,
         deadline_ms: int | None = None,
     ) -> TranscriptionResult:
         """Run an ``audio.transcription`` request against the runtime.
@@ -919,6 +947,10 @@ class NativeSttBackend:
         normalized_beam_size = _normalize_stt_beam_size(beam_size)
         normalized_decode_strategy = _normalize_stt_decode_strategy(decode_strategy, normalized_beam_size)
         normalized_no_context = _normalize_stt_no_context(no_context)
+        # v=6 chunked transcribe (0 = single full-buffer decode).
+        normalized_chunk_window_ms, normalized_chunk_overlap_ms = _normalize_stt_chunk(
+            chunk_window_ms, chunk_overlap_ms
+        )
 
         # Deadline validation BEFORE opening a session.
         resolved_deadline_ms = deadline_ms if deadline_ms is not None else self._default_deadline_ms
@@ -960,6 +992,9 @@ class NativeSttBackend:
                 stt_decode_strategy=normalized_decode_strategy,
                 stt_beam_size=normalized_beam_size,
                 stt_no_context=normalized_no_context,
+                # v=6 chunked transcribe (0 = single full-buffer decode).
+                stt_chunk_window_ms=normalized_chunk_window_ms,
+                stt_chunk_overlap_ms=normalized_chunk_overlap_ms,
             )
         except NativeRuntimeError as exc:
             raise _runtime_status_to_sdk_error(

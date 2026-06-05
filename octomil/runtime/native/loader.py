@@ -188,7 +188,14 @@ OCT_DIARIZATION_SPEAKER_UNKNOWN: int = 65535
 # _REQUIRED_ABI_MINOR is intentionally NOT raised (see its comment). A
 # runtime predating v5 rejects open_session with VERSION_MISMATCH, which
 # error_mapping surfaces as "runtime too old for this SDK".
-OCT_SESSION_CONFIG_VERSION: int = 5
+# v0.1.27 bump 5->6: appended STT chunked-transcribe controls
+# (stt_chunk_window_ms / stt_chunk_overlap_ms; see the oct_session_config_t
+# cdef below). Config-version-only bump (no new ABI symbol); a runtime
+# predating v6 rejects open_session with VERSION_MISMATCH. NOTE: this is the
+# config_version axis only — OCT_EVENT_VERSION (the transcript_segment
+# avg_logprob/no_speech_prob diagnostics, 2->4) advances independently via
+# the realtime-STT bridge PR (#646); a v0.1.27 release needs both merged.
+OCT_SESSION_CONFIG_VERSION: int = 6
 OCT_EVENT_VERSION: int = 2
 
 # session_config v=5 stt_no_context tri-state (mirrors runtime.h
@@ -865,6 +872,13 @@ typedef struct {
     const char*    stt_decode_strategy;
     uint32_t       stt_beam_size;
     uint32_t       stt_no_context;
+    /* v0.1.27 (session_config v=6) — chunked-transcribe controls. Read by the
+     * runtime only when version>=6; v<=5 callers keep the single full-buffer
+     * decode. stt_chunk_window_ms: >0 enables fixed-window chunked transcribe
+     * (0 = off). stt_chunk_overlap_ms: overlap between adjacent windows;
+     * ignored when stt_chunk_window_ms == 0. */
+    uint32_t       stt_chunk_window_ms;
+    uint32_t       stt_chunk_overlap_ms;
 } oct_session_config_t;
 
 typedef struct {
@@ -1443,6 +1457,13 @@ class NativeRuntime:
         stt_decode_strategy: str | None = None,
         stt_beam_size: int = 0,
         stt_no_context: int = OCT_STT_NO_CONTEXT_DEFAULT,
+        # v0.1.27 (session_config v=6) — chunked transcribe for
+        # audio.transcription. Non-STT capabilities ignore them. Default 0
+        # reproduces the historical single full-buffer decode.
+        # stt_chunk_window_ms: >0 enables fixed-window chunked transcribe.
+        # stt_chunk_overlap_ms: overlap between windows (ignored when window 0).
+        stt_chunk_window_ms: int = 0,
+        stt_chunk_overlap_ms: int = 0,
     ) -> "NativeSession":
         """Open a session against this runtime.
 
@@ -1536,6 +1557,9 @@ class NativeRuntime:
         cfg.stt_decode_strategy = _cstr(stt_decode_strategy) if stt_decode_strategy else ffi.NULL
         cfg.stt_beam_size = max(0, int(stt_beam_size))
         cfg.stt_no_context = int(stt_no_context)
+        # v=6 chunked transcribe (0 = single full-buffer decode).
+        cfg.stt_chunk_window_ms = max(0, int(stt_chunk_window_ms))
+        cfg.stt_chunk_overlap_ms = max(0, int(stt_chunk_overlap_ms))
         out = ffi.new("oct_session_t**")
         status = int(lib.oct_session_open(self._handle, cfg, out))
         if status != OCT_STATUS_OK:

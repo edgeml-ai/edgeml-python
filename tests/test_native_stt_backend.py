@@ -52,11 +52,45 @@ from octomil.runtime.native.stt_backend import (
     NativeTranscriptionBackend,
     Segment,
     TranscriptionResult,
+    _normalize_stt_chunk,
     _runtime_status_to_sdk_error,
     _validate_pcm_f32,
     is_supported_native_whisper_model,
     runtime_advertises_audio_transcription,
 )
+
+
+class TestNormalizeSttChunk:
+    """v=6 chunked-transcribe control validation (_normalize_stt_chunk)."""
+
+    def test_none_disables_chunking(self):
+        assert _normalize_stt_chunk(None, None) == (0, 0)
+
+    def test_zero_window_ignores_overlap(self):
+        # overlap is meaningless without a window — coerced to 0, not rejected.
+        assert _normalize_stt_chunk(0, 2000) == (0, 0)
+
+    def test_window_and_overlap_pass_through(self):
+        assert _normalize_stt_chunk(15000, 2000) == (15000, 2000)
+
+    def test_window_without_overlap(self):
+        assert _normalize_stt_chunk(15000, None) == (15000, 0)
+
+    def test_negative_window_rejected(self):
+        with pytest.raises(OctomilError) as exc_info:
+            _normalize_stt_chunk(-1, 0)
+        assert exc_info.value.code == OctomilErrorCode.INVALID_INPUT
+
+    def test_negative_overlap_rejected(self):
+        with pytest.raises(OctomilError) as exc_info:
+            _normalize_stt_chunk(15000, -1)
+        assert exc_info.value.code == OctomilErrorCode.INVALID_INPUT
+
+    def test_overlap_ge_window_rejected(self):
+        with pytest.raises(OctomilError) as exc_info:
+            _normalize_stt_chunk(2000, 2000)
+        assert exc_info.value.code == OctomilErrorCode.INVALID_INPUT
+
 
 _FAKE_WHISPER_BIN = "/tmp/_pr2b_test_fake_ggml_tiny.bin"
 
