@@ -48,6 +48,14 @@ class _FakeEvent:
         self.segment_end_ms = fields.get("segment_end_ms", 0)
         self.segment_avg_logprob = fields.get("segment_avg_logprob", 0.0)
         self.segment_no_speech_prob = fields.get("segment_no_speech_prob", 0.0)
+        self.segment_source_window_index = fields.get("segment_source_window_index", 0)
+        self.segment_source_window_start_ms = fields.get("segment_source_window_start_ms", 0)
+        self.segment_source_window_end_ms = fields.get("segment_source_window_end_ms", 0)
+        self.segment_partial_revision_start = fields.get("segment_partial_revision_start", 0)
+        self.segment_partial_revision_end = fields.get("segment_partial_revision_end", 0)
+        self.segment_source_kind = fields.get("segment_source_kind", L.OCT_TRANSCRIPT_SOURCE_NORMAL)
+        self.segment_vad_active = fields.get("segment_vad_active", False)
+        self.segment_no_speech_decision = fields.get("segment_no_speech_decision", False)
 
 
 def _none() -> _FakeEvent:
@@ -126,6 +134,14 @@ def _scenario_session() -> _FakeStreamSession:
             segment_end_ms=1000,
             segment_avg_logprob=-0.2,
             segment_no_speech_prob=0.01,
+            segment_source_window_index=2,
+            segment_source_window_start_ms=0,
+            segment_source_window_end_ms=30000,
+            segment_partial_revision_start=1,
+            segment_partial_revision_end=3,
+            segment_source_kind=L.OCT_TRANSCRIPT_SOURCE_TAIL_RECOVERY,
+            segment_vad_active=True,
+            segment_no_speech_decision=False,
         ),
         _FakeEvent(
             L.OCT_EVENT_TRANSCRIPT_SEGMENT,
@@ -203,6 +219,14 @@ async def test_finals_authoritative_and_diagnostics() -> None:
     assert segs[0].start_ms == 0 and segs[0].end_ms == 1000
     assert segs[0].avg_logprob == pytest.approx(-0.2)
     assert segs[0].no_speech_prob == pytest.approx(0.01)
+    assert segs[0].source_window_index == 2
+    assert segs[0].source_window_start_ms == 0
+    assert segs[0].source_window_end_ms == 30000
+    assert segs[0].partial_revision_start == 1
+    assert segs[0].partial_revision_end == 3
+    assert segs[0].source_kind == L.OCT_TRANSCRIPT_SOURCE_TAIL_RECOVERY
+    assert segs[0].vad_active is True
+    assert segs[0].no_speech_decision is False
 
 
 @pytest.mark.asyncio
