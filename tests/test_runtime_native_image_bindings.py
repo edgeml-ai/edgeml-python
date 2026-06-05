@@ -77,14 +77,17 @@ def test_image_clip_pooling_constant_appended():
     assert loader.OCT_EMBED_POOLING_IMAGE_CLIP == 5
 
 
-def test_required_abi_minor_is_unchanged_at_10():
-    """HARD INVARIANT for this PR: the binding's required ABI floor
-    MUST remain at 10. Bumping to 11 would force the entire SDK
-    to refuse older minor=10 dylibs even though image-input is
-    optional and capability gates are still in place."""
+def test_required_abi_minor_floor_is_12():
+    """The binding's required ABI floor. Image-input (v0.1.12) kept the
+    floor at 10 because its new symbols were conditionally bound. The
+    realtime-STT bridge (v0.1.23) raised the floor to 12: the cdef now
+    UNCONDITIONALLY declares ``oct_session_end_input`` (a minor-12
+    symbol), so an older minor-10/11 dylib would fail ``dlsym`` at load —
+    the floor must reject it up front with a clear message rather than
+    crash on first use."""
     from octomil.runtime.native import loader
 
-    assert loader._REQUIRED_ABI_MINOR == 10
+    assert loader._REQUIRED_ABI_MINOR == 12
 
 
 # ---------------------------------------------------------------------------

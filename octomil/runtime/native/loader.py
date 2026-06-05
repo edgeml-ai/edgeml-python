@@ -127,6 +127,14 @@ OCT_EVENT_EMBEDDING_VECTOR: int = 20
 # runtime-owned; lifetime = until next poll. Bindings MUST copy.
 OCT_EVENT_TRANSCRIPT_SEGMENT: int = 21
 OCT_EVENT_TRANSCRIPT_FINAL: int = 22
+# v0.1.24 (OCT_EVENT_VERSION 3) — STT stream provisional partial. Emitted
+# ONLY by audio.stt.stream before the committed TRANSCRIPT_FINAL; the final
+# transcript stays authoritative. Revision-aware so bindings replace stale
+# partials without confusing them with finalized segments. Payload:
+# data.transcript_partial { utf8, n_bytes, revision_id, start_ms, end_ms,
+# stable_prefix_bytes, is_stable } — runtime-owned utf8, lifetime = until
+# next poll; bindings MUST copy.
+OCT_EVENT_TRANSCRIPT_PARTIAL: int = 26
 # v0.1.8 Lane A — TTS audio-chunk event (audio.tts.batch + audio.tts.stream).
 # Carries PCM bytes for one synthesized chunk; granularity depends on the
 # capability:
@@ -191,12 +199,21 @@ OCT_DIARIZATION_SPEAKER_UNKNOWN: int = 65535
 # v0.1.27 bump 5->6: appended STT chunked-transcribe controls
 # (stt_chunk_window_ms / stt_chunk_overlap_ms; see the oct_session_config_t
 # cdef below). Config-version-only bump (no new ABI symbol); a runtime
-# predating v6 rejects open_session with VERSION_MISMATCH. NOTE: this is the
-# config_version axis only — OCT_EVENT_VERSION (the transcript_segment
-# avg_logprob/no_speech_prob diagnostics, 2->4) advances independently via
-# the realtime-STT bridge PR (#646); a v0.1.27 release needs both merged.
+# predating v6 rejects open_session with VERSION_MISMATCH.
 OCT_SESSION_CONFIG_VERSION: int = 6
-OCT_EVENT_VERSION: int = 2
+# v0.1.24 bump 2->3: adds OCT_EVENT_TRANSCRIPT_PARTIAL (id=26) + the
+# data.transcript_partial union arm. Event-version-only bump (new event-type
+# id + union member, NOT a new ABI symbol), guarded by the out->size
+# handshake — mirrors runtime.h OCT_EVENT_VERSION 3. The end_input *symbol*
+# (minor 12) is what raises _REQUIRED_ABI_MINOR; partials ride this.
+#
+# v0.1.25 bump 3->4: appends avg_logprob + no_speech_prob to
+# data.transcript_segment (per-segment decode diagnostics). Tail-additive —
+# existing field offsets are unchanged and the out->size handshake reports
+# the larger event, so an EVENT_VERSION-3 binding reading the older shape is
+# unaffected. No new ABI symbol, so _REQUIRED_ABI_MINOR stays 12. Mirrors
+# runtime.h OCT_EVENT_VERSION 4.
+OCT_EVENT_VERSION: int = 4
 
 # session_config v=5 stt_no_context tri-state (mirrors runtime.h
 # OCT_STT_NO_CONTEXT_*). DEFAULT preserves the runtime's historical
@@ -775,6 +792,12 @@ typedef struct oct_event {
             uint8_t     is_final;
             uint8_t     _reserved0;
             uint16_t    _reserved1;
+            /* v0.1.25 (OCT_EVENT_VERSION 4) — per-segment decode
+             * diagnostics, appended at the tail. Both 0.0f when the
+             * engine does not supply them (cloud/echo, or whisper
+             * builds predating the getters). */
+            float       avg_logprob;
+            float       no_speech_prob;
         } transcript_segment;
 
         /* v0.1.5 PR-2 — STT end-of-transcript. Followed by
@@ -788,6 +811,23 @@ typedef struct oct_event {
             uint32_t    _reserved0;
             uint32_t    _reserved1;
         } transcript_final;
+
+        /* v0.1.24 (OCT_EVENT_VERSION 3) — STT provisional partial.
+         * Emitted only by audio.stt.stream before the committed final
+         * transcript. Revision-aware so bindings can replace stale
+         * partials. utf8 lifetime = until next poll. Mirrors runtime.h
+         * data.transcript_partial verbatim. */
+        struct {
+            const char* utf8;
+            uint32_t    n_bytes;
+            uint32_t    revision_id;
+            uint32_t    start_ms;
+            uint32_t    end_ms;
+            uint32_t    stable_prefix_bytes;
+            uint8_t     is_stable;
+            uint8_t     _reserved0;
+            uint16_t    _reserved1;
+        } transcript_partial;
 
         /* audio.diarization segment. */
         struct {
@@ -933,6 +973,14 @@ oct_status_t oct_session_send_text(
     oct_session_t* session,
     const char* utf8
 );
+/* v0.1.23 (ABI minor 12) — explicit streaming-input finalization. For
+ * audio STT/VAD sessions: rejects further audio and lets poll_event run
+ * the terminal decode even on an empty buffer (bounded no-audio error
+ * path instead of a permanent timeout). Idempotent; single-thread-affine
+ * (do not race send_audio/send_text/poll_event). Sessions that do not
+ * consume streaming input return OCT_STATUS_UNSUPPORTED; NULL -> INVALID.
+ * This symbol is why _REQUIRED_ABI_MINOR is 12. */
+oct_status_t oct_session_end_input(oct_session_t* session);
 oct_status_t oct_session_poll_event(
     oct_session_t* session,
     oct_event_t* out,
@@ -1044,7 +1092,7 @@ oct_status_t oct_session_send_image(
 # rather than a typed compatibility error. Codex R1 fix: fail fast
 # at load time with NativeRuntimeError(VERSION_MISMATCH).
 _REQUIRED_ABI_MAJOR: int = 0
-_REQUIRED_ABI_MINOR: int = 10  # v0.1.11: cache introspection ABI symbols and native audio event parity.
+_REQUIRED_ABI_MINOR: int = 12  # v0.1.23: oct_session_end_input symbol (the cdef declares it, so an older minor-11 dylib would fail dlsym on load). v0.1.11 (10): cache introspection + native audio event parity.
 # NOTE: deliberately NOT raised for session_config v4 (OCT_SESSION_CONFIG_VERSION=4).
 # Per the runtime's ABI-minor convention, the minor advertises symbol-table
 # presence only; v4 adds no new symbol. New-SDK-on-old-runtime is guarded by the
@@ -1795,6 +1843,9 @@ class NativeEvent:
         "segment_end_ms",
         "segment_index",
         "segment_is_final",
+        # v0.1.25 (OCT_EVENT_VERSION 4) — per-segment decode diagnostics.
+        "segment_avg_logprob",
+        "segment_no_speech_prob",
         "final_n_segments",
         "final_duration_ms",
         # v0.1.5 PR-2N — VAD transition payload. Populated only on
@@ -1824,6 +1875,19 @@ class NativeEvent:
         "tts_sample_format",
         "tts_channels",
         "tts_is_final",
+        # v0.1.24 (OCT_EVENT_VERSION 3) — STT stream provisional partial.
+        # Populated only on OCT_EVENT_TRANSCRIPT_PARTIAL; the partial UTF-8
+        # is copied into ``text`` (same as segment/final). ``revision_id``
+        # is a 1-based monotonic counter within the session so callers can
+        # discard stale partials. ``stable_prefix_bytes`` is the
+        # local-agreement stable UTF-8 prefix length (0 when unavailable);
+        # ``is_stable`` is True iff the whole partial is safe for
+        # speculative use. The final transcript stays authoritative.
+        "partial_revision_id",
+        "partial_start_ms",
+        "partial_end_ms",
+        "partial_stable_prefix_bytes",
+        "partial_is_stable",
     )
 
     def __init__(
@@ -1861,6 +1925,8 @@ class NativeEvent:
         segment_end_ms: int = 0,
         segment_index: int = 0,
         segment_is_final: bool = False,
+        segment_avg_logprob: float = 0.0,
+        segment_no_speech_prob: float = 0.0,
         final_n_segments: int = 0,
         final_duration_ms: int = 0,
         vad_transition_kind: int = 0,
@@ -1875,6 +1941,11 @@ class NativeEvent:
         tts_sample_format: int = 0,
         tts_channels: int = 0,
         tts_is_final: bool = False,
+        partial_revision_id: int = 0,
+        partial_start_ms: int = 0,
+        partial_end_ms: int = 0,
+        partial_stable_prefix_bytes: int = 0,
+        partial_is_stable: bool = False,
     ) -> None:
         self.type = type
         self.version = version
@@ -1908,6 +1979,8 @@ class NativeEvent:
         self.segment_end_ms = segment_end_ms
         self.segment_index = segment_index
         self.segment_is_final = segment_is_final
+        self.segment_avg_logprob = segment_avg_logprob
+        self.segment_no_speech_prob = segment_no_speech_prob
         self.final_n_segments = final_n_segments
         self.final_duration_ms = final_duration_ms
         self.vad_transition_kind = vad_transition_kind
@@ -1922,6 +1995,11 @@ class NativeEvent:
         self.tts_sample_format = tts_sample_format
         self.tts_channels = tts_channels
         self.tts_is_final = tts_is_final
+        self.partial_revision_id = partial_revision_id
+        self.partial_start_ms = partial_start_ms
+        self.partial_end_ms = partial_end_ms
+        self.partial_stable_prefix_bytes = partial_stable_prefix_bytes
+        self.partial_is_stable = partial_is_stable
 
     @property
     def is_none(self) -> bool:
@@ -2491,6 +2569,8 @@ class NativeSession:
         seg_end_ms = 0
         seg_index = 0
         seg_is_final = False
+        seg_avg_logprob = 0.0
+        seg_no_speech_prob = 0.0
         final_n_segments = 0
         final_duration_ms = 0
         # v0.1.5 PR-2N — VAD transition payload defaults.
@@ -2508,6 +2588,12 @@ class NativeSession:
         tts_sample_format = 0
         tts_channels = 0
         tts_is_final = False
+        # v0.1.24 — STT stream provisional partial payload defaults.
+        partial_revision_id = 0
+        partial_start_ms = 0
+        partial_end_ms = 0
+        partial_stable_prefix_bytes = 0
+        partial_is_stable = False
         ev_type = int(ev.type)
         if ev_type == OCT_EVENT_TRANSCRIPT_CHUNK:
             chunk = ev.data.transcript_chunk
@@ -2552,6 +2638,11 @@ class NativeSession:
             seg_end_ms = int(seg.end_ms)
             seg_index = int(seg.segment_index)
             seg_is_final = bool(seg.is_final)
+            # v0.1.25 (OCT_EVENT_VERSION 4) — tail-additive decode
+            # diagnostics. Guarded by the out->size handshake: an older
+            # runtime that does not emit them leaves these at 0.0.
+            seg_avg_logprob = float(seg.avg_logprob)
+            seg_no_speech_prob = float(seg.no_speech_prob)
         elif ev_type == OCT_EVENT_TRANSCRIPT_FINAL:
             # v0.1.5 PR-2 — STT end-of-transcript. utf8 + n_segments +
             # duration_ms. Same lifetime rule as segment.
@@ -2560,6 +2651,20 @@ class NativeSession:
                 text_payload = ffi.buffer(fin.utf8, int(fin.n_bytes))[:].decode("utf-8", errors="replace")
             final_n_segments = int(fin.n_segments)
             final_duration_ms = int(fin.duration_ms)
+        elif ev_type == OCT_EVENT_TRANSCRIPT_PARTIAL:
+            # v0.1.24 (OCT_EVENT_VERSION 3) — STT stream provisional
+            # partial. Runtime-owned utf8 valid only until the next poll;
+            # copy it out into ``text_payload`` now. Revision-aware fields
+            # let callers replace stale partials; the final transcript
+            # stays authoritative.
+            par = ev.data.transcript_partial
+            if par.utf8 != ffi.NULL and par.n_bytes > 0:
+                text_payload = ffi.buffer(par.utf8, int(par.n_bytes))[:].decode("utf-8", errors="replace")
+            partial_revision_id = int(par.revision_id)
+            partial_start_ms = int(par.start_ms)
+            partial_end_ms = int(par.end_ms)
+            partial_stable_prefix_bytes = int(par.stable_prefix_bytes)
+            partial_is_stable = bool(par.is_stable)
         elif ev_type == OCT_EVENT_EMBEDDING_VECTOR:
             # v0.1.3 — pooled embedding vector. The runtime owns the
             # float buffer only until the next poll on this session,
@@ -2645,6 +2750,8 @@ class NativeSession:
             segment_end_ms=seg_end_ms,
             segment_index=seg_index,
             segment_is_final=seg_is_final,
+            segment_avg_logprob=seg_avg_logprob,
+            segment_no_speech_prob=seg_no_speech_prob,
             final_n_segments=final_n_segments,
             final_duration_ms=final_duration_ms,
             vad_transition_kind=vad_kind,
@@ -2659,6 +2766,11 @@ class NativeSession:
             tts_sample_format=tts_sample_format,
             tts_channels=tts_channels,
             tts_is_final=tts_is_final,
+            partial_revision_id=partial_revision_id,
+            partial_start_ms=partial_start_ms,
+            partial_end_ms=partial_end_ms,
+            partial_stable_prefix_bytes=partial_stable_prefix_bytes,
+            partial_is_stable=partial_is_stable,
             **_envelope(ev),
         )
 
@@ -2675,6 +2787,34 @@ class NativeSession:
             raise NativeRuntimeError(
                 status,
                 "oct_session_cancel failed",
+                last_error=self._owner.last_error(),
+            )
+        return status
+
+    def end_input(self) -> int:
+        """Finalize streaming input for this turn (oct_session_end_input).
+
+        Signals the runtime that no more audio/text will be sent, so
+        :meth:`poll_event` can run the terminal decode even on an empty
+        buffer instead of blocking until timeout (the bounded no-audio
+        path). Idempotent: repeated calls after a successful finalize
+        return OK. Single-thread-affine — do not race with
+        ``send_audio``/``send_text``/``poll_event`` on this session.
+
+        Returns the raw status code. ``OCT_STATUS_UNSUPPORTED`` (sessions
+        that do not consume streaming input) is returned, not raised, so
+        callers can feature-detect; any other non-OK code raises.
+
+        Requires a runtime with ABI minor >= 12 (the
+        ``oct_session_end_input`` symbol); older dylibs are rejected at
+        load time by the loader's ABI-minor gate."""
+        if self._handle_invalid or self._closed:
+            return OCT_STATUS_OK
+        status = int(self._lib.oct_session_end_input(self._handle))
+        if status not in (OCT_STATUS_OK, OCT_STATUS_UNSUPPORTED):
+            raise NativeRuntimeError(
+                status,
+                "oct_session_end_input failed",
                 last_error=self._owner.last_error(),
             )
         return status
@@ -2906,6 +3046,7 @@ __all__ = [
     "OCT_EVENT_THERMAL_STATE",
     "OCT_EVENT_TRANSCRIPT_CHUNK",
     "OCT_EVENT_TRANSCRIPT_FINAL",
+    "OCT_EVENT_TRANSCRIPT_PARTIAL",
     "OCT_EVENT_TRANSCRIPT_SEGMENT",
     "OCT_EVENT_TTS_AUDIO_CHUNK",
     "OCT_EVENT_TURN_ENDED",
