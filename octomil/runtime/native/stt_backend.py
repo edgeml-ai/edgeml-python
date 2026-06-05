@@ -245,6 +245,13 @@ class Segment:
     start_ms: int
     end_ms: int
     text: str
+    # v0.1.25 (OCT_EVENT_VERSION 4) — per-segment decode diagnostics.
+    # ``avg_logprob`` is the mean per-token log-probability (less-negative
+    # = more confident); ``no_speech_prob`` is whisper's no-speech
+    # probability in [0, 1]. Both default to 0.0 against runtimes/engines
+    # that predate the getters (cloud/echo, older whisper builds).
+    avg_logprob: float = 0.0
+    no_speech_prob: float = 0.0
 
 
 @dataclass
@@ -1018,6 +1025,8 @@ class NativeSttBackend:
                             start_ms=int(ev.segment_start_ms),
                             end_ms=int(ev.segment_end_ms),
                             text=ev.text,
+                            avg_logprob=float(ev.segment_avg_logprob),
+                            no_speech_prob=float(ev.segment_no_speech_prob),
                         )
                     )
                     continue

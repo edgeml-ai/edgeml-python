@@ -25,12 +25,14 @@ def _parsed_cdef():
     return ffi
 
 
-def test_abi_constants_match_runtime_v0_1_24() -> None:
+def test_abi_constants_match_runtime() -> None:
     """The mirrored ABI constants must match runtime.h exactly. A bump
     here without a matching runtime release breaks load-time gating, so
     these values are intentionally pinned."""
     assert L.OCT_EVENT_TRANSCRIPT_PARTIAL == 26
-    assert L.OCT_EVENT_VERSION == 3
+    # v0.1.24 bumped EVENT_VERSION 2->3 (TRANSCRIPT_PARTIAL); v0.1.25
+    # bumped 3->4 (tail-additive transcript_segment decode diagnostics).
+    assert L.OCT_EVENT_VERSION == 4
     # end_input is a new exported symbol (minor 12); declaring it in the
     # cdef means an older dylib lacking the export must be rejected.
     assert L._REQUIRED_ABI_MINOR == 12
@@ -104,3 +106,48 @@ def test_native_event_partial_fields_default_to_zero() -> None:
     assert ev.partial_revision_id == 0
     assert ev.partial_is_stable is False
     assert ev.partial_stable_prefix_bytes == 0
+
+
+def test_transcript_segment_carries_v4_decode_diagnostics() -> None:
+    """The data.transcript_segment arm must expose the v0.1.25
+    (EVENT_VERSION 4) tail-additive ``avg_logprob`` / ``no_speech_prob``
+    floats with assignable, round-tripping values."""
+    ffi = _parsed_cdef()
+    ev = ffi.new("oct_event_t*")
+    s = ev.data.transcript_segment
+    s.segment_index = 2
+    s.is_final = 1
+    s.avg_logprob = -0.25
+    s.no_speech_prob = 0.0125
+    assert s.segment_index == 2
+    assert s.is_final == 1
+    assert abs(s.avg_logprob - (-0.25)) < 1e-6
+    assert abs(s.no_speech_prob - 0.0125) < 1e-6
+
+
+def test_native_event_carries_segment_diagnostics() -> None:
+    """A decoded TRANSCRIPT_SEGMENT surfaces the v4 per-segment decode
+    diagnostics; non-segment events leave them at the 0.0 default."""
+    seg = L.NativeEvent(
+        type=L.OCT_EVENT_TRANSCRIPT_SEGMENT,
+        version=L.OCT_EVENT_VERSION,
+        monotonic_ns=0,
+        user_data_ptr=0,
+        text="konnichiwa",
+        segment_index=0,
+        segment_is_final=True,
+        segment_avg_logprob=-0.31,
+        segment_no_speech_prob=0.02,
+    )
+    assert abs(seg.segment_avg_logprob - (-0.31)) < 1e-6
+    assert abs(seg.segment_no_speech_prob - 0.02) < 1e-6
+
+    final = L.NativeEvent(
+        type=L.OCT_EVENT_TRANSCRIPT_FINAL,
+        version=L.OCT_EVENT_VERSION,
+        monotonic_ns=0,
+        user_data_ptr=0,
+        text="final",
+    )
+    assert final.segment_avg_logprob == 0.0
+    assert final.segment_no_speech_prob == 0.0

@@ -1118,11 +1118,13 @@ def test_session_config_version_bumped_to_5():
     assert OCT_SESSION_CONFIG_VERSION == 5
 
 
-def test_event_version_bumped_to_2():
-    """v0.4 step 2 bumps event version 1 → 2."""
+def test_event_version_current():
+    """Event version bump chain: v0.4 step 2 (1→2), v0.1.24 (2→3,
+    TRANSCRIPT_PARTIAL), v0.1.25 (3→4, tail-additive transcript_segment
+    decode diagnostics). Pinned to the current runtime.h value."""
     from octomil.runtime.native.loader import OCT_EVENT_VERSION
 
-    assert OCT_EVENT_VERSION == 2
+    assert OCT_EVENT_VERSION == 4
 
 
 def test_v0_4_step_2_event_type_constants_assigned_correctly():

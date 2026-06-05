@@ -202,7 +202,14 @@ OCT_SESSION_CONFIG_VERSION: int = 5
 # id + union member, NOT a new ABI symbol), guarded by the out->size
 # handshake — mirrors runtime.h OCT_EVENT_VERSION 3. The end_input *symbol*
 # (minor 12) is what raises _REQUIRED_ABI_MINOR; partials ride this.
-OCT_EVENT_VERSION: int = 3
+#
+# v0.1.25 bump 3->4: appends avg_logprob + no_speech_prob to
+# data.transcript_segment (per-segment decode diagnostics). Tail-additive —
+# existing field offsets are unchanged and the out->size handshake reports
+# the larger event, so an EVENT_VERSION-3 binding reading the older shape is
+# unaffected. No new ABI symbol, so _REQUIRED_ABI_MINOR stays 12. Mirrors
+# runtime.h OCT_EVENT_VERSION 4.
+OCT_EVENT_VERSION: int = 4
 
 # session_config v=5 stt_no_context tri-state (mirrors runtime.h
 # OCT_STT_NO_CONTEXT_*). DEFAULT preserves the runtime's historical
@@ -781,6 +788,12 @@ typedef struct oct_event {
             uint8_t     is_final;
             uint8_t     _reserved0;
             uint16_t    _reserved1;
+            /* v0.1.25 (OCT_EVENT_VERSION 4) — per-segment decode
+             * diagnostics, appended at the tail. Both 0.0f when the
+             * engine does not supply them (cloud/echo, or whisper
+             * builds predating the getters). */
+            float       avg_logprob;
+            float       no_speech_prob;
         } transcript_segment;
 
         /* v0.1.5 PR-2 — STT end-of-transcript. Followed by
@@ -1809,6 +1822,9 @@ class NativeEvent:
         "segment_end_ms",
         "segment_index",
         "segment_is_final",
+        # v0.1.25 (OCT_EVENT_VERSION 4) — per-segment decode diagnostics.
+        "segment_avg_logprob",
+        "segment_no_speech_prob",
         "final_n_segments",
         "final_duration_ms",
         # v0.1.5 PR-2N — VAD transition payload. Populated only on
@@ -1888,6 +1904,8 @@ class NativeEvent:
         segment_end_ms: int = 0,
         segment_index: int = 0,
         segment_is_final: bool = False,
+        segment_avg_logprob: float = 0.0,
+        segment_no_speech_prob: float = 0.0,
         final_n_segments: int = 0,
         final_duration_ms: int = 0,
         vad_transition_kind: int = 0,
@@ -1940,6 +1958,8 @@ class NativeEvent:
         self.segment_end_ms = segment_end_ms
         self.segment_index = segment_index
         self.segment_is_final = segment_is_final
+        self.segment_avg_logprob = segment_avg_logprob
+        self.segment_no_speech_prob = segment_no_speech_prob
         self.final_n_segments = final_n_segments
         self.final_duration_ms = final_duration_ms
         self.vad_transition_kind = vad_transition_kind
@@ -2528,6 +2548,8 @@ class NativeSession:
         seg_end_ms = 0
         seg_index = 0
         seg_is_final = False
+        seg_avg_logprob = 0.0
+        seg_no_speech_prob = 0.0
         final_n_segments = 0
         final_duration_ms = 0
         # v0.1.5 PR-2N — VAD transition payload defaults.
@@ -2595,6 +2617,11 @@ class NativeSession:
             seg_end_ms = int(seg.end_ms)
             seg_index = int(seg.segment_index)
             seg_is_final = bool(seg.is_final)
+            # v0.1.25 (OCT_EVENT_VERSION 4) — tail-additive decode
+            # diagnostics. Guarded by the out->size handshake: an older
+            # runtime that does not emit them leaves these at 0.0.
+            seg_avg_logprob = float(seg.avg_logprob)
+            seg_no_speech_prob = float(seg.no_speech_prob)
         elif ev_type == OCT_EVENT_TRANSCRIPT_FINAL:
             # v0.1.5 PR-2 — STT end-of-transcript. utf8 + n_segments +
             # duration_ms. Same lifetime rule as segment.
@@ -2702,6 +2729,8 @@ class NativeSession:
             segment_end_ms=seg_end_ms,
             segment_index=seg_index,
             segment_is_final=seg_is_final,
+            segment_avg_logprob=seg_avg_logprob,
+            segment_no_speech_prob=seg_no_speech_prob,
             final_n_segments=final_n_segments,
             final_duration_ms=final_duration_ms,
             vad_transition_kind=vad_kind,
