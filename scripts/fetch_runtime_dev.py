@@ -63,7 +63,7 @@ import urllib.request
 from pathlib import Path
 
 REPO = "octomil/octomil-runtime"
-DEFAULT_VERSION = "v0.1.22"  # v0.1.22: session_config v5 runtime (STT decode controls: strategy/beam/no_context + timestamp clamp); requires the v0.1.22 release dylibs
+DEFAULT_VERSION = "v0.1.24"  # v0.1.24: realtime STT bridge — ABI minor 12 (oct_session_end_input) + OCT_EVENT_VERSION 3 (OCT_EVENT_TRANSCRIPT_PARTIAL); required by loader.py _REQUIRED_ABI_MINOR=12. NOTE: v0.1.24 ships darwin-arm64 only (manual build while the self-hosted Linux runner is offline); linux-x86_64 / android assets pending runner restoration.
 CACHE_ROOT = Path.home() / ".cache" / "octomil-runtime"
 MANIFEST_ASSET_NAME = "MANIFEST.json"
 
