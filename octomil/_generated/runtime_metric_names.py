@@ -53,8 +53,14 @@ VAD_INFERENCE_MS = "vad.inference_ms"
 VAD_REAL_TIME_FACTOR = "vad.real_time_factor"
 VAD_SETUP_MS = "vad.setup_ms"
 WHISPER_AUDIO_DURATION_MS = "whisper.audio_duration_ms"
+WHISPER_CHUNK_FINAL_COVERAGE_MS = "whisper.chunk_final_coverage_ms"
+WHISPER_CHUNK_SEGMENTS_EMITTED = "whisper.chunk_segments_emitted"
+WHISPER_CHUNK_SEGMENTS_KEPT = "whisper.chunk_segments_kept"
+WHISPER_CHUNK_WINDOW_COUNT = "whisper.chunk_window_count"
 WHISPER_DECODE_MS = "whisper.decode_ms"
 WHISPER_DIGEST_ADMISSION_OK = "whisper.digest_admission_ok"
+WHISPER_FIRST_FINAL_SEGMENT_MS = "whisper.first_final_segment_ms"
+WHISPER_FIRST_PARTIAL_MS = "whisper.first_partial_ms"
 WHISPER_LOAD_MS = "whisper.load_ms"
 WHISPER_QUEUE_MS = "whisper.queue_ms"
 WHISPER_REAL_TIME_FACTOR = "whisper.real_time_factor"
@@ -111,8 +117,14 @@ ALL_RUNTIME_METRICS = [
     VAD_REAL_TIME_FACTOR,
     VAD_SETUP_MS,
     WHISPER_AUDIO_DURATION_MS,
+    WHISPER_CHUNK_FINAL_COVERAGE_MS,
+    WHISPER_CHUNK_SEGMENTS_EMITTED,
+    WHISPER_CHUNK_SEGMENTS_KEPT,
+    WHISPER_CHUNK_WINDOW_COUNT,
     WHISPER_DECODE_MS,
     WHISPER_DIGEST_ADMISSION_OK,
+    WHISPER_FIRST_FINAL_SEGMENT_MS,
+    WHISPER_FIRST_PARTIAL_MS,
     WHISPER_LOAD_MS,
     WHISPER_QUEUE_MS,
     WHISPER_REAL_TIME_FACTOR,
