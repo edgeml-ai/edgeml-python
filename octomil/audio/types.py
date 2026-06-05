@@ -69,6 +69,35 @@ class TranscriptionSegment:
 
 
 @dataclass
+class TranscriptionPartial:
+    """A provisional, revision-aware partial from a streaming transcription.
+
+    Public mirror of the runtime's ``OCT_EVENT_TRANSCRIPT_PARTIAL``
+    payload (see ``NativeEvent.partial_*`` in
+    :mod:`octomil.runtime.native.loader`), kept free of native cffi
+    imports. Emitted by :meth:`octomil.audio.transcriptions.AudioTranscriptions.stream_transcribe`
+    while audio is still being fed.
+
+    ``revision_id`` is a 1-based monotonic counter within the session —
+    a higher ``revision_id`` supersedes every prior partial, so callers
+    that render speculatively should always replace on the latest. A
+    partial is NEVER authoritative: the final
+    :class:`TranscriptionSegment` values yielded after ``end_input`` are
+    the committed transcript. ``is_stable`` is ``True`` iff the whole
+    partial is safe for speculative use (local-agreement converged);
+    ``stable_prefix_bytes`` is the length of the stable UTF-8 prefix
+    (0 when unavailable).
+    """
+
+    text: str
+    revision_id: int
+    is_stable: bool = False
+    start_ms: int = 0
+    end_ms: int = 0
+    stable_prefix_bytes: int = 0
+
+
+@dataclass
 class TranscriptionResult:
     """Result of a non-streaming transcription."""
 
