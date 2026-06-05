@@ -7,7 +7,10 @@ Requirements:
     pip install "octomil[dev]"  # includes flwr-datasets
 """
 
+import os
 import unittest
+from collections.abc import Callable
+from typing import Any
 
 try:
     from flwr_datasets import FederatedDataset
@@ -21,7 +24,14 @@ except ImportError:
     HAS_FLWR_DATASETS = False
 
 
+RUN_EXTERNAL_DATASET_TESTS = os.environ.get("OCTOMIL_RUN_EXTERNAL_DATASET_TESTS") == "1"
+
+
 @unittest.skipUnless(HAS_FLWR_DATASETS, "flwr-datasets not installed")
+@unittest.skipUnless(
+    RUN_EXTERNAL_DATASET_TESTS,
+    "external dataset examples require OCTOMIL_RUN_EXTERNAL_DATASET_TESTS=1",
+)
 class NonIIDPartitioningTests(unittest.TestCase):
     """Demonstrate non-IID partitioning strategies relevant to FL.
 
@@ -30,6 +40,14 @@ class NonIIDPartitioningTests(unittest.TestCase):
     URIs (HfUriError), so use the canonical mirrors ``uoft-cs/cifar10`` and
     ``ylecun/mnist``.
     """
+
+    def _load_partition_or_skip(self, loader: Callable[[], Any]) -> Any:
+        try:
+            return loader()
+        except FileNotFoundError as exc:
+            if "Hugging Face Hub" not in str(exc):
+                raise
+            self.skipTest(f"external Hugging Face dataset unavailable: {exc}")
 
     def test_dirichlet_partitioning_cifar10(self):
         """Dirichlet(alpha) partitioning creates label-skewed splits.
@@ -48,7 +66,7 @@ class NonIIDPartitioningTests(unittest.TestCase):
             },
         )
 
-        partition_0 = fds.load_partition(0)
+        partition_0 = self._load_partition_or_skip(lambda: fds.load_partition(0))
         self.assertGreater(len(partition_0), 0)
 
         # Each partition should have data but likely not all 10 labels equally.
@@ -72,7 +90,7 @@ class NonIIDPartitioningTests(unittest.TestCase):
             },
         )
 
-        partition_3 = fds.load_partition(3)
+        partition_3 = self._load_partition_or_skip(lambda: fds.load_partition(3))
         self.assertGreater(len(partition_3), 0)
 
         # With 2 shards per partition the label diversity should be limited.
@@ -93,7 +111,10 @@ class NonIIDPartitioningTests(unittest.TestCase):
             },
         )
 
-        total_samples = sum(len(fds.load_partition(i)) for i in range(num_partitions))
+        total_samples = sum(
+            len(self._load_partition_or_skip(lambda partition_id=i: fds.load_partition(partition_id)))
+            for i in range(num_partitions)
+        )
         # CIFAR-10 train set has 50 000 samples.
         self.assertEqual(total_samples, 50_000)
 
@@ -110,7 +131,7 @@ class NonIIDPartitioningTests(unittest.TestCase):
             },
         )
 
-        partition = fds.load_partition(0)
+        partition = self._load_partition_or_skip(lambda: fds.load_partition(0))
         df = partition.to_pandas()
         self.assertIn("label", df.columns)
         self.assertGreater(len(df), 0)
