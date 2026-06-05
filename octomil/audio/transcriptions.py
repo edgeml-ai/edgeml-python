@@ -483,4 +483,12 @@ def _segment_from_event(ev: object) -> TranscriptionSegment:
         end_ms=int(getattr(ev, "segment_end_ms", 0)),
         avg_logprob=float(getattr(ev, "segment_avg_logprob", 0.0)),
         no_speech_prob=float(getattr(ev, "segment_no_speech_prob", 0.0)),
+        source_window_index=int(getattr(ev, "segment_source_window_index", 0)),
+        source_window_start_ms=int(getattr(ev, "segment_source_window_start_ms", 0)),
+        source_window_end_ms=int(getattr(ev, "segment_source_window_end_ms", 0)),
+        partial_revision_start=int(getattr(ev, "segment_partial_revision_start", 0)),
+        partial_revision_end=int(getattr(ev, "segment_partial_revision_end", 0)),
+        source_kind=int(getattr(ev, "segment_source_kind", 0)),
+        vad_active=bool(getattr(ev, "segment_vad_active", False)),
+        no_speech_decision=bool(getattr(ev, "segment_no_speech_decision", False)),
     )
