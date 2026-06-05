@@ -1108,14 +1108,33 @@ def test_oct_session_config_t_v0_4_appended_fields_present():
     assert cffi_size == runtime_size
 
 
-def test_session_config_version_bumped_to_5():
-    """v0.1.22 bumps session_config version 4 → 5 (appended STT decode
-    controls: stt_decode_strategy / stt_beam_size / stt_no_context). The
-    runtime accepts {1,2,3,4,5}; a v5 SDK against a pre-v5 runtime is
-    rejected with VERSION_MISMATCH."""
+def test_session_config_version_bumped_to_6():
+    """v0.1.22 bumped session_config 4 → 5 (STT decode controls); v0.1.27
+    bumps 5 → 6 (appended chunked-transcribe controls: stt_chunk_window_ms /
+    stt_chunk_overlap_ms). The runtime accepts {1..6}; a v6 SDK against a
+    pre-v6 runtime is rejected with VERSION_MISMATCH."""
     from octomil.runtime.native.loader import OCT_SESSION_CONFIG_VERSION
 
-    assert OCT_SESSION_CONFIG_VERSION == 5
+    assert OCT_SESSION_CONFIG_VERSION == 6
+
+
+def test_oct_session_config_t_has_v6_chunk_fields():
+    """The v=6 cdef must expose the chunked-transcribe fields with
+    assignable, round-tripping values (struct-layout parity vs the runtime is
+    pinned separately by test_oct_session_config_t_size_matches_runtime). Parses
+    the cdef directly so it runs without a dylib."""
+    from cffi import FFI
+
+    from octomil.runtime.native import loader as L
+
+    ffi = FFI()
+    ffi.cdef(L._CDEF)
+    cfg = ffi.new("oct_session_config_t*")
+    cfg.version = 6
+    cfg.stt_chunk_window_ms = 15000
+    cfg.stt_chunk_overlap_ms = 2000
+    assert cfg.stt_chunk_window_ms == 15000
+    assert cfg.stt_chunk_overlap_ms == 2000
 
 
 def test_event_version_current():

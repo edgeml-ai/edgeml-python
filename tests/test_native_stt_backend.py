@@ -48,15 +48,100 @@ from octomil.runtime.native.loader import (
 )
 from octomil.runtime.native.stt_backend import (
     _WHISPER_ARTIFACTS,
+    ChunkDiagnostics,
     NativeSttBackend,
     NativeTranscriptionBackend,
     Segment,
     TranscriptionResult,
+    _compute_chunk_diagnostics,
+    _normalize_stt_chunk,
     _runtime_status_to_sdk_error,
     _validate_pcm_f32,
     is_supported_native_whisper_model,
     runtime_advertises_audio_transcription,
 )
+
+
+class TestChunkDiagnostics:
+    """v=6 SDK-side chunk provenance (_compute_chunk_diagnostics)."""
+
+    def _seg(self, start_ms: int, end_ms: int) -> Segment:
+        return Segment(start_ms=start_ms, end_ms=end_ms, text="x")
+
+    def test_window_partition_15s_no_overlap(self):
+        # 120s audio, 15s windows, no overlap → 8 windows, step 15s, last to 120s.
+        d = _compute_chunk_diagnostics(15000, 0, 16000, 120000, [])
+        assert isinstance(d, ChunkDiagnostics)
+        assert d.window_count == 8
+        assert d.step_ms == 15000
+        assert d.windows[0].off_ms == 0
+        assert d.windows[-1].is_last is True
+        assert d.windows[-1].end_ms == 120000
+
+    def test_window_partition_overlap_step(self):
+        # 60s window, 10s overlap → step 50s; over 120s → windows at 0,50,100s.
+        d = _compute_chunk_diagnostics(60000, 10000, 16000, 120000, [])
+        assert d.step_ms == 50000
+        assert [w.off_ms for w in d.windows] == [0, 50000, 100000]
+        assert d.windows[-1].is_last is True
+
+    def test_segment_ownership_by_midpoint(self):
+        # 15s/0: a seg at 16-24s (mid 20s) is owned by window 1 ([15,30)).
+        segs = [self._seg(16000, 24000)]
+        d = _compute_chunk_diagnostics(15000, 0, 16000, 120000, segs)
+        assert d.segment_owner_window == [1]
+
+    def test_tail_gap_surfaces_dropped_tail(self):
+        # The 60s/10s tail-drop signature: last segment ends at 102s on 120s
+        # audio → 18s uncovered. This is the headline tail-drop diagnostic.
+        segs = [self._seg(0, 11000), self._seg(100000, 102000)]
+        d = _compute_chunk_diagnostics(60000, 10000, 16000, 120000, segs)
+        assert d.final_segment_end_ms == 102000
+        assert d.tail_gap_ms == 18000
+
+    def test_full_tail_coverage_no_gap(self):
+        segs = [self._seg(111000, 119000)]
+        d = _compute_chunk_diagnostics(15000, 0, 16000, 120000, segs)
+        assert d.tail_gap_ms == 1000  # 120000 - 119000
+
+    def test_overlap_clamped_keeps_step_ge_1(self):
+        # overlap >= window clamps so the partition still advances.
+        d = _compute_chunk_diagnostics(1000, 5000, 16000, 3000, [])
+        assert d.step_ms >= 1
+        assert d.window_count >= 1
+
+
+class TestNormalizeSttChunk:
+    """v=6 chunked-transcribe control validation (_normalize_stt_chunk)."""
+
+    def test_none_disables_chunking(self):
+        assert _normalize_stt_chunk(None, None) == (0, 0)
+
+    def test_zero_window_ignores_overlap(self):
+        # overlap is meaningless without a window — coerced to 0, not rejected.
+        assert _normalize_stt_chunk(0, 2000) == (0, 0)
+
+    def test_window_and_overlap_pass_through(self):
+        assert _normalize_stt_chunk(15000, 2000) == (15000, 2000)
+
+    def test_window_without_overlap(self):
+        assert _normalize_stt_chunk(15000, None) == (15000, 0)
+
+    def test_negative_window_rejected(self):
+        with pytest.raises(OctomilError) as exc_info:
+            _normalize_stt_chunk(-1, 0)
+        assert exc_info.value.code == OctomilErrorCode.INVALID_INPUT
+
+    def test_negative_overlap_rejected(self):
+        with pytest.raises(OctomilError) as exc_info:
+            _normalize_stt_chunk(15000, -1)
+        assert exc_info.value.code == OctomilErrorCode.INVALID_INPUT
+
+    def test_overlap_ge_window_rejected(self):
+        with pytest.raises(OctomilError) as exc_info:
+            _normalize_stt_chunk(2000, 2000)
+        assert exc_info.value.code == OctomilErrorCode.INVALID_INPUT
+
 
 _FAKE_WHISPER_BIN = "/tmp/_pr2b_test_fake_ggml_tiny.bin"
 

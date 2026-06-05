@@ -118,6 +118,32 @@ def _normalize_stt_no_context(no_context: bool | None) -> int:
     return OCT_STT_NO_CONTEXT_ENABLED if no_context else OCT_STT_NO_CONTEXT_DISABLED
 
 
+def _normalize_stt_chunk(chunk_window_ms: int | None, chunk_overlap_ms: int | None) -> tuple[int, int]:
+    """Validate + normalize the v=6 chunked-transcribe controls. ``None`` → 0
+    (single full-buffer decode). Overlap is meaningless without a window and
+    must be < the window; both must be >= 0."""
+    window = 0 if chunk_window_ms is None else int(chunk_window_ms)
+    overlap = 0 if chunk_overlap_ms is None else int(chunk_overlap_ms)
+    if window < 0:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=f"native STT: chunk_window_ms must be >= 0; got {chunk_window_ms!r}",
+        )
+    if overlap < 0:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=f"native STT: chunk_overlap_ms must be >= 0; got {chunk_overlap_ms!r}",
+        )
+    if window == 0:
+        return 0, 0  # chunking off — ignore overlap
+    if overlap >= window:
+        raise OctomilError(
+            code=OctomilErrorCode.INVALID_INPUT,
+            message=(f"native STT: chunk_overlap_ms ({overlap}) must be < " f"chunk_window_ms ({window})"),
+        )
+    return window, overlap
+
+
 _BACKEND_NAME = "native-whisper-cpp"
 _DEFAULT_DEADLINE_MS = 300_000  # 5 minutes — same shape as chat / embeddings.
 # whisper.cpp STT is hard-coded to 16kHz mono PCM-f32 for the W1
@@ -255,6 +281,118 @@ class Segment:
 
 
 @dataclass
+class ChunkWindow:
+    """One fixed decode window in a chunked (v=6) transcription.
+
+    Mirrors the runtime's window geometry so callers can see the
+    partition without diffing transcripts. ``off_ms`` is the window's
+    start offset; the window OWNS the half-open span
+    ``[off_ms, off_ms + step_ms)`` for segment-midpoint dedup (the last
+    window owns through the end of the audio).
+    """
+
+    index: int
+    start_ms: int
+    end_ms: int
+    off_ms: int
+    is_last: bool
+
+
+@dataclass
+class ChunkDiagnostics:
+    """Chunked-transcribe provenance, reconstructed SDK-side from the
+    requested window/overlap + the (already merged) returned segments.
+
+    Surfaces what previously had to be inferred by diffing transcripts:
+    the window partition, which window owns each kept segment, and —
+    most usefully for the tail-drop class of bug — how much of the audio
+    the final emitted segment actually covers (``tail_gap_ms`` > 0 means
+    trailing audio produced no segment, e.g. a last-window collapse).
+
+    NOTE: ``segment_owner_window`` is the owning window the SDK
+    reconstructs for each RETURNED segment; the count of segments
+    whisper emitted but the runtime DROPPED in dedup is runtime-only and
+    is not visible here (that needs a runtime metric — follow-up).
+    """
+
+    window_ms: int
+    overlap_ms: int
+    step_ms: int
+    window_count: int
+    windows: list[ChunkWindow]
+    segment_owner_window: list[int]
+    audio_duration_ms: int
+    final_segment_end_ms: int
+    tail_gap_ms: int
+
+
+def _compute_chunk_diagnostics(
+    window_ms: int,
+    overlap_ms: int,
+    sample_rate_hz: int,
+    audio_duration_ms: int,
+    segments: "list[Segment]",
+) -> ChunkDiagnostics:
+    """Reconstruct the chunk window partition + per-segment ownership.
+
+    Pure (no runtime / dylib) so it is unit-testable. Mirrors the
+    runtime's ``stt_chunk_geometry`` / ``stt_chunk_owns_segment``
+    (whisper_stt_hints.h): sample counts round to the nearest sample,
+    overlap is clamped to window-1 and step to >= 1, and a segment is
+    owned by the window whose ``[off_ms, off_ms + step_ms)`` contains its
+    midpoint (the last window owns through the end).
+    """
+    sr = int(sample_rate_hz)
+    total_samples = round(audio_duration_ms / 1000 * sr)
+    win_n = max(1, round(window_ms / 1000 * sr))
+    ov_n = min(round(overlap_ms / 1000 * sr), win_n - 1)
+    step_n = max(1, win_n - ov_n)
+    step_ms = max(1, round(step_n * 1000 / sr))
+
+    windows: list[ChunkWindow] = []
+    start = 0
+    idx = 0
+    while start < total_samples:
+        end = min(start + win_n, total_samples)
+        is_last = end >= total_samples
+        windows.append(
+            ChunkWindow(
+                index=idx,
+                start_ms=round(start * 1000 / sr),
+                end_ms=round(end * 1000 / sr),
+                off_ms=round(start * 1000 / sr),
+                is_last=is_last,
+            )
+        )
+        idx += 1
+        if is_last:
+            break
+        start += step_n
+
+    def _owner(mid_ms: int) -> int:
+        for w in windows:
+            if mid_ms < w.off_ms:
+                continue
+            if w.is_last or mid_ms < w.off_ms + step_ms:
+                return w.index
+        return windows[-1].index if windows else -1
+
+    owners = [_owner(s.start_ms + (s.end_ms - s.start_ms) // 2) for s in segments]
+    final_end = max((s.end_ms for s in segments), default=0)
+    return ChunkDiagnostics(
+        window_ms=int(window_ms),
+        overlap_ms=int(overlap_ms),
+        step_ms=step_ms,
+        window_count=len(windows),
+        windows=windows,
+        segment_owner_window=owners,
+        audio_duration_ms=int(audio_duration_ms),
+        final_segment_end_ms=final_end,
+        tail_gap_ms=max(0, int(audio_duration_ms) - final_end),
+    )
+
+
+@dataclass
 class TranscriptionResult:
     """Native-STT transcription result.
 
@@ -268,6 +406,8 @@ class TranscriptionResult:
     segments: list[Segment] = field(default_factory=list)
     language: str = "en"
     duration_ms: int = 0
+    # v=6 chunked transcribe provenance; None for single full-buffer decode.
+    chunk_diagnostics: "ChunkDiagnostics | None" = None
 
 
 def _runtime_status_to_sdk_error(
@@ -875,6 +1015,8 @@ class NativeSttBackend:
         decode_strategy: str | None = None,
         beam_size: int | None = None,
         no_context: bool | None = None,
+        chunk_window_ms: int | None = None,
+        chunk_overlap_ms: int | None = None,
         deadline_ms: int | None = None,
     ) -> TranscriptionResult:
         """Run an ``audio.transcription`` request against the runtime.
@@ -926,6 +1068,10 @@ class NativeSttBackend:
         normalized_beam_size = _normalize_stt_beam_size(beam_size)
         normalized_decode_strategy = _normalize_stt_decode_strategy(decode_strategy, normalized_beam_size)
         normalized_no_context = _normalize_stt_no_context(no_context)
+        # v=6 chunked transcribe (0 = single full-buffer decode).
+        normalized_chunk_window_ms, normalized_chunk_overlap_ms = _normalize_stt_chunk(
+            chunk_window_ms, chunk_overlap_ms
+        )
 
         # Deadline validation BEFORE opening a session.
         resolved_deadline_ms = deadline_ms if deadline_ms is not None else self._default_deadline_ms
@@ -967,6 +1113,9 @@ class NativeSttBackend:
                 stt_decode_strategy=normalized_decode_strategy,
                 stt_beam_size=normalized_beam_size,
                 stt_no_context=normalized_no_context,
+                # v=6 chunked transcribe (0 = single full-buffer decode).
+                stt_chunk_window_ms=normalized_chunk_window_ms,
+                stt_chunk_overlap_ms=normalized_chunk_overlap_ms,
             )
         except NativeRuntimeError as exc:
             raise _runtime_status_to_sdk_error(
@@ -1062,11 +1211,23 @@ class NativeSttBackend:
                     message=("native STT: SESSION_COMPLETED(OK) without preceding TRANSCRIPT_FINAL"),
                 )
 
+            chunk_diag = (
+                _compute_chunk_diagnostics(
+                    normalized_chunk_window_ms,
+                    normalized_chunk_overlap_ms,
+                    sample_rate_hz,
+                    duration_ms,
+                    segments,
+                )
+                if normalized_chunk_window_ms > 0
+                else None
+            )
             return TranscriptionResult(
                 text=final_text,
                 segments=segments,
                 language=language,
                 duration_ms=duration_ms,
+                chunk_diagnostics=chunk_diag,
             )
         finally:
             sess.close()

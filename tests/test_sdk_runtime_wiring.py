@@ -36,7 +36,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-EXPECTED_RUNTIME_VERSION = "v0.1.26"
+EXPECTED_RUNTIME_VERSION = "v0.1.27"
 
 
 def test_fetch_runtime_dev_pins_expected_version() -> None:
