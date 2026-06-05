@@ -249,3 +249,146 @@ async def _collect_async(transcriptions: AudioTranscriptions, source: Any) -> li
     async for ev in transcriptions.stream_transcribe(source):
         out.append(ev)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Regression: the DEFAULT factory must keep the warmed NativeSttBackend alive
+# for the session's lifetime. Returning the bare session let the backend be
+# GC'd, whose finalizer closed the parent NativeRuntime and invalidated the
+# live session ("session handle invalidated by parent NativeRuntime.close").
+# ---------------------------------------------------------------------------
+
+
+class _FakeRef:
+    model_id = "whisper-base"
+
+
+class _FakeOwnedSession:
+    def __init__(self) -> None:
+        self.sent: list[bytes] = []
+        self.ended = 0
+        self.closed = False
+
+    def send_audio(self, samples: bytes, *, sample_rate: int, channels: int = 1) -> None:
+        self.sent.append(samples)
+
+    def end_input(self) -> int:
+        self.ended += 1
+        return L.OCT_STATUS_OK
+
+    def poll_event(self, timeout_ms: int = 0) -> _FakeEvent:
+        return _none()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _install_fake_backend(monkeypatch, order: list[str]):
+    inner = _FakeOwnedSession()
+
+    class _FakeBackend:
+        def load_model(self, name: str) -> None:
+            self.model = name
+
+        def open_stream_session(self, *, language=None):
+            return inner
+
+        def close(self) -> None:
+            order.append("backend")
+
+    import octomil.runtime.native.stt_backend as sb
+
+    monkeypatch.setattr(sb, "NativeSttBackend", _FakeBackend)
+    return inner
+
+
+def test_default_factory_pins_backend_against_gc(monkeypatch):
+    """The returned stream session must retain a strong ref to the backend
+    so it survives garbage collection — the core lifetime regression."""
+    import gc
+    import weakref
+
+    backend_ref = {}
+
+    class _FakeBackend:
+        def load_model(self, name: str) -> None:
+            pass
+
+        def open_stream_session(self, *, language=None):
+            return _FakeOwnedSession()
+
+        def close(self) -> None:
+            pass
+
+    import octomil.runtime.native.stt_backend as sb
+
+    monkeypatch.setattr(sb, "NativeSttBackend", _FakeBackend)
+
+    at = AudioTranscriptions(runtime_resolver=lambda ref: None)
+    factory = at._default_stream_session_factory(language="en")
+    session = factory(_FakeRef())
+    # Track the backend via weakref; drop all other refs and force GC.
+    backend_ref["w"] = weakref.ref(session._backend)  # type: ignore[attr-defined]
+    gc.collect()
+    assert backend_ref["w"]() is not None, "backend was GC'd while session alive — runtime would be closed under it"
+
+
+def test_owned_stream_session_close_order_and_delegation(monkeypatch):
+    """close() tears down session THEN backend; the 4 stream methods delegate."""
+    order: list[str] = []
+    inner = _install_fake_backend(monkeypatch, order)
+    inner_close = inner.close
+
+    def _record_close() -> None:
+        order.append("session")
+        inner_close()
+
+    inner.close = _record_close  # type: ignore[method-assign]
+
+    at = AudioTranscriptions(runtime_resolver=lambda ref: None)
+    session = at._default_stream_session_factory(language=None)(_FakeRef())
+
+    session.send_audio(b"\x00\x00", sample_rate=16000)
+    assert inner.sent == [b"\x00\x00"]
+    assert session.end_input() == L.OCT_STATUS_OK
+    assert inner.ended == 1
+    assert order == []  # nothing torn down mid-stream
+    session.close()
+    assert order == ["session", "backend"]  # session first, backend second
+
+
+def test_default_factory_uses_uploaded_model_path_when_artifact_given(monkeypatch):
+    """artifact_path + expected_sha256 route through load_uploaded_model
+    (uploaded-model path), so medium/large run without a registry bump."""
+    calls: dict = {}
+
+    class _FakeBackend:
+        def load_model(self, name: str) -> None:
+            calls["load_model"] = name
+
+        def load_uploaded_model(self, *, model_name, artifact_path, expected_sha256) -> None:
+            calls["uploaded"] = (model_name, artifact_path, expected_sha256)
+
+        def open_stream_session(self, *, language=None):
+            return _FakeOwnedSession()
+
+        def close(self) -> None:
+            pass
+
+    import octomil.runtime.native.stt_backend as sb
+
+    monkeypatch.setattr(sb, "NativeSttBackend", _FakeBackend)
+    at = AudioTranscriptions(runtime_resolver=lambda ref: None)
+
+    # With artifact + sha -> uploaded path.
+    at._default_stream_session_factory(language="ja", artifact_path="/m/ggml-medium.bin", expected_sha256="ab" * 32)(
+        _FakeRef()
+    )
+    assert calls.get("uploaded") == ("whisper-base", "/m/ggml-medium.bin", "ab" * 32)
+    assert "load_model" not in calls
+
+    # Without -> registered-name path.
+    calls.clear()
+    at._default_stream_session_factory(language="ja")(_FakeRef())
+    assert calls.get("load_model") == "whisper-base"
+    assert "uploaded" not in calls
