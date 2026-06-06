@@ -76,6 +76,12 @@ class TranscriptionSegment:
     source_kind: int = 0
     vad_active: bool = False
     no_speech_decision: bool = False
+    # v0.1.30 stream-final diagnostics. ``commit_reason`` uses the
+    # OCT_TRANSCRIPT_COMMIT_* integer constants from runtime.native.loader.
+    # ``finalization_latency_ms`` is audio-time latency: how much later than
+    # ``end_ms`` the source/commit window ended when the runtime finalized it.
+    finalization_latency_ms: int = 0
+    commit_reason: int = 1
 
 
 @dataclass

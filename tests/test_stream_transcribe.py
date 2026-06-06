@@ -56,6 +56,8 @@ class _FakeEvent:
         self.segment_source_kind = fields.get("segment_source_kind", L.OCT_TRANSCRIPT_SOURCE_NORMAL)
         self.segment_vad_active = fields.get("segment_vad_active", False)
         self.segment_no_speech_decision = fields.get("segment_no_speech_decision", False)
+        self.segment_finalization_latency_ms = fields.get("segment_finalization_latency_ms", 0)
+        self.segment_commit_reason = fields.get("segment_commit_reason", L.OCT_TRANSCRIPT_COMMIT_END_INPUT)
 
 
 def _none() -> _FakeEvent:
@@ -142,6 +144,8 @@ def _scenario_session() -> _FakeStreamSession:
             segment_source_kind=L.OCT_TRANSCRIPT_SOURCE_TAIL_RECOVERY,
             segment_vad_active=True,
             segment_no_speech_decision=False,
+            segment_finalization_latency_ms=29000,
+            segment_commit_reason=L.OCT_TRANSCRIPT_COMMIT_TAIL_FLUSH,
         ),
         _FakeEvent(
             L.OCT_EVENT_TRANSCRIPT_SEGMENT,
@@ -227,6 +231,37 @@ async def test_finals_authoritative_and_diagnostics() -> None:
     assert segs[0].source_kind == L.OCT_TRANSCRIPT_SOURCE_TAIL_RECOVERY
     assert segs[0].vad_active is True
     assert segs[0].no_speech_decision is False
+    assert segs[0].finalization_latency_ms == 29000
+    assert segs[0].commit_reason == L.OCT_TRANSCRIPT_COMMIT_TAIL_FLUSH
+
+
+@pytest.mark.asyncio
+async def test_stream_segments_can_arrive_before_end_input() -> None:
+    """Stable runtime finals emitted during feeding are yielded immediately,
+    not held until the SDK calls end_input."""
+    pre = [
+        _FakeEvent(L.OCT_EVENT_SESSION_STARTED),
+        _FakeEvent(L.OCT_EVENT_TRANSCRIPT_PARTIAL, text="he", partial_revision_id=1),
+        _FakeEvent(
+            L.OCT_EVENT_TRANSCRIPT_SEGMENT,
+            text="hello",
+            segment_start_ms=0,
+            segment_end_ms=800,
+            segment_source_window_index=4,
+            segment_finalization_latency_ms=8000,
+            segment_commit_reason=L.OCT_TRANSCRIPT_COMMIT_STABLE_WINDOW,
+        ),
+    ]
+    post = [_FakeEvent(L.OCT_EVENT_SESSION_COMPLETED)]
+    sess = _FakeStreamSession(pre, post)
+    events = await _collect(_backend(sess), _FOUR_BLOCKS)
+
+    assert sess.end_input_calls == 1
+    assert any(isinstance(e, TranscriptionSegment) and e.text == "hello" for e in events)
+    seg = next(e for e in events if isinstance(e, TranscriptionSegment))
+    assert seg.source_window_index == 4
+    assert seg.finalization_latency_ms == 8000
+    assert seg.commit_reason == L.OCT_TRANSCRIPT_COMMIT_STABLE_WINDOW
 
 
 @pytest.mark.asyncio
