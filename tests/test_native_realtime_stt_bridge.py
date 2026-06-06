@@ -31,8 +31,10 @@ def test_abi_constants_match_runtime() -> None:
     these values are intentionally pinned."""
     assert L.OCT_EVENT_TRANSCRIPT_PARTIAL == 26
     # v0.1.24 bumped EVENT_VERSION 2->3 (TRANSCRIPT_PARTIAL); v0.1.25
-    # bumped 3->4 (tail-additive transcript_segment decode diagnostics).
-    assert L.OCT_EVENT_VERSION == 5
+    # bumped 3->4 (tail-additive transcript_segment decode diagnostics);
+    # v0.1.29 bumped 4->5 (final-segment provenance); v0.1.30 bumped
+    # 5->6 (stream-final commit reason + finalization latency).
+    assert L.OCT_EVENT_VERSION == 6
     # end_input is a new exported symbol (minor 12); declaring it in the
     # cdef means an older dylib lacking the export must be rejected.
     assert L._REQUIRED_ABI_MINOR == 12

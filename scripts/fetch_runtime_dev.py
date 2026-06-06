@@ -63,7 +63,7 @@ import urllib.request
 from pathlib import Path
 
 REPO = "octomil/octomil-runtime"
-DEFAULT_VERSION = "v0.1.28"  # v0.1.28: v0.1.27 (session_config v6 chunked transcribe + EVENT_VERSION 4 + end_input) PLUS the chunked-decode tail-recovery fix (runtime #132) and whisper.chunk_*/first_partial/final observability metrics (#131). Same ABI (config 6, minor 12, event 4) — no SDK cdef change vs v0.1.27. Ships darwin-arm64 + linux-x86_64 (merged MANIFEST + SHA256SUMS).
+DEFAULT_VERSION = "v0.1.30"  # v0.1.30: streaming STT commits stable finals during live input, suppresses generic/low-content terminal tail artifacts, and emits EVENT_VERSION 6 stream-final diagnostics (commit reason + finalization latency). Ships darwin-arm64 STT + headers via MANIFEST/SHA256SUMS.
 CACHE_ROOT = Path.home() / ".cache" / "octomil-runtime"
 MANIFEST_ASSET_NAME = "MANIFEST.json"
 
