@@ -209,12 +209,18 @@ OCT_SESSION_CONFIG_VERSION: int = 6
 #
 # v0.1.29 bump 4->5: appends final-segment provenance diagnostics to
 # data.transcript_segment. Tail-additive; no new ABI symbol, so
-# _REQUIRED_ABI_MINOR stays 12. Mirrors runtime.h OCT_EVENT_VERSION 5.
-OCT_EVENT_VERSION: int = 5
+# _REQUIRED_ABI_MINOR stays 12.
+# v0.1.30 bump 5->6: appends stream-final commit reason and finalization
+# latency to data.transcript_segment. Still no new ABI symbol.
+OCT_EVENT_VERSION: int = 6
 
 OCT_TRANSCRIPT_SOURCE_NORMAL: int = 0
 OCT_TRANSCRIPT_SOURCE_TAIL_RECOVERY: int = 1
 OCT_TRANSCRIPT_SOURCE_FALLBACK: int = 2
+
+OCT_TRANSCRIPT_COMMIT_STABLE_WINDOW: int = 0
+OCT_TRANSCRIPT_COMMIT_END_INPUT: int = 1
+OCT_TRANSCRIPT_COMMIT_TAIL_FLUSH: int = 2
 
 # session_config v=5 stt_no_context tri-state (mirrors runtime.h
 # OCT_STT_NO_CONTEXT_*). DEFAULT preserves the runtime's historical
@@ -808,6 +814,9 @@ typedef struct oct_event {
             uint8_t     vad_active;
             uint8_t     no_speech_decision;
             uint8_t     _reserved2;
+            uint32_t    finalization_latency_ms;
+            uint8_t     commit_reason;
+            uint8_t     _reserved3[3];
         } transcript_segment;
 
         /* v0.1.5 PR-2 — STT end-of-transcript. Followed by
@@ -1865,6 +1874,8 @@ class NativeEvent:
         "segment_source_kind",
         "segment_vad_active",
         "segment_no_speech_decision",
+        "segment_finalization_latency_ms",
+        "segment_commit_reason",
         "final_n_segments",
         "final_duration_ms",
         # v0.1.5 PR-2N — VAD transition payload. Populated only on
@@ -1954,6 +1965,8 @@ class NativeEvent:
         segment_source_kind: int = OCT_TRANSCRIPT_SOURCE_NORMAL,
         segment_vad_active: bool = False,
         segment_no_speech_decision: bool = False,
+        segment_finalization_latency_ms: int = 0,
+        segment_commit_reason: int = OCT_TRANSCRIPT_COMMIT_END_INPUT,
         final_n_segments: int = 0,
         final_duration_ms: int = 0,
         vad_transition_kind: int = 0,
@@ -2016,6 +2029,8 @@ class NativeEvent:
         self.segment_source_kind = segment_source_kind
         self.segment_vad_active = segment_vad_active
         self.segment_no_speech_decision = segment_no_speech_decision
+        self.segment_finalization_latency_ms = segment_finalization_latency_ms
+        self.segment_commit_reason = segment_commit_reason
         self.final_n_segments = final_n_segments
         self.final_duration_ms = final_duration_ms
         self.vad_transition_kind = vad_transition_kind
@@ -2614,6 +2629,8 @@ class NativeSession:
         seg_source_kind = OCT_TRANSCRIPT_SOURCE_NORMAL
         seg_vad_active = False
         seg_no_speech_decision = False
+        seg_finalization_latency_ms = 0
+        seg_commit_reason = OCT_TRANSCRIPT_COMMIT_END_INPUT
         final_n_segments = 0
         final_duration_ms = 0
         # v0.1.5 PR-2N — VAD transition payload defaults.
@@ -2694,6 +2711,8 @@ class NativeSession:
             seg_source_kind = int(seg.source_kind)
             seg_vad_active = bool(seg.vad_active)
             seg_no_speech_decision = bool(seg.no_speech_decision)
+            seg_finalization_latency_ms = int(seg.finalization_latency_ms)
+            seg_commit_reason = int(seg.commit_reason)
         elif ev_type == OCT_EVENT_TRANSCRIPT_FINAL:
             # v0.1.5 PR-2 — STT end-of-transcript. utf8 + n_segments +
             # duration_ms. Same lifetime rule as segment.
@@ -2811,6 +2830,8 @@ class NativeSession:
             segment_source_kind=seg_source_kind,
             segment_vad_active=seg_vad_active,
             segment_no_speech_decision=seg_no_speech_decision,
+            segment_finalization_latency_ms=seg_finalization_latency_ms,
+            segment_commit_reason=seg_commit_reason,
             final_n_segments=final_n_segments,
             final_duration_ms=final_duration_ms,
             vad_transition_kind=vad_kind,

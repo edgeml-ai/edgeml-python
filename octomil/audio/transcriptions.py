@@ -306,15 +306,18 @@ class AudioTranscriptions:
         end_input_calls = 0
         try:
             # Feed phase: push each audio block, draining any provisional
-            # partials the runtime emits between sends so callers see them
-            # as early as possible.
+            # partials and stable committed segments the runtime emits between
+            # sends so callers see stream finals before end_input.
             async for block in _as_async_iter(audio_chunks):
                 if block:
                     session.send_audio(block, sample_rate=sample_rate_hz, channels=1)
-                for partial in self._drain_partials(session):
-                    if partial.revision_id > highest_revision:
-                        highest_revision = partial.revision_id
-                        yield partial
+                for event in self._drain_stream_events(session):
+                    if isinstance(event, TranscriptionPartial):
+                        if event.revision_id > highest_revision:
+                            highest_revision = event.revision_id
+                            yield event
+                    else:
+                        yield event
 
             # Finalize input exactly once, then drain to completion: late
             # partials first (still subject to revision supersession), then
@@ -385,15 +388,17 @@ class AudioTranscriptions:
         return _factory
 
     @staticmethod
-    def _drain_partials(session: StreamSession) -> "list[TranscriptionPartial]":
-        """Non-blocking drain of any pending provisional partials.
+    def _drain_stream_events(
+        session: StreamSession,
+    ) -> "list[Union[TranscriptionPartial, TranscriptionSegment]]":
+        """Non-blocking drain of pending stream partials and segment finals.
 
         Uses ``timeout_ms=0`` so the feed loop never stalls waiting on a
-        partial that has not been produced yet.
+        runtime event that has not been produced yet.
         """
         from octomil.runtime.native import loader as _L
 
-        out: list[TranscriptionPartial] = []
+        out: list[Union[TranscriptionPartial, TranscriptionSegment]] = []
         while True:
             ev = session.poll_event(timeout_ms=0)
             ev_type = getattr(ev, "type", _L.OCT_EVENT_NONE)
@@ -401,6 +406,9 @@ class AudioTranscriptions:
                 break
             if ev_type == _L.OCT_EVENT_TRANSCRIPT_PARTIAL:
                 out.append(_partial_from_event(ev))
+                continue
+            if ev_type == _L.OCT_EVENT_TRANSCRIPT_SEGMENT:
+                out.append(_segment_from_event(ev))
         return out
 
     @staticmethod
@@ -491,4 +499,6 @@ def _segment_from_event(ev: object) -> TranscriptionSegment:
         source_kind=int(getattr(ev, "segment_source_kind", 0)),
         vad_active=bool(getattr(ev, "segment_vad_active", False)),
         no_speech_decision=bool(getattr(ev, "segment_no_speech_decision", False)),
+        finalization_latency_ms=int(getattr(ev, "segment_finalization_latency_ms", 0)),
+        commit_reason=int(getattr(ev, "segment_commit_reason", 1)),
     )
