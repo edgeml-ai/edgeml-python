@@ -47,10 +47,10 @@ dev = [
     "mypy>=1.19.1",
     "ruff>=0.1.0",
     "flwr-datasets>=0.5.0",
-    "cryptography>=48.0.0",
+    "cryptography>=49.0.0",
 ]
 auth = ["keyring>=25.7.0"]
-secagg = ["cryptography>=48.0.0"]
+secagg = ["cryptography>=49.0.0"]
 
 [project.urls]
 Homepage = "https://octomil.com"
