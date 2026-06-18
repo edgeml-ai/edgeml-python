@@ -43,7 +43,7 @@ dev = [
     # See sibling pyproject.toml for rationale. Keeps the SDK package
     # consistent with the umbrella repo's test deps so a hung test
     # surfaces as a 60s failure, not a 6h Actions ceiling kill.
-    "pytest-timeout>=2.3.0",
+    "pytest-timeout>=2.4.0",
     "mypy>=1.19.1",
     "ruff>=0.1.0",
     "flwr-datasets>=0.5.0",
